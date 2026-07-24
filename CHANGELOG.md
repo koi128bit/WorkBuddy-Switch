@@ -1,5 +1,13 @@
 # WorkBuddy Switch Changelog
 
+## 0.1.2 - 2026-07-25
+
+- Label the headline Token value explicitly as the total for the selected date
+  range, including the active model and range when a model filter is applied.
+- Clarify that model Credits are only the locally attributable subset while the
+  precise server figure represents all models for the current account's billing
+  cycle.
+
 ## 0.1.1 - 2026-07-25
 
 - Redesign usage analytics with account, model, and period filters; token

@@ -86,6 +86,8 @@ enum UsageParser {
             ]),
             1
         )
+        // Credits are only locally attributable when WorkBuddy records the
+        // explicit scalar. Token counts are never converted into Credits.
         let credits = max(double(rawUsage?["credit"]) ?? 0, 0)
         let timestamp = Date(timeIntervalSince1970: timestampMS / 1_000)
         let messageID = string(object["uuid"])

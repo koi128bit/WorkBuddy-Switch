@@ -331,7 +331,11 @@ struct UsageView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(selectedModelSummary == nil ? "真实消耗 Tokens" : "模型消耗 Tokens")
+                        Text(
+                            selectedModelSummary == nil
+                                ? "所选区间合计 Tokens"
+                                : "所选模型区间合计 Tokens"
+                        )
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.secondary)
                         Text(headlineTokens.formatted())
@@ -339,7 +343,11 @@ struct UsageView: View {
                             .contentTransition(.numericText())
                             .lineLimit(1)
                             .minimumScaleFactor(0.72)
-                        Text(selectedModelSummary?.model ?? rangeTitle)
+                        Text(
+                            selectedModelSummary.map {
+                                "\($0.model) · \(rangeTitle)"
+                            } ?? rangeTitle
+                        )
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)

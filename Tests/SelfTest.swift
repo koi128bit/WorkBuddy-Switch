@@ -121,6 +121,7 @@ enum OpenUsageSelfTest {
         try expect(cacheWriteMessage.tokens.cacheWrite == 250, "duplicate cache write fields use max")
         try expect(cacheWriteMessage.tokens.reasoning == 30, "reasoning detail fallback")
         try expect(cacheWriteMessage.tokens.total == 1100, "cache split preserves reported total")
+        try expect(cacheWriteMessage.credits == 0, "tokens without credit are not converted")
 
         let normalizedOnlyLine = Data(
             """
@@ -180,12 +181,12 @@ enum OpenUsageSelfTest {
             "messages without official usage are not estimated"
         )
 
-        let kimiParts: [(prompt: Int, cacheHit: Int, output: Int)] = [
-            (300_000, 299_500, 400),
-            (300_000, 299_500, 400),
-            (300_000, 299_500, 400),
-            (300_000, 299_500, 400),
-            (293_390, 292_944, 531)
+        let kimiParts: [(prompt: Int, cacheHit: Int, output: Int, credit: Double)] = [
+            (300_000, 299_500, 400, 15.39),
+            (300_000, 299_500, 400, 16.50),
+            (300_000, 299_500, 400, 17.69),
+            (300_000, 299_500, 400, 15.24),
+            (293_390, 292_944, 531, 10.04)
         ]
         var kimiMessages: [UsageMessage] = []
         for (index, part) in kimiParts.enumerated() {
@@ -209,7 +210,8 @@ enum OpenUsageSelfTest {
                         "prompt_cache_miss_tokens": part.prompt - part.cacheHit,
                         "cache_creation_input_tokens": 0,
                         "prompt_cache_write_tokens": 0,
-                        "completion_thinking_tokens": 1
+                        "completion_thinking_tokens": 1,
+                        "credit": part.credit
                     ]
                 ]
             ]
@@ -247,6 +249,14 @@ enum OpenUsageSelfTest {
         try expect(kimiModel.tokens.reasoning == 5, "Kimi reasoning")
         try expect(kimiModel.tokens.requestCount == 5, "Kimi request count")
         try expect(kimiModel.tokens.total == 1_495_521, "Kimi total")
+        try expect(
+            abs(kimiModel.credits - 74.86) < 0.000_001,
+            "Kimi model exposes only locally recorded Credits"
+        )
+        try expect(
+            abs(kimiSnapshot.credits - 74.86) < 0.000_001,
+            "usage snapshot keeps locally attributable Credits separate"
+        )
         try expect(
             kimiSnapshot.daily.first?.breakdown == kimiModel.tokens,
             "daily breakdown preserves Kimi token components"
