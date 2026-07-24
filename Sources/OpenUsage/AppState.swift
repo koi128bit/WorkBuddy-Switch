@@ -21,6 +21,7 @@ final class AppState: ObservableObject {
     @Published private(set) var usagePeriod: UsagePeriod = .today
     @Published private(set) var usageStartDate: Date
     @Published private(set) var usageEndDate: Date
+    @Published private(set) var resumingSessionID: String?
     @Published var usageAccountID: String?
     @Published var alert: AppAlert?
 
@@ -28,9 +29,11 @@ final class AppState: ObservableObject {
     private let sessionStore = SessionStore()
     private let usageService = UsageService()
     private let workBuddy = WorkBuddyController()
-    private var hasStarted = false
+    private var startupTask: Task<Void, Never>?
+    private var localRefreshTask: Task<Void, Never>?
     private var autoRefreshTask: Task<Void, Never>?
     private var refreshGeneration: UInt64 = 0
+    private var sessionGeneration: UInt64 = 0
     private var usageGeneration: UInt64 = 0
 
     init() {
@@ -40,6 +43,8 @@ final class AppState: ObservableObject {
     }
 
     deinit {
+        startupTask?.cancel()
+        localRefreshTask?.cancel()
         autoRefreshTask?.cancel()
     }
 
@@ -51,21 +56,57 @@ final class AppState: ObservableObject {
     }
 
     func start() async {
-        guard !hasStarted else { return }
-        hasStarted = true
+        if let startupTask {
+            await startupTask.value
+            return
+        }
+
+        let task = Task { @MainActor [weak self] () -> Void in
+            guard let self else { return }
+            await self.performStartup()
+        }
+        startupTask = task
+        await task.value
+    }
+
+    private func performStartup() async {
         if UserDefaults.standard.bool(forKey: "autoCaptureCurrentAccount") {
             _ = try? accounts.captureCurrent()
         }
-        await refreshAll()
+
+        localRefreshTask = Task { @MainActor [weak self] in
+            await self?.localRefreshLoop()
+        }
         autoRefreshTask = Task { [weak self] in
             await self?.autoRefreshLoop()
+        }
+
+        await refreshAll()
+
+        for delay in [300_000_000, 900_000_000, 1_800_000_000] as [UInt64] {
+            guard sessions.isEmpty || usage.scannedFiles == 0 || usageMessage != nil else {
+                break
+            }
+            do {
+                try await Task.sleep(nanoseconds: delay)
+            } catch {
+                return
+            }
+            if sessions.isEmpty {
+                await reloadSessions()
+            }
+            if usage.scannedFiles == 0 || usageMessage != nil {
+                await refreshUsageIfIdle(force: true)
+            }
         }
     }
 
     func refreshAll(force: Bool = false) async {
         refreshGeneration &+= 1
+        sessionGeneration &+= 1
         usageGeneration &+= 1
         let generation = refreshGeneration
+        let sessionRequest = sessionGeneration
         let usageRequest = usageGeneration
         let range = usageDateRange
         let accountID = usageAccountID
@@ -87,12 +128,21 @@ final class AppState: ObservableObject {
             let loadedSessions = try await Task.detached(priority: .utility) {
                 try store.loadSessions(includeDeleted: true)
             }.value
-            guard refreshGeneration == generation else { return }
+            guard
+                refreshGeneration == generation,
+                sessionGeneration == sessionRequest
+            else {
+                return
+            }
             sessions = loadedSessions
             sessionMessage = nil
         } catch {
-            guard refreshGeneration == generation else { return }
-            sessions = []
+            guard
+                refreshGeneration == generation,
+                sessionGeneration == sessionRequest
+            else {
+                return
+            }
             sessionMessage = error.localizedDescription
         }
 
@@ -112,9 +162,10 @@ final class AppState: ObservableObject {
         } catch {
             guard refreshGeneration == generation else { return }
             if usageGeneration == usageRequest {
-                usage = .empty
                 usageMessage = error.localizedDescription
-                present(error, title: "用量读取失败")
+                if force {
+                    present(error, title: "用量读取失败")
+                }
             }
         }
 
@@ -142,6 +193,15 @@ final class AppState: ObservableObject {
     }
 
     func recalculateUsage() async {
+        while isRefreshing || isUsageRefreshing {
+            do {
+                try await Task.sleep(nanoseconds: 50_000_000)
+            } catch {
+                return
+            }
+        }
+        guard !Task.isCancelled else { return }
+
         usageGeneration &+= 1
         let request = usageGeneration
         let range = usageDateRange
@@ -240,6 +300,13 @@ final class AppState: ObservableObject {
     }
 
     func switchAccount(to profile: AccountProfile) async {
+        guard resumingSessionID == nil else {
+            alert = AppAlert(
+                title: "正在准备对话",
+                message: "对话迁移或恢复完成后再切换账号。"
+            )
+            return
+        }
         invalidateRefreshResults()
         do {
             try await accounts.switchAccount(to: profile)
@@ -275,38 +342,86 @@ final class AppState: ObservableObject {
     }
 
     func canResume(_ session: SessionRecord) -> Bool {
-        session.userID == accounts.currentUserID || accounts.hasSnapshot(for: session.userID)
+        guard
+            !accounts.isSwitching,
+            resumingSessionID == nil,
+            let currentUserID = accounts.currentUserID
+        else {
+            return false
+        }
+        return !currentUserID.isEmpty
+    }
+
+    func sessionNeedsMigration(_ session: SessionRecord) -> Bool {
+        guard let currentUserID = accounts.currentUserID else { return false }
+        return session.userID != currentUserID
+    }
+
+    func resumeActionTitle(_ session: SessionRecord) -> String {
+        switch (sessionNeedsMigration(session), session.isDeleted) {
+        case (true, true):
+            return "恢复、迁移并继续"
+        case (true, false):
+            return "迁移并继续"
+        case (false, true):
+            return "恢复并打开"
+        case (false, false):
+            return "继续对话"
+        }
     }
 
     func resume(_ session: SessionRecord) async {
+        guard beginResuming(session) else { return }
+        defer { finishResuming(session) }
+
         var preparation: ResumePreparation?
         do {
             preparation = try await prepareToResume(session)
+            try verifyCurrentAccount(preparation?.targetUserID)
             try await workBuddy.openSession(session.id)
             if let preparation, preparation.changedLocalState {
                 await refreshAll(force: true)
             }
         } catch {
+            let presentedError = await relaunchWorkBuddyIfNeeded(
+                after: preparation,
+                originalError: error
+            )
             if let preparation, preparation.changedLocalState {
                 await refreshAll(force: true)
             }
-            present(error, title: "无法恢复对话")
+            let title = preparation?.changedLocalState == true
+                ? "迁移已完成，打开失败"
+                : "无法恢复对话"
+            present(presentedError, title: title)
         }
     }
 
     func openInTerminal(_ session: SessionRecord) async {
+        guard beginResuming(session) else { return }
+        defer { finishResuming(session) }
+
         var preparation: ResumePreparation?
         do {
+            try workBuddy.validateTerminalResume(session)
             preparation = try await prepareToResume(session)
+            try verifyCurrentAccount(preparation?.targetUserID)
             try workBuddy.openSessionInTerminal(session)
+            if preparation?.stoppedRunningApplication == true {
+                try await workBuddy.launch()
+            }
             if let preparation, preparation.changedLocalState {
                 await refreshAll(force: true)
             }
         } catch {
+            let presentedError = await relaunchWorkBuddyIfNeeded(
+                after: preparation,
+                originalError: error
+            )
             if let preparation, preparation.changedLocalState {
                 await refreshAll(force: true)
             }
-            present(error, title: "无法在终端恢复")
+            present(presentedError, title: "无法在终端恢复")
         }
     }
 
@@ -315,68 +430,143 @@ final class AppState: ObservableObject {
     }
 
     private struct ResumePreparation {
-        let switchedAccount: Bool
+        let reassignedToCurrentAccount: Bool
         let restoredFromTrash: Bool
+        let stoppedRunningApplication: Bool
+        let targetUserID: String
 
-        var changedLocalState: Bool { switchedAccount || restoredFromTrash }
+        var changedLocalState: Bool {
+            reassignedToCurrentAccount || restoredFromTrash
+        }
     }
 
     private func prepareToResume(_ session: SessionRecord) async throws -> ResumePreparation {
         accounts.refreshCurrentAccount()
-        let needsAccountSwitch = session.userID != accounts.currentUserID
-        if needsAccountSwitch || session.isDeleted {
-            invalidateRefreshResults()
+        guard
+            let targetUserID = accounts.currentUserID,
+            !targetUserID.isEmpty
+        else {
+            throw OpenUsageError.authenticationFileMissing
+        }
+        guard workBuddy.applicationURL != nil else {
+            throw OpenUsageError.workBuddyNotInstalled
         }
 
-        var switchedAccount = false
-        if needsAccountSwitch {
-            guard let profile = accounts.accounts.first(where: { $0.id == session.userID }) else {
-                throw OpenUsageError.accountSnapshotMissing
+        let needsMutation = session.userID != targetUserID || session.isDeleted
+        guard needsMutation else {
+            return ResumePreparation(
+                reassignedToCurrentAccount: false,
+                restoredFromTrash: false,
+                stoppedRunningApplication: false,
+                targetUserID: targetUserID
+            )
+        }
+
+        invalidateRefreshResults()
+        let wasRunning = workBuddy.isRunning
+        do {
+            try await workBuddy.stop()
+            let verifiedUserID = try AuthDocument.loadActive().userID
+            guard verifiedUserID == targetUserID else {
+                accounts.refreshCurrentAccount()
+                throw OpenUsageError.commandFailed(
+                    "WorkBuddy 当前账号在准备恢复时发生变化，请重新选择对话。"
+                )
             }
-            try await accounts.switchAccount(to: profile)
-            usageAccountID = profile.id
-            quota = nil
-            locallyAttributedCycleCredits = nil
-            quotaMessage = "正在刷新新账号额度。"
-            switchedAccount = true
-            try await Task.sleep(nanoseconds: 700_000_000)
-        }
 
-        var restoredFromTrash = false
-        if session.isDeleted {
             let store = sessionStore
-            do {
-                try await Task.detached(priority: .userInitiated) {
-                    try store.restoreFromTrash(
-                        session.id,
-                        expectedUserID: session.userID
+            let mutation = try await Task.detached(priority: .userInitiated) {
+                try store.prepareSessionForResume(
+                    sessionID: session.id,
+                    expectedSourceUserID: session.userID,
+                    targetUserID: targetUserID,
+                    restoreFromTrash: session.isDeleted
+                )
+            }.value
+            return ResumePreparation(
+                reassignedToCurrentAccount: mutation.reassignedToCurrentAccount,
+                restoredFromTrash: mutation.restoredFromTrash,
+                stoppedRunningApplication: wasRunning,
+                targetUserID: targetUserID
+            )
+        } catch {
+            let preparationError = error
+            await reloadSessions()
+            if wasRunning {
+                do {
+                    try await workBuddy.launch()
+                } catch {
+                    throw OpenUsageError.commandFailed(
+                        """
+                        \(preparationError.localizedDescription)
+                        WorkBuddy 重新启动失败：\(error.localizedDescription)
+                        """
                     )
-                }.value
-                restoredFromTrash = true
-            } catch {
-                await reloadSessions()
-                if switchedAccount {
-                    Task { await refreshAll(force: true) }
                 }
-                throw error
             }
+            throw preparationError
         }
+    }
 
-        return ResumePreparation(
-            switchedAccount: switchedAccount,
-            restoredFromTrash: restoredFromTrash
-        )
+    private func beginResuming(_ session: SessionRecord) -> Bool {
+        guard resumingSessionID == nil, !accounts.isSwitching else { return false }
+        resumingSessionID = session.id
+        return true
+    }
+
+    private func finishResuming(_ session: SessionRecord) {
+        if resumingSessionID == session.id {
+            resumingSessionID = nil
+        }
+    }
+
+    private func verifyCurrentAccount(_ expectedUserID: String?) throws {
+        guard let expectedUserID else { throw OpenUsageError.authenticationFileMissing }
+        let currentUserID = try AuthDocument.loadActive().userID
+        guard currentUserID == expectedUserID else {
+            accounts.refreshCurrentAccount()
+            throw OpenUsageError.commandFailed(
+                "WorkBuddy 当前账号在打开对话前发生变化，已停止自动打开。"
+            )
+        }
+    }
+
+    private func relaunchWorkBuddyIfNeeded(
+        after preparation: ResumePreparation?,
+        originalError: Error
+    ) async -> Error {
+        guard
+            preparation?.stoppedRunningApplication == true,
+            !workBuddy.isRunning
+        else {
+            return originalError
+        }
+        do {
+            try await workBuddy.launch()
+            return originalError
+        } catch {
+            return OpenUsageError.commandFailed(
+                """
+                \(originalError.localizedDescription)
+                WorkBuddy 重新启动失败：\(error.localizedDescription)
+                """
+            )
+        }
     }
 
     private func reloadSessions() async {
+        sessionGeneration &+= 1
+        let request = sessionGeneration
         do {
             let store = sessionStore
-            sessions = try await Task.detached(priority: .utility) {
+            let loadedSessions = try await Task.detached(priority: .utility) {
                 try store.loadSessions(includeDeleted: true)
             }.value
+            guard sessionGeneration == request else { return }
+            sessions = loadedSessions
             sessionMessage = nil
         } catch {
-            sessions = []
+            guard sessionGeneration == request else { return }
             sessionMessage = error.localizedDescription
         }
     }
@@ -398,6 +588,26 @@ final class AppState: ObservableObject {
             accountID: quota.sourceUserID
         )
         return snapshot?.credits
+    }
+
+    private func localRefreshLoop() async {
+        while !Task.isCancelled {
+            do {
+                try await Task.sleep(nanoseconds: 15_000_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            guard
+                !isRefreshing,
+                !accounts.isSwitching,
+                resumingSessionID == nil
+            else {
+                continue
+            }
+            await reloadSessions()
+            await refreshUsageIfIdle()
+        }
     }
 
     private func autoRefreshLoop() async {

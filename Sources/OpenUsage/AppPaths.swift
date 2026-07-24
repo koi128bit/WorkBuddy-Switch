@@ -6,6 +6,8 @@ enum AppPaths {
     static let workBuddyRoot = home.appendingPathComponent(".workbuddy", isDirectory: true)
     static let workBuddyDatabase = workBuddyRoot.appendingPathComponent("workbuddy.db")
     static let workBuddyProjects = workBuddyRoot.appendingPathComponent("projects", isDirectory: true)
+    static let workBuddyMigrationBackups = workBuddyRoot
+        .appendingPathComponent("migrate_backups", isDirectory: true)
 
     static let authFile = home
         .appendingPathComponent("Library/Application Support/CodeBuddyExtension/Data/Public/auth", isDirectory: true)

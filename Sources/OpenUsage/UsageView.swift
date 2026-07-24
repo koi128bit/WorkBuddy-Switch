@@ -64,17 +64,6 @@ struct UsageView: View {
         .task(id: usageFilterID) {
             await state.recalculateUsage()
         }
-        .task {
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(nanoseconds: 15_000_000_000)
-                } catch {
-                    return
-                }
-                guard !Task.isCancelled else { return }
-                await state.refreshUsageIfIdle()
-            }
-        }
     }
 
     private var usageFilterID: UsageFilterID {

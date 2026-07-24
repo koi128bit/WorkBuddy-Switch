@@ -13,6 +13,7 @@ actor UsageService {
     private var lastMessages: [UsageMessage] = []
     private var lastTranscriptTitles: [String: String] = [:]
     private var lastScannedFiles = 0
+    private var hasScannedCorpus = false
 
     init(
         sessionStore: SessionStore = SessionStore(),
@@ -77,6 +78,7 @@ actor UsageService {
         lastMessages = messages
         lastTranscriptTitles = transcriptTitles
         lastScannedFiles = files.count
+        hasScannedCorpus = true
         var titles = metadata.titlesBySession
         transcriptTitles.forEach { titles[$0.key] = $0.value }
         var snapshot = UsageParser.aggregate(
@@ -102,6 +104,9 @@ actor UsageService {
         range: UsageDateRange,
         accountID: String?
     ) throws -> UsageSnapshot {
+        guard hasScannedCorpus else {
+            throw OpenUsageError.usageCacheUnavailable
+        }
         let metadata = try sessionStore.usageMetadata()
         var titles = metadata.titlesBySession
         lastTranscriptTitles.forEach { titles[$0.key] = $0.value }

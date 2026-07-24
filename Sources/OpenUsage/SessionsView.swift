@@ -128,11 +128,11 @@ struct SessionsView: View {
                     .padding(.vertical, 5)
                     .tag(session.id)
                     .contextMenu {
-                        Button("恢复对话") {
+                        Button(state.resumeActionTitle(session)) {
                             Task { await state.resume(session) }
                         }
                         .disabled(!state.canResume(session))
-                        Button("在终端恢复") {
+                        Button(terminalActionTitle(session)) {
                             Task { await state.openInTerminal(session) }
                         }
                         .disabled(!state.canResume(session))
@@ -167,24 +167,42 @@ struct SessionsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.large)
-                        .help("在终端恢复")
-                        .accessibilityLabel("在终端恢复")
+                        .help(terminalActionTitle(session))
+                        .accessibilityLabel(terminalActionTitle(session))
                         .disabled(!state.canResume(session))
 
                         Button {
                             Task { await state.resume(session) }
                         } label: {
-                            Label(session.isDeleted ? "恢复并打开" : "继续对话", systemImage: "arrow.up.forward.app")
+                            if state.resumingSessionID == session.id {
+                                Label("正在准备", systemImage: "clock")
+                            } else {
+                                Label(
+                                    state.resumeActionTitle(session),
+                                    systemImage: "arrow.up.forward.app"
+                                )
+                            }
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
                         .disabled(!state.canResume(session))
                     }
 
-                    if !state.canResume(session) {
-                        Label("先在账号页保存该对话所属账号", systemImage: "key.slash")
+                    if accounts.currentUserID == nil {
+                        Label("请先在 WorkBuddy 登录要继续使用的账号", systemImage: "person.crop.circle.badge.exclamationmark")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.orange)
+                    } else if state.sessionNeedsMigration(session) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Label(
+                                "继续后会将此对话迁移到当前账号，不会切换 WorkBuddy 登录账号。",
+                                systemImage: "arrow.left.arrow.right"
+                            )
+                            Text("该对话的历史本地 Token 与 Credits 也会归入当前账号。")
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(OpenUsageColors.blue)
                     }
 
                     Divider()
@@ -248,7 +266,7 @@ struct SessionsView: View {
     private func detailGrid(_ session: SessionRecord) -> some View {
         Grid(alignment: .leading, horizontalSpacing: 34, verticalSpacing: 14) {
             GridRow {
-                detailLabel("账号")
+                detailLabel(state.sessionNeedsMigration(session) ? "原账号" : "账号")
                 detailValue(
                     accounts.accounts.first { $0.id == session.userID }?.nickname
                         ?? String(session.userID.prefix(12))
@@ -298,5 +316,12 @@ struct SessionsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(OpenUsageColors.faintFill)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func terminalActionTitle(_ session: SessionRecord) -> String {
+        if state.sessionNeedsMigration(session) {
+            return session.isDeleted ? "恢复、迁移并在终端继续" : "迁移并在终端继续"
+        }
+        return session.isDeleted ? "恢复并在终端继续" : "在终端继续"
     }
 }

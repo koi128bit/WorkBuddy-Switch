@@ -19,7 +19,13 @@ struct WorkBuddyController {
     }
 
     @MainActor
+    var isRunning: Bool {
+        !runningApplications().isEmpty
+    }
+
+    @MainActor
     func stop() async throws {
+        try ensureNoRunningCLI()
         let running = runningApplications()
         guard !running.isEmpty else { return }
 
@@ -27,6 +33,7 @@ struct WorkBuddyController {
         if try await waitUntilStopped(
             deadline: Date().addingTimeInterval(Self.gracefulTerminationTimeout)
         ) {
+            try ensureNoRunningCLI()
             return
         }
 
@@ -36,13 +43,72 @@ struct WorkBuddyController {
         if try await waitUntilStopped(
             deadline: Date().addingTimeInterval(Self.forcedTerminationTimeout)
         ) {
+            try ensureNoRunningCLI()
             return
         }
 
         let remaining = runningApplications().count
         throw OpenUsageError.commandFailed(
-            "WorkBuddy 仍有 \(remaining) 个实例未退出，无法安全更改登录凭据。"
+            "WorkBuddy 仍有 \(remaining) 个实例未退出，无法安全更改本地数据。"
         )
+    }
+
+    func ensureNoRunningCLI() throws {
+        guard let cliURL else { return }
+
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        let escapedPath = NSRegularExpression.escapedPattern(for: cliURL.path)
+        process.arguments = [
+            "-f",
+            "(^|[[:space:]])\(escapedPath)([[:space:]]|$)"
+        ]
+        process.standardOutput = output
+        process.standardError = Pipe()
+        try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus == 1 {
+            return
+        }
+        guard process.terminationStatus == 0 else {
+            throw OpenUsageError.commandFailed("无法确认 WorkBuddy 终端进程状态。")
+        }
+
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        let processIDs = String(decoding: data, as: UTF8.self)
+            .split(whereSeparator: \.isWhitespace)
+        var interactiveProcessIDs: [Substring] = []
+        for processID in processIDs {
+            guard let command = try commandLine(for: processID) else { continue }
+            if Self.isInteractiveCLICommand(command) {
+                interactiveProcessIDs.append(processID)
+            }
+        }
+        guard interactiveProcessIDs.isEmpty else {
+            throw OpenUsageError.commandFailed(
+                "检测到 \(interactiveProcessIDs.count) 个终端 WorkBuddy 正在运行，请先退出后再迁移对话。"
+            )
+        }
+    }
+
+    static func isInteractiveCLICommand(_ command: String) -> Bool {
+        !command.split(whereSeparator: \.isWhitespace).contains("--serve")
+    }
+
+    private func commandLine(for processID: Substring) throws -> String? {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-p", String(processID), "-o", "command="]
+        process.standardOutput = output
+        process.standardError = Pipe()
+        try process.run()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        return String(decoding: data, as: UTF8.self)
     }
 
     @MainActor
@@ -73,6 +139,7 @@ struct WorkBuddyController {
 
     @MainActor
     func openSessionInTerminal(_ session: SessionRecord) throws {
+        try validateTerminalResume(session)
         guard let cliURL else {
             throw OpenUsageError.commandFailed("当前 WorkBuddy 版本没有附带命令行工具。")
         }
@@ -95,6 +162,25 @@ struct WorkBuddyController {
             throw OpenUsageError.commandFailed(
                 error[NSAppleScript.errorMessage] as? String ?? "无法打开终端。"
             )
+        }
+    }
+
+    func validateTerminalResume(_ session: SessionRecord) throws {
+        guard let cliURL else {
+            throw OpenUsageError.commandFailed("当前 WorkBuddy 版本没有附带命令行工具。")
+        }
+        guard FileManager.default.isExecutableFile(atPath: cliURL.path) else {
+            throw OpenUsageError.commandFailed("WorkBuddy 命令行工具当前不可执行。")
+        }
+        var isDirectory: ObjCBool = false
+        guard
+            FileManager.default.fileExists(
+                atPath: session.workingDirectory,
+                isDirectory: &isDirectory
+            ),
+            isDirectory.boolValue
+        else {
+            throw OpenUsageError.commandFailed("该对话的工作目录已不存在，无法在终端继续。")
         }
     }
 

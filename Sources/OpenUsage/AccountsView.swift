@@ -211,6 +211,6 @@ struct AccountsView: View {
             }
         }
         .controlSize(.large)
-        .disabled(accounts.isSwitching)
+        .disabled(accounts.isSwitching || state.resumingSessionID != nil)
     }
 }

@@ -123,7 +123,7 @@ struct MenuBarView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .disabled(accounts.isSwitching)
+                    .disabled(accounts.isSwitching || state.resumingSessionID != nil)
                 }
                 if accounts.accounts.count > 5 {
                     Button("全部账号…") {
@@ -159,7 +159,11 @@ struct MenuBarView: View {
                                 .font(.system(size: 11, weight: .medium))
                                 .lineLimit(1)
                             Spacer()
-                            Image(systemName: "arrow.up.forward.app")
+                            Image(
+                                systemName: state.sessionNeedsMigration(session)
+                                    ? "arrow.left.arrow.right"
+                                    : "arrow.up.forward.app"
+                            )
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.horizontal, 12)
@@ -167,6 +171,7 @@ struct MenuBarView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .help(state.resumeActionTitle(session))
                 }
                 Divider()
             }
@@ -186,6 +191,7 @@ struct MenuBarView: View {
             .padding(12)
         }
         .frame(width: 318)
+        .task { await state.start() }
     }
 
     private func openMainWindow() {

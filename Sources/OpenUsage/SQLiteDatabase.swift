@@ -71,6 +71,54 @@ final class SQLiteDatabase {
         }
     }
 
+    func checkpointWAL() throws {
+        guard let handle else { throw OpenUsageError.databaseUnavailable }
+        var logFrames: Int32 = 0
+        var checkpointedFrames: Int32 = 0
+        let result = sqlite3_wal_checkpoint_v2(
+            handle,
+            nil,
+            SQLITE_CHECKPOINT_TRUNCATE,
+            &logFrames,
+            &checkpointedFrames
+        )
+        guard result == SQLITE_OK else { throw databaseError(handle) }
+    }
+
+    func backup(to destinationURL: URL) throws {
+        guard let handle else { throw OpenUsageError.databaseUnavailable }
+
+        var destination: OpaquePointer?
+        let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
+        let openResult = sqlite3_open_v2(destinationURL.path, &destination, flags, nil)
+        guard openResult == SQLITE_OK, let destination else {
+            let message = destination.map { String(cString: sqlite3_errmsg($0)) } ?? "unknown"
+            sqlite3_close(destination)
+            throw OpenUsageError.commandFailed("SQLite 备份文件创建失败：\(message)")
+        }
+        defer { sqlite3_close(destination) }
+
+        guard let backup = sqlite3_backup_init(destination, "main", handle, "main") else {
+            throw databaseError(destination)
+        }
+
+        var stepResult = SQLITE_OK
+        var attempts = 0
+        repeat {
+            stepResult = sqlite3_backup_step(backup, -1)
+            if stepResult == SQLITE_BUSY || stepResult == SQLITE_LOCKED {
+                sqlite3_sleep(50)
+            }
+            attempts += 1
+        } while (stepResult == SQLITE_OK || stepResult == SQLITE_BUSY || stepResult == SQLITE_LOCKED)
+            && attempts < 20
+
+        let finishResult = sqlite3_backup_finish(backup)
+        guard stepResult == SQLITE_DONE, finishResult == SQLITE_OK else {
+            throw databaseError(destination)
+        }
+    }
+
     private func bind(
         _ values: [SQLiteValue],
         to statement: OpaquePointer?,

@@ -428,6 +428,18 @@ enum OpenUsageSelfTest {
                 == "workbuddy://chat/session-abc",
             "deep link"
         )
+        try expect(
+            !WorkBuddyController.isInteractiveCLICommand(
+                "/Applications/WorkBuddy.app/Contents/MacOS/Electron codebuddy --serve --port 1234"
+            ),
+            "background WorkBuddy service is not treated as an interactive CLI"
+        )
+        try expect(
+            WorkBuddyController.isInteractiveCLICommand(
+                "/usr/bin/node codebuddy --resume session-abc"
+            ),
+            "terminal WorkBuddy resume is detected before migration"
+        )
 
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("openusage-selftest-\(UUID().uuidString)", isDirectory: true)
@@ -479,6 +491,195 @@ enum OpenUsageSelfTest {
         try expect(legacySessions.count == 1, "legacy session schema")
         try expect(legacySessions.first?.title == "Legacy title", "legacy session title")
         try expect(legacySessions.first?.model == nil, "legacy optional model")
+
+        let migrationDatabaseURL = directory.appendingPathComponent("migration.db")
+        let migrationBackupsURL = directory
+            .appendingPathComponent("migration-backups", isDirectory: true)
+        do {
+            _ = FileManager.default.createFile(
+                atPath: migrationDatabaseURL.path,
+                contents: Data()
+            )
+            let migrationDatabase = try SQLiteDatabase(
+                url: migrationDatabaseURL,
+                readOnly: false
+            )
+            let journalMode = try migrationDatabase.query("PRAGMA journal_mode = WAL")
+            try expect(
+                journalMode.first?["journal_mode"]?.string?.lowercased() == "wal",
+                "migration fixture uses WAL journal mode"
+            )
+            try migrationDatabase.execute(
+                """
+                CREATE TABLE sessions (
+                    id TEXT PRIMARY KEY,
+                    cwd TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    title TEXT,
+                    status TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER,
+                    deleted_at INTEGER
+                )
+                """
+            )
+            for (id, owner, deletedAt) in [
+                ("move-selected", "source-account", nil),
+                ("leave-source", "source-account", nil),
+                ("deleted-selected", "source-account", 1_784_822_500_000),
+                ("already-current", "target-account", nil)
+            ] as [(String, String, Int64?)] {
+                try migrationDatabase.execute(
+                    """
+                    INSERT INTO sessions (
+                        id, cwd, user_id, title, status, created_at, updated_at, deleted_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    bindings: [
+                        .text(id),
+                        .text("/tmp/project"),
+                        .text(owner),
+                        .text(id),
+                        .text("done"),
+                        .integer(1_784_822_400_000),
+                        .integer(1_784_822_400_000),
+                        deletedAt.map(SQLiteValue.integer) ?? .null
+                    ]
+                )
+            }
+        }
+        let migrationStore = SessionStore(
+            databaseURL: migrationDatabaseURL,
+            backupDirectoryURL: migrationBackupsURL
+        )
+        let unchangedMutation = try migrationStore.prepareSessionForResume(
+            sessionID: "already-current",
+            expectedSourceUserID: "target-account",
+            targetUserID: "target-account",
+            restoreFromTrash: false
+        )
+        try expect(!unchangedMutation.changedLocalState, "same-account resume is a no-op")
+        try expect(unchangedMutation.backupURL == nil, "same-account resume skips backup")
+        try expect(
+            !FileManager.default.fileExists(atPath: migrationBackupsURL.path),
+            "same-account resume does not create a backup directory"
+        )
+
+        var rejectedMigrationOwner = false
+        do {
+            _ = try migrationStore.prepareSessionForResume(
+                sessionID: "move-selected",
+                expectedSourceUserID: "wrong-account",
+                targetUserID: "target-account",
+                restoreFromTrash: false
+            )
+        } catch OpenUsageError.sessionRestoreConflict {
+            rejectedMigrationOwner = true
+        }
+        try expect(rejectedMigrationOwner, "migration rejects a mismatched source owner")
+        let beforeMigration = try migrationStore.loadSessions(includeDeleted: true)
+        try expect(
+            beforeMigration.first { $0.id == "move-selected" }?.userID == "source-account",
+            "rejected migration leaves the selected session unchanged"
+        )
+
+        let migrated = try migrationStore.prepareSessionForResume(
+            sessionID: "move-selected",
+            expectedSourceUserID: "source-account",
+            targetUserID: "target-account",
+            restoreFromTrash: false
+        )
+        try expect(migrated.reassignedToCurrentAccount, "selected session is reassigned")
+        try expect(!migrated.restoredFromTrash, "active session is not marked restored")
+        guard let firstBackupURL = migrated.backupURL else {
+            throw SelfTestFailure(
+                message: "migration backup missing",
+                file: #filePath,
+                line: #line
+            )
+        }
+        try expect(
+            FileManager.default.fileExists(atPath: firstBackupURL.path),
+            "migration creates a recoverable backup"
+        )
+        let backupDatabase = try SQLiteDatabase(url: firstBackupURL, readOnly: true)
+        let backupCheck = try backupDatabase.query("PRAGMA quick_check")
+        try expect(
+            backupCheck.first?["quick_check"]?.string == "ok",
+            "migration backup passes SQLite quick_check"
+        )
+        let backupJournalMode = try backupDatabase.query("PRAGMA journal_mode")
+        try expect(
+            backupJournalMode.first?["journal_mode"]?.string?.lowercased() == "delete",
+            "migration backup is self-contained outside WAL mode"
+        )
+        try expect(
+            !FileManager.default.fileExists(atPath: firstBackupURL.path + "-wal")
+                && !FileManager.default.fileExists(atPath: firstBackupURL.path + "-shm"),
+            "migration backup does not depend on SQLite sidecars"
+        )
+        let backupOwner = try backupDatabase.query(
+            "SELECT user_id FROM sessions WHERE id = ?",
+            bindings: [.text("move-selected")]
+        )
+        try expect(
+            backupOwner.first?["user_id"]?.string == "source-account",
+            "backup captures the owner before mutation"
+        )
+
+        let afterMigration = try migrationStore.loadSessions(includeDeleted: true)
+        try expect(
+            afterMigration.first { $0.id == "move-selected" }?.userID == "target-account",
+            "selected session moves to the target account"
+        )
+        try expect(
+            afterMigration.first { $0.id == "leave-source" }?.userID == "source-account",
+            "other sessions from the source account do not move"
+        )
+
+        let restoredAndMigrated = try migrationStore.prepareSessionForResume(
+            sessionID: "deleted-selected",
+            expectedSourceUserID: "source-account",
+            targetUserID: "target-account",
+            restoreFromTrash: true
+        )
+        try expect(
+            restoredAndMigrated.reassignedToCurrentAccount
+                && restoredAndMigrated.restoredFromTrash,
+            "deleted session restores and reassigns atomically"
+        )
+        let afterDeletedMigration = try migrationStore.loadSessions(includeDeleted: true)
+        let restoredSession = afterDeletedMigration.first { $0.id == "deleted-selected" }
+        try expect(restoredSession?.userID == "target-account", "restored session owner")
+        try expect(restoredSession?.isDeleted == false, "restored session leaves trash")
+        try expect(
+            restoredSession?.updatedAt ?? .distantPast > Date(timeIntervalSince1970: 1_784_822_400),
+            "trash restoration advances the update timestamp"
+        )
+
+        let blockedBackupURL = directory.appendingPathComponent("backup-path-is-a-file")
+        try Data("blocked".utf8).write(to: blockedBackupURL)
+        let blockedBackupStore = SessionStore(
+            databaseURL: migrationDatabaseURL,
+            backupDirectoryURL: blockedBackupURL
+        )
+        var rejectedMissingBackup = false
+        do {
+            _ = try blockedBackupStore.prepareSessionForResume(
+                sessionID: "leave-source",
+                expectedSourceUserID: "source-account",
+                targetUserID: "target-account",
+                restoreFromTrash: false
+            )
+        } catch {
+            rejectedMissingBackup = true
+        }
+        try expect(rejectedMissingBackup, "migration stops when backup creation fails")
+        let afterBackupFailure = try migrationStore.loadSessions(includeDeleted: true)
+        try expect(
+            afterBackupFailure.first { $0.id == "leave-source" }?.userID == "source-account",
+            "backup failure leaves session ownership unchanged"
+        )
 
         let trashDatabaseURL = directory.appendingPathComponent("trash.db")
         _ = FileManager.default.createFile(atPath: trashDatabaseURL.path, contents: Data())
@@ -579,9 +780,29 @@ enum OpenUsageSelfTest {
             withJSONObject: JSONSerialization.jsonObject(with: usageLine)
         )
         try compactUsageLine.write(to: projectsURL.appendingPathComponent("session.jsonl"))
+        let cacheStore = SessionStore(
+            databaseURL: cacheDatabaseURL,
+            backupDirectoryURL: directory.appendingPathComponent(
+                "usage-cache-backups",
+                isDirectory: true
+            )
+        )
         let usageService = UsageService(
-            sessionStore: SessionStore(databaseURL: cacheDatabaseURL),
+            sessionStore: cacheStore,
             projectsURL: projectsURL
+        )
+        var rejectedUninitializedUsageCache = false
+        do {
+            _ = try await usageService.aggregateCached(
+                period: .all,
+                accountID: "account-1"
+            )
+        } catch OpenUsageError.usageCacheUnavailable {
+            rejectedUninitializedUsageCache = true
+        }
+        try expect(
+            rejectedUninitializedUsageCache,
+            "uninitialized usage cache cannot publish a false empty snapshot"
         )
         let cachedForOriginalOwner = try await usageService.scan(
             period: .all,
@@ -633,9 +854,15 @@ enum OpenUsageSelfTest {
         }
         try expect(scanObservedCancellation, "usage scan observes task cancellation")
 
-        try cacheDatabase.execute(
-            "UPDATE sessions SET user_id = ? WHERE id = ?",
-            bindings: [.text("account-2"), .text("session-1")]
+        let usageMigration = try cacheStore.prepareSessionForResume(
+            sessionID: "session-1",
+            expectedSourceUserID: "account-1",
+            targetUserID: "account-2",
+            restoreFromTrash: false
+        )
+        try expect(
+            usageMigration.reassignedToCurrentAccount,
+            "usage fixture migrates through the production session API"
         )
         let cachedAfterOwnerChange = try await usageService.aggregateCached(
             period: .all,

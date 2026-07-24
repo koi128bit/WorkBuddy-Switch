@@ -272,6 +272,7 @@ enum OpenUsageError: LocalizedError, Sendable {
     case databaseUnavailable
     case sessionNotFound
     case sessionRestoreConflict
+    case usageCacheUnavailable
     case commandFailed(String)
     case quotaUnavailable(String)
 
@@ -293,6 +294,8 @@ enum OpenUsageError: LocalizedError, Sendable {
             return "该对话已不存在。"
         case .sessionRestoreConflict:
             return "对话已变更、已恢复，或不属于预期账号；列表已重新加载。"
+        case .usageCacheUnavailable:
+            return "用量数据正在初始化。"
         case .commandFailed(let message):
             return message
         case .quotaUnavailable(let message):

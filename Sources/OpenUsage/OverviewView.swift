@@ -264,11 +264,15 @@ struct OverviewView: View {
                 Button {
                     Task { await state.resume(session) }
                 } label: {
-                    Image(systemName: "arrow.up.forward.app")
+                    Image(
+                        systemName: state.sessionNeedsMigration(session)
+                            ? "arrow.left.arrow.right"
+                            : "arrow.up.forward.app"
+                    )
                 }
                 .buttonStyle(.borderless)
-                .help("恢复对话")
-                .accessibilityLabel("恢复对话")
+                .help(state.resumeActionTitle(session))
+                .accessibilityLabel(state.resumeActionTitle(session))
                 .disabled(!state.canResume(session))
                 }
                 .padding(.vertical, 8)

@@ -1,5 +1,18 @@
 # WorkBuddy Switch Changelog
 
+## 0.1.3 - 2026-07-25
+
+- Continue a cross-account conversation by migrating only the selected session
+  to the currently logged-in WorkBuddy account instead of switching credentials
+  back to the session's original account.
+- Stop WorkBuddy before migration, verify the active identity again, checkpoint
+  WAL, and create a consistent SQLite backup before the guarded transaction.
+- Restore deleted sessions and reassign ownership atomically, prevent duplicate
+  resume operations, and clarify migration behavior across every resume entry.
+- Make initial session and usage loading survive SwiftUI task cancellation,
+  distinguish an uninitialized usage cache from a genuine zero, retry transient
+  empty sources, and refresh local sessions and usage globally every 15 seconds.
+
 ## 0.1.2 - 2026-07-25
 
 - Label the headline Token value explicitly as the total for the selected date
