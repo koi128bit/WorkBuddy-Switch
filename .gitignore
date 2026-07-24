@@ -1,0 +1,19 @@
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+dist/
+outputs/
+work/
+*.dmg
+*.zip
+*.xcarchive
+*.mobileprovision
+
+# Never commit WorkBuddy data or authentication snapshots.
+*.info
+*.db
+*.db-wal
+*.db-shm
+*.jsonl
+auth-backups/
