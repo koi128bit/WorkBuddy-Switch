@@ -16,7 +16,7 @@ struct MenuBarView: View {
             HStack(spacing: 10) {
                 AppIconView(size: 32)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("OpenUsage")
+                    Text("WorkBuddy Switch")
                         .font(.system(size: 14, weight: .semibold))
                     Text(
                         accounts.currentAccount?.nickname
@@ -172,7 +172,7 @@ struct MenuBarView: View {
             }
 
             HStack {
-                Button("打开 OpenUsage") {
+                Button("打开 WorkBuddy Switch") {
                     openMainWindow()
                 }
                 .buttonStyle(.borderless)

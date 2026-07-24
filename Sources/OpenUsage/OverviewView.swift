@@ -48,7 +48,7 @@ struct OverviewView: View {
         ZStack(alignment: .leading) {
             SpectralRibbonField()
             VStack(alignment: .leading, spacing: 10) {
-                Text("OpenUsage")
+                Text("WorkBuddy Switch")
                     .font(.system(size: 38, weight: .semibold))
                 Text(accounts.currentAccount?.nickname ?? "尚未捕获 WorkBuddy 账号")
                     .font(.system(size: 16, weight: .medium))
@@ -130,7 +130,7 @@ struct OverviewView: View {
                 Chart(state.usage.daily) { point in
                     AreaMark(
                         x: .value("日期", point.day),
-                        y: .value("Token", point.tokens)
+                        y: .value("Token", Double(point.tokens))
                     )
                     .foregroundStyle(
                         LinearGradient(
@@ -144,7 +144,7 @@ struct OverviewView: View {
                     )
                     LineMark(
                         x: .value("日期", point.day),
-                        y: .value("Token", point.tokens)
+                        y: .value("Token", Double(point.tokens))
                     )
                     .foregroundStyle(OpenUsageColors.blue)
                     .interpolationMethod(.catmullRom)
@@ -156,9 +156,13 @@ struct OverviewView: View {
                     }
                 }
                 .chartYAxis {
-                    AxisMarks(position: .leading) {
+                    AxisMarks(position: .leading) { value in
                         AxisGridLine().foregroundStyle(Color.primary.opacity(0.06))
-                        AxisValueLabel()
+                        AxisValueLabel {
+                            if let tokens = value.as(Double.self) {
+                                Text(DisplayFormat.axisTokens(tokens))
+                            }
+                        }
                     }
                 }
                 .frame(height: 210)

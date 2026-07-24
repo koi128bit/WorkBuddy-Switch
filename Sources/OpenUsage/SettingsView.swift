@@ -15,10 +15,10 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                SectionTitle(title: "设置", subtitle: "OpenUsage \(appVersion)")
+                SectionTitle(title: "设置", subtitle: "WorkBuddy Switch \(appVersion)")
 
                 settingsSection("常规") {
-                    Toggle("登录时启动 OpenUsage", isOn: $launchAtLogin)
+                    Toggle("登录时启动 WorkBuddy Switch", isOn: $launchAtLogin)
                         .onChange(of: launchAtLogin) { enabled in
                             do {
                                 if enabled {

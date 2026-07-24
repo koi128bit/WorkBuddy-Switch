@@ -83,14 +83,14 @@ struct AccountsView: View {
             )
         ) {
             if let profile = pendingRemoval {
-                Button("从 OpenUsage 移除", role: .destructive) {
+                Button("从 WorkBuddy Switch 移除", role: .destructive) {
                     state.removeAccount(profile)
                     pendingRemoval = nil
                 }
             }
             Button("取消", role: .cancel) { pendingRemoval = nil }
         } message: {
-            Text("只会删除 OpenUsage 钥匙串快照，不会删除 WorkBuddy 数据。")
+            Text("只会删除 WorkBuddy Switch 钥匙串快照，不会删除 WorkBuddy 数据。")
         }
     }
 

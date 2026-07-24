@@ -2,7 +2,7 @@
 
 ## Credential handling
 
-OpenUsage reads the active WorkBuddy authentication document only when an
+WorkBuddy Switch reads the active WorkBuddy authentication document only when an
 account is captured, switched, or its quota is refreshed.
 
 - Account snapshots are stored as generic-password items in macOS Keychain.
@@ -19,7 +19,7 @@ account is captured, switched, or its quota is refreshed.
 ## Local data
 
 Conversation metadata and token totals are read from the user's local
-`~/.workbuddy` directory. OpenUsage does not upload message content. The only
+`~/.workbuddy` directory. WorkBuddy Switch does not upload message content. The only
 network request is a quota request to WorkBuddy's resource endpoint using the
 currently active WorkBuddy credential. It runs on launch, on manual refresh,
 and at the configured refresh interval.

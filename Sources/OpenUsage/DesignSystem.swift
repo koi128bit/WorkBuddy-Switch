@@ -6,6 +6,8 @@ enum OpenUsageColors {
     static let cyan = Color(red: 0.20, green: 0.79, blue: 0.94)
     static let lime = Color(red: 0.63, green: 0.86, blue: 0.24)
     static let coral = Color(red: 1.0, green: 0.43, blue: 0.31)
+    static let violet = Color(red: 0.63, green: 0.30, blue: 0.98)
+    static let mint = Color(red: 0.08, green: 0.76, blue: 0.53)
     static let ink = Color(red: 0.08, green: 0.08, blue: 0.09)
     static let separator = Color.primary.opacity(0.10)
     static let faintFill = Color.primary.opacity(0.035)
@@ -107,6 +109,25 @@ struct SectionTitle: View {
     }
 }
 
+struct PanelSurface<Content: View>: View {
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .padding(20)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(OpenUsageColors.separator, lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
 struct MetricTile: View {
     let title: String
     let value: String
@@ -196,6 +217,20 @@ enum DisplayFormat {
 
     static func credits(_ value: Double) -> String {
         String(format: "%.2f", value)
+    }
+
+    static func axisTokens(_ value: Double) -> String {
+        let magnitude = abs(value)
+        switch magnitude {
+        case 1_000_000_000...:
+            return String(format: "%.1fB", value / 1_000_000_000)
+        case 1_000_000...:
+            return String(format: "%.1fM", value / 1_000_000)
+        case 1_000...:
+            return String(format: "%.0fK", value / 1_000)
+        default:
+            return String(format: "%.0f", value)
+        }
     }
 
     static func relativeDate(_ date: Date) -> String {

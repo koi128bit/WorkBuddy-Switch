@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-OpenUsage is an independent implementation. It does not bundle source code,
+WorkBuddy Switch is an independent implementation. It does not bundle source code,
 logos, screenshots, or other assets from WorkBuddy, CC Switch, Kimi Work, or
 usageBar.
 
@@ -33,4 +33,4 @@ repository's `LICENSE` file. Their project-specific copyright notices remain
 the property of their respective authors.
 
 WorkBuddy and Kimi are trademarks or products of their respective owners.
-OpenUsage is not affiliated with, endorsed by, or sponsored by those owners.
+WorkBuddy Switch is not affiliated with, endorsed by, or sponsored by those owners.

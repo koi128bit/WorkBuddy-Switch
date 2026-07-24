@@ -12,11 +12,15 @@ final class AppState: ObservableObject {
     @Published private(set) var sessions: [SessionRecord] = []
     @Published private(set) var usage: UsageSnapshot = .empty
     @Published private(set) var quota: QuotaSnapshot?
+    @Published private(set) var locallyAttributedCycleCredits: Double?
     @Published private(set) var quotaMessage: String?
     @Published private(set) var sessionMessage: String?
     @Published private(set) var usageMessage: String?
     @Published private(set) var isRefreshing = false
-    @Published var usagePeriod: UsagePeriod = .thirtyDays
+    @Published private(set) var isUsageRefreshing = false
+    @Published private(set) var usagePeriod: UsagePeriod = .today
+    @Published private(set) var usageStartDate: Date
+    @Published private(set) var usageEndDate: Date
     @Published var usageAccountID: String?
     @Published var alert: AppAlert?
 
@@ -29,8 +33,21 @@ final class AppState: ObservableObject {
     private var refreshGeneration: UInt64 = 0
     private var usageGeneration: UInt64 = 0
 
+    init() {
+        let today = Calendar.current.startOfDay(for: Date())
+        usageStartDate = today
+        usageEndDate = today
+    }
+
     deinit {
         autoRefreshTask?.cancel()
+    }
+
+    var usageDateRange: UsageDateRange {
+        usagePeriod.dateRange(
+            customStart: usageStartDate,
+            customEnd: usageEndDate
+        )
     }
 
     func start() async {
@@ -50,7 +67,7 @@ final class AppState: ObservableObject {
         usageGeneration &+= 1
         let generation = refreshGeneration
         let usageRequest = usageGeneration
-        let period = usagePeriod
+        let range = usageDateRange
         let accountID = usageAccountID
         isRefreshing = true
         defer {
@@ -61,6 +78,7 @@ final class AppState: ObservableObject {
         accounts.refreshCurrentAccount()
         if let quota, quota.sourceUserID != accounts.currentUserID {
             self.quota = nil
+            locallyAttributedCycleCredits = nil
             quotaMessage = "账号已变更，正在刷新额度。"
         }
 
@@ -80,7 +98,7 @@ final class AppState: ObservableObject {
 
         do {
             let loadedUsage = try await usageService.scan(
-                period: period,
+                range: range,
                 accountID: accountID,
                 force: force
             )
@@ -89,6 +107,8 @@ final class AppState: ObservableObject {
                 usage = loadedUsage
                 usageMessage = nil
             }
+        } catch is CancellationError {
+            return
         } catch {
             guard refreshGeneration == generation else { return }
             if usageGeneration == usageRequest {
@@ -105,13 +125,18 @@ final class AppState: ObservableObject {
             if loadedQuota.sourceUserID == accounts.currentUserID {
                 quota = loadedQuota
                 quotaMessage = nil
+                let attributed = await localCycleCredits(for: loadedQuota)
+                guard refreshGeneration == generation else { return }
+                locallyAttributedCycleCredits = attributed
             } else {
                 quota = nil
+                locallyAttributedCycleCredits = nil
                 quotaMessage = "账号已变更，旧额度结果已丢弃。"
             }
         } catch {
             guard refreshGeneration == generation else { return }
             quota = nil
+            locallyAttributedCycleCredits = nil
             quotaMessage = error.localizedDescription
         }
     }
@@ -119,20 +144,90 @@ final class AppState: ObservableObject {
     func recalculateUsage() async {
         usageGeneration &+= 1
         let request = usageGeneration
-        let period = usagePeriod
+        let range = usageDateRange
         let accountID = usageAccountID
         do {
             let recalculated = try await usageService.aggregateCached(
-                period: period,
+                range: range,
                 accountID: accountID
             )
-            guard usageGeneration == request else { return }
+            guard !Task.isCancelled, usageGeneration == request else { return }
             usage = recalculated
             usageMessage = nil
         } catch {
-            guard usageGeneration == request else { return }
+            guard !Task.isCancelled, usageGeneration == request else { return }
             usageMessage = error.localizedDescription
         }
+    }
+
+    func refreshUsageIfIdle(force: Bool = false) async {
+        guard !isRefreshing, !isUsageRefreshing else { return }
+        isUsageRefreshing = true
+        usageGeneration &+= 1
+        let request = usageGeneration
+        let range = usageDateRange
+        let accountID = usageAccountID
+        defer { isUsageRefreshing = false }
+
+        do {
+            let refreshed = try await usageService.scan(
+                range: range,
+                accountID: accountID,
+                force: force
+            )
+            guard !Task.isCancelled, usageGeneration == request else { return }
+            usage = refreshed
+            usageMessage = nil
+            if let quota, quota.sourceUserID == accounts.currentUserID {
+                let attributed = await localCycleCredits(for: quota)
+                guard !Task.isCancelled, usageGeneration == request else { return }
+                locallyAttributedCycleCredits = attributed
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled, usageGeneration == request else { return }
+            usageMessage = error.localizedDescription
+        }
+    }
+
+    func selectUsagePeriod(_ period: UsagePeriod) {
+        usagePeriod = period
+        guard period != .all, period != .custom else { return }
+
+        let calendar = Calendar.current
+        let now = Date()
+        let range = period.dateRange(
+            customStart: usageStartDate,
+            customEnd: usageEndDate,
+            now: now,
+            calendar: calendar
+        )
+        if let start = range.startInclusive {
+            usageStartDate = start
+        }
+        if let end = range.endExclusive,
+           let inclusiveEnd = calendar.date(byAdding: .day, value: -1, to: end) {
+            usageEndDate = inclusiveEnd
+        }
+    }
+
+    func setUsageStartDate(_ date: Date) {
+        let day = Calendar.current.startOfDay(for: date)
+        usageStartDate = day
+        if usageEndDate < day {
+            usageEndDate = day
+        }
+        usagePeriod = .custom
+    }
+
+    func setUsageEndDate(_ date: Date) {
+        let day = Calendar.current.startOfDay(for: date)
+        usageEndDate = day
+        if usageStartDate > day {
+            usageStartDate = day
+        }
+        usagePeriod = .custom
     }
 
     func captureCurrentAccount() {
@@ -150,6 +245,7 @@ final class AppState: ObservableObject {
             try await accounts.switchAccount(to: profile)
             usageAccountID = profile.id
             quota = nil
+            locallyAttributedCycleCredits = nil
             quotaMessage = "正在刷新新账号额度。"
             try await Task.sleep(nanoseconds: 500_000_000)
             await refreshAll(force: true)
@@ -240,6 +336,7 @@ final class AppState: ObservableObject {
             try await accounts.switchAccount(to: profile)
             usageAccountID = profile.id
             quota = nil
+            locallyAttributedCycleCredits = nil
             quotaMessage = "正在刷新新账号额度。"
             switchedAccount = true
             try await Task.sleep(nanoseconds: 700_000_000)
@@ -288,6 +385,19 @@ final class AppState: ObservableObject {
         refreshGeneration &+= 1
         usageGeneration &+= 1
         isRefreshing = false
+    }
+
+    private func localCycleCredits(for quota: QuotaSnapshot) async -> Double? {
+        guard let cycleStartsAt = quota.cycleStartsAt else { return nil }
+        let endExclusive = quota.resetsAt?.addingTimeInterval(1)
+        let snapshot = try? await usageService.aggregateCached(
+            range: UsageDateRange(
+                startInclusive: cycleStartsAt,
+                endExclusive: endExclusive
+            ),
+            accountID: quota.sourceUserID
+        )
+        return snapshot?.credits
     }
 
     private func autoRefreshLoop() async {

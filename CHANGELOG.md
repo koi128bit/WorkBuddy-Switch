@@ -1,4 +1,18 @@
-# Changelog
+# WorkBuddy Switch Changelog
+
+## 0.1.1 - 2026-07-25
+
+- Redesign usage analytics with account, model, and period filters; token
+  breakdowns; cache hit rate; multi-series trends; and model/session details.
+- Default usage analytics to today, add an inclusive custom calendar range, and
+  refresh local usage incrementally every 15 seconds while the page is open.
+- Add model-level request, input, output, cache-read, cache-write, and daily
+  aggregation, including normalized WorkBuddy usage payload support.
+- Reconcile locally attributable Credits with the current account's precise
+  server-side cycle total without inventing unsupported model-level billing.
+- Format chart axes with K/M/B units instead of scientific notation.
+- Rename the user-facing product to WorkBuddy Switch.
+- Replace the application icon and remove the opaque outer corner background.
 
 ## 0.1.0 - 2026-07-24
 

@@ -76,16 +76,20 @@ struct TokenBreakdown: Codable, Hashable, Sendable {
     var input: Int = 0
     var output: Int = 0
     var cacheRead: Int = 0
+    var cacheWrite: Int = 0
     var reasoning: Int = 0
+    var requestCount: Int = 0
 
-    var total: Int { input + output + cacheRead }
+    var total: Int { input + output + cacheRead + cacheWrite }
 
     static func + (lhs: TokenBreakdown, rhs: TokenBreakdown) -> TokenBreakdown {
         TokenBreakdown(
             input: lhs.input + rhs.input,
             output: lhs.output + rhs.output,
             cacheRead: lhs.cacheRead + rhs.cacheRead,
-            reasoning: lhs.reasoning + rhs.reasoning
+            cacheWrite: lhs.cacheWrite + rhs.cacheWrite,
+            reasoning: lhs.reasoning + rhs.reasoning,
+            requestCount: lhs.requestCount + rhs.requestCount
         )
     }
 }
@@ -103,10 +107,38 @@ struct UsageMessage: Hashable, Sendable {
 
 struct DailyUsagePoint: Identifiable, Hashable, Sendable {
     let day: Date
-    let tokens: Int
+    let breakdown: TokenBreakdown
     let credits: Double
 
     var id: Date { day }
+    var tokens: Int { breakdown.total }
+}
+
+struct HourlyUsagePoint: Identifiable, Hashable, Sendable {
+    let hour: Date
+    let breakdown: TokenBreakdown
+    let credits: Double
+
+    var id: Date { hour }
+    var tokens: Int { breakdown.total }
+}
+
+struct ModelDailyUsagePoint: Identifiable, Hashable, Sendable {
+    let day: Date
+    let model: String
+    let tokens: TokenBreakdown
+    let credits: Double
+
+    var id: String { "\(day.timeIntervalSinceReferenceDate):\(model)" }
+}
+
+struct ModelHourlyUsagePoint: Identifiable, Hashable, Sendable {
+    let hour: Date
+    let model: String
+    let tokens: TokenBreakdown
+    let credits: Double
+
+    var id: String { "\(hour.timeIntervalSinceReferenceDate):\(model)" }
 }
 
 struct SessionUsageSummary: Identifiable, Hashable, Sendable {
@@ -121,7 +153,7 @@ struct SessionUsageSummary: Identifiable, Hashable, Sendable {
 
 struct ModelUsageSummary: Identifiable, Hashable, Sendable {
     let model: String
-    let tokens: Int
+    let tokens: TokenBreakdown
     let credits: Double
 
     var id: String { model }
@@ -131,6 +163,9 @@ struct UsageSnapshot: Hashable, Sendable {
     var total = TokenBreakdown()
     var credits: Double = 0
     var daily: [DailyUsagePoint] = []
+    var hourly: [HourlyUsagePoint] = []
+    var modelDaily: [ModelDailyUsagePoint] = []
+    var modelHourly: [ModelHourlyUsagePoint] = []
     var sessions: [SessionUsageSummary] = []
     var models: [ModelUsageSummary] = []
     var scannedFiles: Int = 0
@@ -144,6 +179,7 @@ struct QuotaSnapshot: Hashable, Sendable {
     let used: Double
     let total: Double
     let packageName: String?
+    let cycleStartsAt: Date?
     let resetsAt: Date?
     let capturedAt: Date
 
@@ -151,30 +187,78 @@ struct QuotaSnapshot: Hashable, Sendable {
     var usedFraction: Double { total > 0 ? min(max(used / total, 0), 1) : 0 }
 }
 
+struct UsageDateRange: Hashable, Sendable {
+    let startInclusive: Date?
+    let endExclusive: Date?
+
+    func contains(_ date: Date) -> Bool {
+        let isAfterStart = startInclusive.map { date >= $0 } ?? true
+        let isBeforeEnd = endExclusive.map { date < $0 } ?? true
+        return isAfterStart && isBeforeEnd
+    }
+
+    func spansSingleDay(calendar: Calendar = .current) -> Bool {
+        guard
+            let startInclusive,
+            let endExclusive,
+            endExclusive > startInclusive
+        else {
+            return false
+        }
+        let finalMoment = endExclusive.addingTimeInterval(-0.001)
+        return calendar.isDate(startInclusive, inSameDayAs: finalMoment)
+    }
+}
+
 enum UsagePeriod: String, CaseIterable, Identifiable, Sendable {
+    case today
     case sevenDays
     case thirtyDays
     case all
+    case custom
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .today: return "当天"
         case .sevenDays: return "7 天"
         case .thirtyDays: return "30 天"
         case .all: return "全部"
+        case .custom: return "自定义"
         }
     }
 
-    var startDate: Date? {
-        let calendar = Calendar.current
+    func dateRange(
+        customStart: Date,
+        customEnd: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> UsageDateRange {
+        let today = calendar.startOfDay(for: now)
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)
         switch self {
+        case .today:
+            return UsageDateRange(startInclusive: today, endExclusive: tomorrow)
         case .sevenDays:
-            return calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: Date()))
+            return UsageDateRange(
+                startInclusive: calendar.date(byAdding: .day, value: -6, to: today),
+                endExclusive: tomorrow
+            )
         case .thirtyDays:
-            return calendar.date(byAdding: .day, value: -29, to: calendar.startOfDay(for: Date()))
+            return UsageDateRange(
+                startInclusive: calendar.date(byAdding: .day, value: -29, to: today),
+                endExclusive: tomorrow
+            )
         case .all:
-            return nil
+            return UsageDateRange(startInclusive: nil, endExclusive: nil)
+        case .custom:
+            let firstDay = calendar.startOfDay(for: min(customStart, customEnd))
+            let lastDay = calendar.startOfDay(for: max(customStart, customEnd))
+            return UsageDateRange(
+                startInclusive: firstDay,
+                endExclusive: calendar.date(byAdding: .day, value: 1, to: lastDay)
+            )
         }
     }
 }

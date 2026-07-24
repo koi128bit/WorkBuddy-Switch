@@ -1,6 +1,6 @@
-# OpenUsage
+# WorkBuddy Switch
 
-OpenUsage 是面向 WorkBuddy 的原生 macOS 账号、对话与用量管理器。界面借鉴
+WorkBuddy Switch 是面向 WorkBuddy 的原生 macOS 账号、对话与用量管理器。界面借鉴
 CC Switch 的紧凑信息架构，并以原创的光谱流带实现清亮、低干扰的动态风格。
 
 ## 功能
@@ -10,7 +10,8 @@ CC Switch 的紧凑信息架构，并以原创的光谱流带实现清亮、低�
 - 对话恢复：读取 `~/.workbuddy/workbuddy.db`，支持账号和目录筛选、回收站恢复、
   `workbuddy://chat/<session-id>` 快速继续，以及终端 `--resume` 回退。
 - Token 用量：流式解析 `~/.workbuddy/projects/**/*.jsonl`，展示净输入、输出、
-  缓存命中、思考 token、Credits、模型和对话排行。
+  缓存创建/命中、思考 token、Credits、模型和对话排行；默认查看当天，可选择
+  7 天、30 天、全部或自定义日历区间，用量页每 15 秒增量刷新。
 - 账号额度：按需读取当前 WorkBuddy 凭据并查询周期额度，不存储 token 或远程响应。
 - 菜单栏：快速查看用量、额度和切换账号。
 
@@ -24,10 +25,11 @@ CC Switch 的紧凑信息架构，并以原创的光谱流带实现清亮、低�
 
 ## 安装
 
-从 Releases 下载 DMG，将 OpenUsage 拖入 Applications。
+从 Releases 下载 `WorkBuddy-Switch-<version>-<arch>.dmg`，将
+`WorkBuddy Switch.app` 拖入 Applications。
 
 默认构建使用 ad-hoc 签名，未经过 Apple 公证，因此从网络下载后不能通过
-Gatekeeper 的常规双击检查。首次打开时可在 Finder 中右键 OpenUsage 并选择
+Gatekeeper 的常规双击检查。首次打开时可在 Finder 中右键 WorkBuddy Switch 并选择
 “打开”；这类产物只适合本地测试。面向其他用户分发时，应通过下方环境变量
 启用 Developer ID 签名与 Apple 公证。
 
@@ -40,7 +42,7 @@ scripts/test.sh
 scripts/build-release.sh
 ```
 
-产物位于 `dist/`。
+产物位于 `dist/`，文件名以 `WorkBuddy-Switch-` 开头。
 
 Developer ID 构建：
 
@@ -66,14 +68,18 @@ scripts/build-release.sh
 会话 ID 通过 SQLite `sessions.user_id` 映射到账号。重复文件优先使用消息 ID
 去重，缺少消息 ID 时使用稳定内容哈希，避免恢复或复制记录后重复计数。
 
+WorkBuddy 的额度接口只返回当前账号的周期总额，不提供模型级账单。因此界面会把
+服务端周期已用、本地可归因和未归因 Credits 分开显示；模型 Credits 只统计本地
+日志中带 `usage` 的记录，可能低于实际消耗，不会根据 Token 数量进行估算。
+
 ## 隐私与安全
 
-详见 [SECURITY.md](SECURITY.md)。OpenUsage 不包含 WorkBuddy 账号、对话、
+详见 [SECURITY.md](SECURITY.md)。WorkBuddy Switch 不包含 WorkBuddy 账号、对话、
 数据库、JSONL 或认证快照；`.gitignore` 对这些格式做了额外防护。
 
 ## 致谢与许可
 
-OpenUsage 以 MIT License 发布。参考项目及固定修订见
+WorkBuddy Switch 以 MIT License 发布。参考项目及固定修订见
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-OpenUsage 是独立项目，不隶属于腾讯、WorkBuddy、Kimi、CC Switch 或 usageBar。
+WorkBuddy Switch 是独立项目，不隶属于腾讯、WorkBuddy、Kimi、CC Switch 或 usageBar。

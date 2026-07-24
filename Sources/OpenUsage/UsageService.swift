@@ -27,6 +27,19 @@ actor UsageService {
         accountID: String?,
         force: Bool = false
     ) throws -> UsageSnapshot {
+        let today = Calendar.current.startOfDay(for: Date())
+        return try scan(
+            range: period.dateRange(customStart: today, customEnd: today),
+            accountID: accountID,
+            force: force
+        )
+    }
+
+    func scan(
+        range: UsageDateRange,
+        accountID: String?,
+        force: Bool = false
+    ) throws -> UsageSnapshot {
         var messages: [UsageMessage] = []
         var transcriptTitles: [String: String] = [:]
         var seenKeys = Set<String>()
@@ -34,7 +47,9 @@ actor UsageService {
         let paths = Set(files.map(\.path))
         cache = cache.filter { paths.contains($0.key) }
 
+        try Task.checkCancellation()
         for url in files {
+            try Task.checkCancellation()
             let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
             let modifiedAt = attributes?[.modificationDate] as? Date ?? .distantPast
             let size = (attributes?[.size] as? NSNumber)?.intValue ?? 0
@@ -57,6 +72,7 @@ actor UsageService {
             result.titles.forEach { transcriptTitles[$0.key] = $0.value }
         }
 
+        try Task.checkCancellation()
         let metadata = try sessionStore.usageMetadata()
         lastMessages = messages
         lastTranscriptTitles = transcriptTitles
@@ -67,7 +83,7 @@ actor UsageService {
             messages: messages,
             titles: titles,
             accountBySession: metadata.accountBySession,
-            period: period,
+            range: range,
             accountID: accountID
         )
         snapshot.scannedFiles = files.count
@@ -75,6 +91,17 @@ actor UsageService {
     }
 
     func aggregateCached(period: UsagePeriod, accountID: String?) throws -> UsageSnapshot {
+        let today = Calendar.current.startOfDay(for: Date())
+        return try aggregateCached(
+            range: period.dateRange(customStart: today, customEnd: today),
+            accountID: accountID
+        )
+    }
+
+    func aggregateCached(
+        range: UsageDateRange,
+        accountID: String?
+    ) throws -> UsageSnapshot {
         let metadata = try sessionStore.usageMetadata()
         var titles = metadata.titlesBySession
         lastTranscriptTitles.forEach { titles[$0.key] = $0.value }
@@ -82,7 +109,7 @@ actor UsageService {
             messages: lastMessages,
             titles: titles,
             accountBySession: metadata.accountBySession,
-            period: period,
+            range: range,
             accountID: accountID
         )
         snapshot.scannedFiles = lastScannedFiles
@@ -122,13 +149,29 @@ actor UsageService {
         var total = 0.0
         var remaining = 0.0
         var packageName: String?
+        var cycleStartsAt: Date?
         var resetsAt: Date?
         for account in accounts {
-            total += Self.number(account["CycleCapacitySize"])
-            remaining += Self.number(account["CycleCapacityRemain"])
+            total += Self.quotaAmount(
+                in: account,
+                preciseKey: "CycleCapacitySizePrecise",
+                fallbackKey: "CycleCapacitySize"
+            )
+            remaining += Self.quotaAmount(
+                in: account,
+                preciseKey: "CycleCapacityRemainPrecise",
+                fallbackKey: "CycleCapacityRemain"
+            )
             packageName = packageName ?? account["PackageName"] as? String
-            if resetsAt == nil, let value = account["CycleEndTime"] as? String {
-                resetsAt = Self.parseCycleDate(value)
+            if let value = account["CycleStartTime"] as? String,
+               let parsed = Self.parseCycleDate(value),
+               cycleStartsAt == nil || parsed < cycleStartsAt! {
+                cycleStartsAt = parsed
+            }
+            if let value = account["CycleEndTime"] as? String,
+               let parsed = Self.parseCycleDate(value),
+               resetsAt == nil || parsed > resetsAt! {
+                resetsAt = parsed
             }
         }
         guard total > 0 else {
@@ -139,6 +182,7 @@ actor UsageService {
             used: max(total - remaining, 0),
             total: total,
             packageName: packageName,
+            cycleStartsAt: cycleStartsAt,
             resetsAt: resetsAt,
             capturedAt: Date()
         )
@@ -166,6 +210,7 @@ actor UsageService {
         var buffer = Data()
         var lineNumber = 0
         while let chunk = try handle.read(upToCount: 64 * 1_024), !chunk.isEmpty {
+            try Task.checkCancellation()
             buffer.append(chunk)
             while let newline = buffer.firstRange(of: Data([0x0A])) {
                 let line = buffer.subdata(in: 0..<newline.lowerBound)
@@ -202,10 +247,18 @@ actor UsageService {
         if let title = parsed.title { result.titles[title.0] = title.1 }
     }
 
-    private static func number(_ value: Any?) -> Double {
+    static func quotaAmount(
+        in account: [String: Any],
+        preciseKey: String,
+        fallbackKey: String
+    ) -> Double {
+        number(account[preciseKey]) ?? number(account[fallbackKey]) ?? 0
+    }
+
+    private static func number(_ value: Any?) -> Double? {
         if let value = value as? NSNumber { return value.doubleValue }
-        if let value = value as? String { return Double(value) ?? 0 }
-        return 0
+        if let value = value as? String { return Double(value) }
+        return nil
     }
 
     private static func parseCycleDate(_ value: String) -> Date? {

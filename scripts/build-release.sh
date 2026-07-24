@@ -2,13 +2,15 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-version="${OPENUSAGE_VERSION:-0.1.0}"
-build_number="${OPENUSAGE_BUILD_NUMBER:-1}"
+version="${OPENUSAGE_VERSION:-0.1.1}"
+build_number="${OPENUSAGE_BUILD_NUMBER:-2}"
 sign_identity="${OPENUSAGE_SIGN_IDENTITY:--}"
 arch_list=(${=OPENUSAGE_ARCHS:-$(uname -m)})
+product_name="WorkBuddy Switch"
+artifact_prefix="WorkBuddy-Switch"
 
 if [[ ! -f "$repo_root/Package.swift" || ! -d "$repo_root/Sources/OpenUsage" ]]; then
-  echo "Refusing to package outside the OpenUsage repository: $repo_root" >&2
+  echo "Refusing to package outside the WorkBuddy Switch repository: $repo_root" >&2
   exit 1
 fi
 
@@ -52,7 +54,7 @@ if [[ ! -x "$binary" ]]; then
 fi
 
 dist_dir="$repo_root/dist"
-app="$dist_dir/OpenUsage.app"
+app="$dist_dir/$product_name.app"
 staging="$dist_dir/dmg-root"
 iconset="$dist_dir/AppIcon.iconset"
 rm -rf "$app" "$staging" "$iconset"
@@ -98,19 +100,19 @@ else
 fi
 codesign --verify --deep --strict --verbose=2 "$app"
 
-cp -R "$app" "$staging/OpenUsage.app"
+cp -R "$app" "$staging/$product_name.app"
 ln -s /Applications "$staging/Applications"
 
 arch_label="${(j:-:)arch_list}"
 if (( ${#arch_list[@]} > 1 )); then
   arch_label="universal"
 fi
-dmg="$dist_dir/OpenUsage-${version}-${arch_label}.dmg"
-zip="$dist_dir/OpenUsage-${version}-${arch_label}.zip"
+dmg="$dist_dir/${artifact_prefix}-${version}-${arch_label}.dmg"
+zip="$dist_dir/${artifact_prefix}-${version}-${arch_label}.zip"
 rm -f "$dmg" "$zip"
 
 hdiutil create \
-  -volname "OpenUsage" \
+  -volname "$product_name" \
   -srcfolder "$staging" \
   -ov \
   -format UDZO \

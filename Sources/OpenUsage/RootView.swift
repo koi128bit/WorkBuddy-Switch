@@ -36,8 +36,10 @@ struct RootView: View {
             HStack(spacing: 11) {
                 AppIconView(size: 38)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("OpenUsage")
-                        .font(.system(size: 16, weight: .semibold))
+                    Text("WorkBuddy Switch")
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
                     Text("WorkBuddy")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)

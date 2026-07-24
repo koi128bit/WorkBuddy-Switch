@@ -5,7 +5,7 @@ struct OpenUsageApp: App {
     @StateObject private var state = AppState()
 
     var body: some Scene {
-        Window("OpenUsage", id: "main") {
+        Window("WorkBuddy Switch", id: "main") {
             RootView(state: state)
                 .frame(minWidth: 1120, minHeight: 620)
                 .task { await state.start() }
@@ -29,7 +29,7 @@ struct OpenUsageApp: App {
         MenuBarExtra {
             MenuBarView(state: state)
         } label: {
-            Label("OpenUsage", systemImage: "chart.bar.fill")
+            Label("WorkBuddy Switch", systemImage: "chart.bar.fill")
         }
         .menuBarExtraStyle(.window)
 

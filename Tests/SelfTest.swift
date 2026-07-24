@@ -71,12 +71,197 @@ enum OpenUsageSelfTest {
         try expect(message.tokens.input == 800, "net input")
         try expect(message.tokens.output == 300, "output")
         try expect(message.tokens.cacheRead == 400, "cache hit")
+        try expect(message.tokens.cacheWrite == 0, "cache write defaults to zero")
         try expect(message.tokens.reasoning == 80, "reasoning")
+        try expect(message.tokens.requestCount == 1, "usage record defaults to one request")
         try expect(message.tokens.total == 1500, "total")
         try expect(message.credits == 1.25, "credits")
         try expect(
             parsedA.message?.deduplicationKey == parsedB.message?.deduplicationKey,
             "copied rows must deduplicate"
+        )
+
+        let cacheWriteLine = Data(
+            """
+            {
+              "type": "message",
+              "role": "assistant",
+              "sessionId": "cache-write-session",
+              "id": "cache-write-message",
+              "timestamp": 1784822400000,
+              "providerData": {
+                "model": "fixture-model",
+                "rawUsage": {
+                  "prompt_tokens": 1000,
+                  "completion_tokens": 100,
+                  "prompt_cache_hit_tokens": 400,
+                  "prompt_cache_miss_tokens": 600,
+                  "cache_creation_input_tokens": 250,
+                  "prompt_cache_write_tokens": 250,
+                  "completion_tokens_details": {
+                    "reasoning_tokens": 30
+                  }
+                }
+              }
+            }
+            """.utf8
+        )
+        guard let cacheWriteMessage = UsageParser.parseLine(
+            cacheWriteLine,
+            sourceFingerprint: "cache-write"
+        ).message else {
+            throw SelfTestFailure(
+                message: "cache-write usage missing",
+                file: #filePath,
+                line: #line
+            )
+        }
+        try expect(cacheWriteMessage.tokens.input == 350, "cache write removed from net input")
+        try expect(cacheWriteMessage.tokens.cacheRead == 400, "explicit cache read")
+        try expect(cacheWriteMessage.tokens.cacheWrite == 250, "duplicate cache write fields use max")
+        try expect(cacheWriteMessage.tokens.reasoning == 30, "reasoning detail fallback")
+        try expect(cacheWriteMessage.tokens.total == 1100, "cache split preserves reported total")
+
+        let normalizedOnlyLine = Data(
+            """
+            {
+              "type": "message",
+              "role": "assistant",
+              "sessionId": "normalized-session",
+              "id": "normalized-message",
+              "timestamp": 1784822400000,
+              "providerData": {
+                "model": "normalized-model",
+                "usage": {
+                  "requests": 2,
+                  "inputTokens": 2200,
+                  "outputTokens": 300,
+                  "inputTokensDetails": [{ "cached_tokens": 2000 }],
+                  "outputTokensDetails": [{ "reasoning_tokens": 75 }]
+                }
+              }
+            }
+            """.utf8
+        )
+        guard let normalizedMessage = UsageParser.parseLine(
+            normalizedOnlyLine,
+            sourceFingerprint: "normalized"
+        ).message else {
+            throw SelfTestFailure(
+                message: "normalized usage missing",
+                file: #filePath,
+                line: #line
+            )
+        }
+        try expect(normalizedMessage.tokens.input == 200, "normalized net input")
+        try expect(normalizedMessage.tokens.output == 300, "normalized output")
+        try expect(normalizedMessage.tokens.cacheRead == 2000, "normalized cache details")
+        try expect(normalizedMessage.tokens.reasoning == 75, "normalized reasoning details")
+        try expect(normalizedMessage.tokens.requestCount == 2, "normalized request count")
+        try expect(normalizedMessage.tokens.total == 2500, "normalized total")
+
+        let missingUsageLine = Data(
+            """
+            {
+              "type": "message",
+              "role": "assistant",
+              "sessionId": "missing-usage-session",
+              "id": "missing-usage-message",
+              "timestamp": 1784822400000,
+              "providerData": { "model": "kimi-k3-1" }
+            }
+            """.utf8
+        )
+        try expect(
+            UsageParser.parseLine(
+                missingUsageLine,
+                sourceFingerprint: "missing-usage"
+            ).message == nil,
+            "messages without official usage are not estimated"
+        )
+
+        let kimiParts: [(prompt: Int, cacheHit: Int, output: Int)] = [
+            (300_000, 299_500, 400),
+            (300_000, 299_500, 400),
+            (300_000, 299_500, 400),
+            (300_000, 299_500, 400),
+            (293_390, 292_944, 531)
+        ]
+        var kimiMessages: [UsageMessage] = []
+        for (index, part) in kimiParts.enumerated() {
+            let object: [String: Any] = [
+                "type": "message",
+                "role": "assistant",
+                "sessionId": "kimi-session",
+                "id": "kimi-message-\(index)",
+                "timestamp": 1_784_822_400_000 + index,
+                "providerData": [
+                    "model": "kimi-k3-1",
+                    "usage": [
+                        "requests": 1,
+                        "inputTokens": part.prompt,
+                        "outputTokens": part.output
+                    ],
+                    "rawUsage": [
+                        "prompt_tokens": part.prompt,
+                        "completion_tokens": part.output,
+                        "prompt_cache_hit_tokens": part.cacheHit,
+                        "prompt_cache_miss_tokens": part.prompt - part.cacheHit,
+                        "cache_creation_input_tokens": 0,
+                        "prompt_cache_write_tokens": 0,
+                        "completion_thinking_tokens": 1
+                    ]
+                ]
+            ]
+            let data = try JSONSerialization.data(withJSONObject: object)
+            guard let parsed = UsageParser.parseLine(
+                data,
+                sourceFingerprint: "kimi-\(index)"
+            ).message else {
+                throw SelfTestFailure(
+                    message: "Kimi usage record \(index) missing",
+                    file: #filePath,
+                    line: #line
+                )
+            }
+            kimiMessages.append(parsed)
+        }
+        let kimiSnapshot = UsageParser.aggregate(
+            messages: kimiMessages,
+            titles: ["kimi-session": "Kimi fixture"],
+            accountBySession: ["kimi-session": "account-1"],
+            period: .all,
+            accountID: "account-1"
+        )
+        guard let kimiModel = kimiSnapshot.models.first(where: { $0.model == "kimi-k3-1" }) else {
+            throw SelfTestFailure(
+                message: "Kimi model summary missing",
+                file: #filePath,
+                line: #line
+            )
+        }
+        try expect(kimiModel.tokens.input == 2_446, "Kimi net input")
+        try expect(kimiModel.tokens.output == 2_131, "Kimi output exceeds 2,000")
+        try expect(kimiModel.tokens.cacheRead == 1_490_944, "Kimi cache hit")
+        try expect(kimiModel.tokens.cacheWrite == 0, "Kimi cache write remains zero")
+        try expect(kimiModel.tokens.reasoning == 5, "Kimi reasoning")
+        try expect(kimiModel.tokens.requestCount == 5, "Kimi request count")
+        try expect(kimiModel.tokens.total == 1_495_521, "Kimi total")
+        try expect(
+            kimiSnapshot.daily.first?.breakdown == kimiModel.tokens,
+            "daily breakdown preserves Kimi token components"
+        )
+        try expect(
+            kimiSnapshot.modelDaily.first?.tokens == kimiModel.tokens,
+            "model/day series preserves Kimi token components"
+        )
+        try expect(
+            kimiSnapshot.hourly.first?.breakdown == kimiModel.tokens,
+            "hourly breakdown preserves Kimi token components"
+        )
+        try expect(
+            kimiSnapshot.modelHourly.first?.tokens == kimiModel.tokens,
+            "model/hour series preserves Kimi token components"
         )
 
         let snapshot = UsageParser.aggregate(
@@ -120,6 +305,113 @@ enum OpenUsageSelfTest {
             accountID: nil
         )
         try expect(allAccounts.total.total == 1500, "unmapped session retained in all accounts")
+
+        var utcCalendar = Calendar(identifier: .gregorian)
+        utcCalendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let rangeStart = utcCalendar.date(
+            from: DateComponents(year: 2026, month: 7, day: 24)
+        )!
+        let secondDay = utcCalendar.date(byAdding: .day, value: 1, to: rangeStart)!
+        let rangeEnd = utcCalendar.date(byAdding: .day, value: 2, to: rangeStart)!
+        let boundaryTimestamps = [
+            rangeStart.addingTimeInterval(-0.001),
+            rangeStart,
+            rangeEnd.addingTimeInterval(-0.001),
+            rangeEnd
+        ]
+        let boundaryMessages = boundaryTimestamps.enumerated().map { index, timestamp in
+            UsageMessage(
+                deduplicationKey: "boundary-\(index)",
+                sessionID: "boundary-session",
+                timestamp: timestamp,
+                model: "boundary-model",
+                tokens: TokenBreakdown(input: 1, requestCount: 1),
+                credits: 0
+            )
+        }
+        let inclusiveDayRange = UsageDateRange(
+            startInclusive: rangeStart,
+            endExclusive: rangeEnd
+        )
+        let boundarySnapshot = UsageParser.aggregate(
+            messages: boundaryMessages,
+            titles: ["boundary-session": "Boundary"],
+            accountBySession: ["boundary-session": "account-1"],
+            range: inclusiveDayRange,
+            accountID: "account-1"
+        )
+        try expect(boundarySnapshot.total.total == 2, "date range includes both day boundaries")
+        try expect(
+            boundarySnapshot.total.requestCount == 2,
+            "date range excludes the exact end-exclusive instant"
+        )
+        try expect(boundarySnapshot.hourly.count == 2, "range aggregation produces hourly points")
+        try expect(
+            boundarySnapshot.modelHourly.count == 2,
+            "range aggregation produces model/hour points"
+        )
+
+        let singleDayRange = UsagePeriod.today.dateRange(
+            customStart: rangeStart,
+            customEnd: rangeStart,
+            now: rangeStart.addingTimeInterval(12 * 60 * 60),
+            calendar: utcCalendar
+        )
+        try expect(
+            singleDayRange.startInclusive == rangeStart,
+            "today starts at local midnight"
+        )
+        try expect(
+            singleDayRange.endExclusive == secondDay,
+            "today ends at the next local midnight"
+        )
+        try expect(
+            singleDayRange.spansSingleDay(calendar: utcCalendar),
+            "today selects hourly trend granularity"
+        )
+
+        let customRange = UsagePeriod.custom.dateRange(
+            customStart: secondDay,
+            customEnd: rangeStart,
+            now: rangeStart,
+            calendar: utcCalendar
+        )
+        try expect(
+            customRange.startInclusive == rangeStart,
+            "custom range normalizes a reversed start"
+        )
+        try expect(
+            customRange.endExclusive == rangeEnd,
+            "custom range includes the selected end date"
+        )
+        try expect(
+            !customRange.spansSingleDay(calendar: utcCalendar),
+            "multi-day custom range selects daily trend granularity"
+        )
+
+        let preciseQuotaAccount: [String: Any] = [
+            "CycleCapacityRemainPrecise": "599.0400001",
+            "CycleCapacityRemain": 599
+        ]
+        try expect(
+            abs(
+                UsageService.quotaAmount(
+                    in: preciseQuotaAccount,
+                    preciseKey: "CycleCapacityRemainPrecise",
+                    fallbackKey: "CycleCapacityRemain"
+                ) - 599.0400001
+            ) < 0.000_000_01,
+            "quota parsing prefers the precise value"
+        )
+        let fallbackQuotaAccount: [String: Any] = ["CycleCapacitySize": 2800]
+        try expect(
+            UsageService.quotaAmount(
+                in: fallbackQuotaAccount,
+                preciseKey: "CycleCapacitySizePrecise",
+                fallbackKey: "CycleCapacitySize"
+            ) == 2800,
+            "quota parsing falls back to the legacy value"
+        )
 
         try expect(
             WorkBuddyController.sessionDeepLink("session-abc")?.absoluteString
@@ -290,6 +582,47 @@ enum OpenUsageSelfTest {
             cachedForOriginalOwner.total.total == 1500,
             "initial scan uses current session owner"
         )
+        let inclusiveCachedRange = UsageDateRange(
+            startInclusive: message.timestamp,
+            endExclusive: message.timestamp.addingTimeInterval(1)
+        )
+        let cachedInsideRange = try await usageService.aggregateCached(
+            range: inclusiveCachedRange,
+            accountID: "account-1"
+        )
+        try expect(
+            cachedInsideRange.total.total == 1500,
+            "cached aggregation includes the exact range start"
+        )
+        let cachedOutsideRange = try await usageService.aggregateCached(
+            range: UsageDateRange(
+                startInclusive: message.timestamp.addingTimeInterval(1),
+                endExclusive: nil
+            ),
+            accountID: "account-1"
+        )
+        try expect(
+            cachedOutsideRange.total.total == 0,
+            "cached aggregation applies a custom range"
+        )
+
+        let cancelledScan = Task {
+            withUnsafeCurrentTask { task in
+                task?.cancel()
+            }
+            return try await usageService.scan(
+                period: .all,
+                accountID: "account-1"
+            )
+        }
+        var scanObservedCancellation = false
+        do {
+            _ = try await cancelledScan.value
+        } catch is CancellationError {
+            scanObservedCancellation = true
+        }
+        try expect(scanObservedCancellation, "usage scan observes task cancellation")
+
         try cacheDatabase.execute(
             "UPDATE sessions SET user_id = ? WHERE id = ?",
             bindings: [.text("account-2"), .text("session-1")]
