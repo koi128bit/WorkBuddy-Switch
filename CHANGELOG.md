@@ -1,5 +1,19 @@
 # WorkBuddy Switch Changelog
 
+## 0.2.0 - 2026-07-25
+
+- Add a unified provider switcher for WorkBuddy, Trae CN, and TRAE Work.
+- Add Keychain-backed account capture and switching for Trae CN and TRAE Work,
+  alongside the existing WorkBuddy account workflow.
+- Add Trae usage and allowance views based on data returned by the corresponding
+  Trae APIs, with a 15-second application refresh target.
+- Keep Trae switching non-destructive: settings, plugins/extensions, workspaces,
+  conversations, and machine identifiers are not reset or removed.
+- Keep conversation browsing and cross-account resume explicitly WorkBuddy-only;
+  Trae conversations are not read, migrated, or resumed.
+- Refresh the interface around the unified provider workflow and update release
+  metadata for the 0.2.0 build.
+
 ## 0.1.4 - 2026-07-25
 
 - Allow the resume migration flow to recreate missing SQLite WAL sidecars after

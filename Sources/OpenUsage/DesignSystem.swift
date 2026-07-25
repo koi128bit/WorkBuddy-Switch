@@ -6,11 +6,13 @@ enum OpenUsageColors {
     static let cyan = Color(red: 0.20, green: 0.79, blue: 0.94)
     static let lime = Color(red: 0.63, green: 0.86, blue: 0.24)
     static let coral = Color(red: 1.0, green: 0.43, blue: 0.31)
+    static let orange = Color(red: 1.0, green: 0.42, blue: 0.10)
     static let violet = Color(red: 0.63, green: 0.30, blue: 0.98)
     static let mint = Color(red: 0.08, green: 0.76, blue: 0.53)
     static let ink = Color(red: 0.08, green: 0.08, blue: 0.09)
     static let separator = Color.primary.opacity(0.10)
     static let faintFill = Color.primary.opacity(0.035)
+    static let toolbarFill = Color.primary.opacity(0.055)
 }
 
 struct AppIconView: View {
@@ -34,6 +36,68 @@ struct AppIconView: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+    }
+}
+
+struct WorkbenchControlGroup<Content: View>: View {
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .padding(4)
+            .background(OpenUsageColors.toolbarFill)
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(OpenUsageColors.separator, lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+struct WorkbenchNavigationButton: View {
+    let title: String
+    let systemImage: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                .frame(width: 34, height: 32)
+                .background {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(backgroundColor)
+                        .shadow(
+                            color: isSelected ? Color.black.opacity(0.07) : .clear,
+                            radius: 2,
+                            y: 1
+                        )
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help(title)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var backgroundColor: Color {
+        if isSelected {
+            return Color(nsColor: .controlBackgroundColor)
+        }
+        if isHovering {
+            return Color.primary.opacity(0.05)
+        }
+        return .clear
     }
 }
 
@@ -258,4 +322,6 @@ enum DisplayFormat {
 extension Animation {
     static let openUsageEase = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.56)
     static let openUsageQuick = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.2)
+    static let workbenchProviderSwitch = Animation.easeOut(duration: 0.15)
+    static let workbenchPageSwitch = Animation.easeOut(duration: 0.20)
 }

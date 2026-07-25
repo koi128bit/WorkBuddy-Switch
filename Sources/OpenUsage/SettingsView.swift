@@ -3,9 +3,15 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var state: AppState
+    @ObservedObject private var traeAccounts: TraeAccountStore
     @AppStorage("autoCaptureCurrentAccount") private var autoCapture = false
     @AppStorage("refreshIntervalMinutes") private var refreshInterval = 10
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+
+    init(state: AppState) {
+        self.state = state
+        _traeAccounts = ObservedObject(wrappedValue: state.traeAccounts)
+    }
 
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
@@ -15,7 +21,10 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                SectionTitle(title: "设置", subtitle: "WorkBuddy Switch \(appVersion)")
+                SectionTitle(
+                    title: "设置",
+                    subtitle: "WorkBuddy Switch \(appVersion) · \(state.selectedProvider.title)"
+                )
 
                 settingsSection("常规") {
                     Toggle("登录时启动 WorkBuddy Switch", isOn: $launchAtLogin)
@@ -31,11 +40,14 @@ struct SettingsView: View {
                                 state.present(error, title: "登录项设置失败")
                             }
                         }
-                    Toggle("启动时保存当前 WorkBuddy 账号", isOn: $autoCapture)
+                    Toggle(
+                        "启动时保存当前 \(state.selectedProvider.title) 账号",
+                        isOn: $autoCapture
+                    )
                     HStack {
-                        Text("自动刷新")
+                        Text("完整刷新间隔")
                         Spacer()
-                        Picker("自动刷新", selection: $refreshInterval) {
+                        Picker("完整刷新间隔", selection: $refreshInterval) {
                             Text("5 分钟").tag(5)
                             Text("10 分钟").tag(10)
                             Text("30 分钟").tag(30)
@@ -46,32 +58,69 @@ struct SettingsView: View {
                     }
                 }
 
-                settingsSection("数据源") {
+                settingsSection("客户端与安装路径") {
                     statusRow(
                         title: "WorkBuddy",
-                        detail: WorkBuddyController().applicationURL?.path ?? "未安装",
-                        available: WorkBuddyController().applicationURL != nil
+                        detail: workBuddyApplicationURL?.path ?? "未安装",
+                        available: workBuddyApplicationURL != nil
                     )
                     statusRow(
-                        title: "会话数据库",
-                        detail: AppPaths.workBuddyDatabase.path,
-                        available: FileManager.default.fileExists(
-                            atPath: AppPaths.workBuddyDatabase.path
-                        )
+                        title: "Trae CN",
+                        detail: traeApplicationURL(.china)?.path ?? "未安装",
+                        available: traeApplicationURL(.china) != nil
                     )
                     statusRow(
-                        title: "Token 记录",
-                        detail: AppPaths.workBuddyProjects.path,
-                        available: FileManager.default.fileExists(
-                            atPath: AppPaths.workBuddyProjects.path
-                        )
+                        title: "TRAE Work",
+                        detail: traeApplicationURL(.work)?.path ?? "未安装",
+                        available: traeApplicationURL(.work) != nil
                     )
                 }
 
+                settingsSection("\(state.selectedProvider.title) 数据源") {
+                    if let variant = state.selectedTraeVariant {
+                        let storageURL = TraeDataLocation.resolve(variant).storageURL
+                        statusRow(
+                            title: "登录数据",
+                            detail: storageURL.path,
+                            available: FileManager.default.fileExists(
+                                atPath: storageURL.path
+                            )
+                        )
+                        Label(
+                            "Token 与额度来自 \(variant.displayName) 官方 API",
+                            systemImage: "network"
+                        )
+                    } else {
+                        statusRow(
+                            title: "会话数据库",
+                            detail: AppPaths.workBuddyDatabase.path,
+                            available: FileManager.default.fileExists(
+                                atPath: AppPaths.workBuddyDatabase.path
+                            )
+                        )
+                        statusRow(
+                            title: "Token 记录",
+                            detail: AppPaths.workBuddyProjects.path,
+                            available: FileManager.default.fileExists(
+                                atPath: AppPaths.workBuddyProjects.path
+                            )
+                        )
+                    }
+                }
+
                 settingsSection("隐私") {
-                    Label("账号凭据存储在 macOS 钥匙串", systemImage: "lock.shield")
-                    Label("Token 统计在本机解析，不上传对话内容", systemImage: "internaldrive")
-                    Label("仅额度刷新访问 WorkBuddy 官方接口", systemImage: "network")
+                    Label(
+                        "三个客户端的账号快照均存储在 macOS 钥匙串",
+                        systemImage: "lock.shield"
+                    )
+                    Label(
+                        "WorkBuddy Token 在本机解析；Trae 用量读取官方 API",
+                        systemImage: "internaldrive"
+                    )
+                    Label(
+                        "Trae 切号不会删除设置、插件、工作区或对话",
+                        systemImage: "checkmark.shield"
+                    )
                 }
 
                 HStack {
@@ -82,7 +131,7 @@ struct SettingsView: View {
                         )!
                     )
                     Spacer()
-                    Text("非腾讯或 WorkBuddy 官方产品")
+                    Text("非 WorkBuddy 或 Trae 官方产品")
                         .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
                 }
@@ -99,6 +148,14 @@ struct SettingsView: View {
                 dismissButton: .default(Text("好"))
             )
         }
+    }
+
+    private var workBuddyApplicationURL: URL? {
+        WorkBuddyController().applicationURL
+    }
+
+    private func traeApplicationURL(_ variant: TraeVariant) -> URL? {
+        traeAccounts.applicationURL(for: variant)
     }
 
     private func settingsSection<Content: View>(

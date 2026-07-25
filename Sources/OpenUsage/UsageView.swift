@@ -3,6 +3,7 @@ import SwiftUI
 
 struct UsageView: View {
     private struct UsageFilterID: Hashable {
+        let provider: ManagedProvider
         let accountID: String?
         let range: UsageDateRange
     }
@@ -19,7 +20,6 @@ struct UsageView: View {
         case models
 
         var id: String { rawValue }
-        var title: String { self == .sessions ? "对话统计" : "模型统计" }
         var systemImage: String {
             self == .sessions ? "bubble.left.and.bubble.right" : "chart.bar.xaxis"
         }
@@ -27,12 +27,14 @@ struct UsageView: View {
 
     @ObservedObject var state: AppState
     @ObservedObject private var accounts: AccountStore
+    @ObservedObject private var traeAccounts: TraeAccountStore
     @State private var detailTab: DetailTab = .sessions
     @State private var selectedModel: String?
 
     init(state: AppState) {
         self.state = state
         _accounts = ObservedObject(wrappedValue: state.accounts)
+        _traeAccounts = ObservedObject(wrappedValue: state.traeAccounts)
     }
 
     var body: some View {
@@ -68,6 +70,7 @@ struct UsageView: View {
 
     private var usageFilterID: UsageFilterID {
         UsageFilterID(
+            provider: state.selectedProvider,
             accountID: state.usageAccountID,
             range: state.usageDateRange
         )
@@ -92,6 +95,13 @@ struct UsageView: View {
         selectedModelSummary?.credits ?? state.usage.credits
     }
 
+    private var headlineUsageAmount: Double {
+        guard state.traeQuota?.unit == .requests else {
+            return headlineCredits
+        }
+        return Double(selectedBreakdown.requestCount)
+    }
+
     private var relevantQuota: QuotaSnapshot? {
         guard let quota = state.quota else { return nil }
         if let accountID = state.usageAccountID, accountID != quota.sourceUserID {
@@ -101,6 +111,7 @@ struct UsageView: View {
     }
 
     private var unattributedCycleCredits: Double? {
+        guard state.selectedProvider == .workBuddy else { return nil }
         guard
             let quota = relevantQuota,
             let local = state.locallyAttributedCycleCredits
@@ -165,15 +176,71 @@ struct UsageView: View {
         return "\(start.formatted(.dateTime.month().day())) - \(end.formatted(.dateTime.month().day()))"
     }
 
+    private var usageSubtitle: String {
+        if state.selectedProvider == .workBuddy {
+            return "查看 WorkBuddy 模型的本地 Token 用量与 Credits"
+        }
+        return "查看 \(state.selectedProvider.title) 官方 API 返回的 Token 与\(usageAmountUnit)"
+    }
+
+    private var recordCountLabel: String {
+        if state.selectedProvider == .workBuddy {
+            return "\(state.usage.scannedFiles) 个记录文件"
+        }
+        return "\(state.usage.scannedFiles) 条 API 用量记录"
+    }
+
+    private var usageAmountUnit: String {
+        state.traeQuota?.unit == .requests ? "请求数" : "Credits"
+    }
+
+    private var creditsSourceTitle: String {
+        state.selectedProvider == .workBuddy
+            ? "本地已记录"
+            : "API \(usageAmountUnit)"
+    }
+
+    private var modelCreditsSourceTitle: String {
+        state.selectedProvider == .workBuddy
+            ? "模型本地已记录"
+            : "模型 \(usageAmountUnit)"
+    }
+
+    private var usageAmountColumnTitle: String {
+        state.selectedProvider == .workBuddy
+            ? "已记录 Credits"
+            : usageAmountUnit
+    }
+
+    private var requestDetailTitle: String {
+        state.selectedProvider == .workBuddy ? "对话统计" : "请求统计"
+    }
+
+    private var requestDetailDescription: String {
+        state.selectedProvider == .workBuddy
+            ? "按 Token 排序的对话"
+            : "按 Token 排序的 API 请求"
+    }
+
+    private func usageAmount(_ value: Double) -> String {
+        guard state.traeQuota?.unit == .requests else {
+            return DisplayFormat.credits(value)
+        }
+        if value.rounded() == value {
+            return Int(value).formatted()
+        }
+        return DisplayFormat.credits(value)
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .bottom) {
                 SectionTitle(
                     title: "使用统计",
-                    subtitle: "查看 WorkBuddy 模型的本地 Token 用量与 Credits"
+                    subtitle: usageSubtitle
                 )
                 Spacer()
-                Text("\(state.usage.scannedFiles) 个记录文件")
+                Text(recordCountLabel)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.tertiary)
             }
@@ -185,9 +252,17 @@ struct UsageView: View {
                     width: 164
                 ) {
                     Picker("账号", selection: $state.usageAccountID) {
-                        Text("全部账号").tag(String?.none)
-                        ForEach(accounts.accounts) { account in
-                            Text(account.nickname).tag(String?.some(account.id))
+                        if let variant = state.selectedTraeVariant {
+                            Text("当前登录账号").tag(String?.none)
+                            ForEach(traeAccounts.accounts(for: variant)) { account in
+                                Text(account.nickname)
+                                    .tag(String?.some(account.userID))
+                            }
+                        } else {
+                            Text("全部账号").tag(String?.none)
+                            ForEach(accounts.accounts) { account in
+                                Text(account.nickname).tag(String?.some(account.id))
+                            }
                         }
                     }
                 }
@@ -346,27 +421,31 @@ struct UsageView: View {
 
                     HStack(spacing: 18) {
                         inlineStat(
-                            title: "请求数",
+                            title: state.traeQuota?.unit == .requests
+                                ? "区间请求数"
+                                : "请求数",
                             value: selectedBreakdown.requestCount.formatted(),
                             systemImage: "waveform.path.ecg",
                             tint: OpenUsageColors.blue
                         )
-                        Divider()
-                            .frame(height: 40)
-                        inlineStat(
-                            title: selectedModelSummary == nil
-                                ? "本地已记录"
-                                : "模型本地已记录",
-                            value: DisplayFormat.credits(headlineCredits),
-                            systemImage: "bolt.circle",
-                            tint: OpenUsageColors.mint
-                        )
+                        if state.traeQuota?.unit != .requests {
+                            Divider()
+                                .frame(height: 40)
+                            inlineStat(
+                                title: selectedModelSummary == nil
+                                    ? creditsSourceTitle
+                                    : modelCreditsSourceTitle,
+                                value: usageAmount(headlineUsageAmount),
+                                systemImage: "bolt.circle",
+                                tint: OpenUsageColors.mint
+                            )
+                        }
                         if let quota = relevantQuota {
                             Divider()
                                 .frame(height: 40)
                             inlineStat(
                                 title: "当前账号周期已用",
-                                value: DisplayFormat.credits(quota.used),
+                                value: usageAmount(quota.used),
                                 systemImage: "gauge.with.dots.needle.67percent",
                                 tint: OpenUsageColors.coral
                             )
@@ -470,32 +549,63 @@ struct UsageView: View {
         .frame(minWidth: 84, alignment: .leading)
     }
 
+    @ViewBuilder
     private func creditReconciliation(_ quota: QuotaSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 12) {
-                Label("Credits 对账", systemImage: "info.circle")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if let local = state.locallyAttributedCycleCredits {
-                    Text("当前账号本地可归因 \(DisplayFormat.credits(local))")
+        if let traeQuota = state.traeQuota {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 12) {
+                    Label("\(usageAmountUnit)口径", systemImage: "info.circle")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("周期已用 \(usageAmount(traeQuota.used))")
+                        .foregroundStyle(OpenUsageColors.mint)
+                    if let total = traeQuota.total {
+                        Text("总额 \(usageAmount(total))")
+                    } else {
+                        Text("额度不限量")
+                    }
+                    if traeQuota.payGoUsed > 0 {
+                        Text("按量 \(usageAmount(traeQuota.payGoUsed))")
+                            .foregroundStyle(OpenUsageColors.coral)
+                    }
                 }
-                if let unattributedCycleCredits {
-                    Text("未归因 \(DisplayFormat.credits(unattributedCycleCredits))")
-                        .foregroundStyle(OpenUsageColors.coral)
-                }
-                Text("当前账号服务端 \(DisplayFormat.credits(quota.used))")
-                    .foregroundStyle(OpenUsageColors.mint)
-            }
-            .font(.system(size: 11, weight: .medium, design: .rounded))
+                .font(.system(size: 11, weight: .medium, design: .rounded))
 
-            Text(
-                "上方 Token 与本地 Credits 按当前筛选；WorkBuddy 服务端只返回当前登录账号的周期总额，不提供模型账单。模型 Credits 仅统计本地带 usage 的记录，可能低于实际消耗。"
-            )
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
+                Text(
+                    "Token 与\(usageAmountUnit)均来自 \(state.selectedProvider.title) 官方接口；选择日期范围后会拉取完整记录并在本机聚合。"
+                )
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+            .accessibilityElement(children: .combine)
+        } else {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 12) {
+                    Label("Credits 对账", systemImage: "info.circle")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if let local = state.locallyAttributedCycleCredits {
+                        Text("当前账号本地可归因 \(DisplayFormat.credits(local))")
+                    }
+                    if let unattributedCycleCredits {
+                        Text("未归因 \(DisplayFormat.credits(unattributedCycleCredits))")
+                            .foregroundStyle(OpenUsageColors.coral)
+                    }
+                    Text("当前账号服务端 \(DisplayFormat.credits(quota.used))")
+                        .foregroundStyle(OpenUsageColors.mint)
+                }
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+
+                Text(
+                    "上方 Token 与本地 Credits 按当前筛选；WorkBuddy 服务端只返回当前登录账号的周期总额，不提供模型账单。模型 Credits 仅统计本地带 usage 的记录，可能低于实际消耗。"
+                )
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+            .accessibilityElement(children: .combine)
         }
-        .accessibilityElement(children: .combine)
     }
 
     private func breakdownMetric(
@@ -696,7 +806,10 @@ struct UsageView: View {
             HStack {
                 Picker("统计明细", selection: $detailTab) {
                     ForEach(DetailTab.allCases) { tab in
-                        Label(tab.title, systemImage: tab.systemImage)
+                        Label(
+                            tab == .sessions ? requestDetailTitle : "模型统计",
+                            systemImage: tab.systemImage
+                        )
                             .tag(tab)
                     }
                 }
@@ -704,7 +817,11 @@ struct UsageView: View {
                 .labelsHidden()
                 .frame(width: 260)
                 Spacer()
-                Text(detailTab == .sessions ? "按 Token 排序的对话" : "按 Token 排序的模型")
+                Text(
+                    detailTab == .sessions
+                        ? requestDetailDescription
+                        : "按 Token 排序的模型"
+                )
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
             }
@@ -723,14 +840,23 @@ struct UsageView: View {
     private var sessionDetail: some View {
         if state.usage.sessions.isEmpty {
             EmptyStateView(
-                systemImage: "bubble.left.and.bubble.right",
-                title: "暂无对话用量",
-                message: "当前账号与周期没有可展示的对话记录。"
+                systemImage: state.selectedProvider == .workBuddy
+                    ? "bubble.left.and.bubble.right"
+                    : "list.bullet.rectangle",
+                title: state.selectedProvider == .workBuddy
+                    ? "暂无对话用量"
+                    : "暂无请求用量",
+                message: state.selectedProvider == .workBuddy
+                    ? "当前账号与周期没有可展示的对话记录。"
+                    : "当前账号与周期没有可展示的 API 请求记录。"
             )
             .frame(height: 150)
         } else {
             VStack(spacing: 0) {
-                detailHeader(firstColumn: "对话", secondColumn: "Token")
+                detailHeader(
+                    firstColumn: state.selectedProvider == .workBuddy ? "对话" : "请求",
+                    secondColumn: "Token"
+                )
                 Divider()
                 ForEach(
                     Array(state.usage.sessions.prefix(20).enumerated()),
@@ -743,6 +869,7 @@ struct UsageView: View {
                         title: item.title,
                         subtitle: String(item.sessionID.prefix(10)),
                         tokens: item.tokens.total,
+                        requestCount: item.tokens.requestCount,
                         credits: item.credits
                     )
                 }
@@ -774,6 +901,7 @@ struct UsageView: View {
                         title: item.model,
                         subtitle: "模型",
                         tokens: item.tokens.total,
+                        requestCount: item.tokens.requestCount,
                         credits: item.credits
                     )
                 }
@@ -789,7 +917,7 @@ struct UsageView: View {
             Spacer()
             Text(secondColumn)
                 .frame(width: 90, alignment: .trailing)
-            Text("已记录 Credits")
+            Text(usageAmountColumnTitle)
                 .frame(width: 94, alignment: .trailing)
         }
         .font(.system(size: 10, weight: .semibold))
@@ -802,6 +930,7 @@ struct UsageView: View {
         title: String,
         subtitle: String,
         tokens: Int,
+        requestCount: Int,
         credits: Double
     ) -> some View {
         HStack(spacing: 12) {
@@ -821,7 +950,13 @@ struct UsageView: View {
             Text(DisplayFormat.tokens(tokens))
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .frame(width: 90, alignment: .trailing)
-            Text(DisplayFormat.credits(credits))
+            Text(
+                usageAmount(
+                    state.traeQuota?.unit == .requests
+                        ? Double(requestCount)
+                        : credits
+                )
+            )
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(width: 94, alignment: .trailing)

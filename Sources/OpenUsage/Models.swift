@@ -1,5 +1,33 @@
 import Foundation
 
+enum ManagedProvider: String, CaseIterable, Codable, Identifiable, Sendable {
+    case workBuddy
+    case traeCN
+    case traeWork
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .workBuddy: return "WorkBuddy"
+        case .traeCN: return "Trae CN"
+        case .traeWork: return "TRAE Work"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .workBuddy: return "bolt.horizontal.circle"
+        case .traeCN: return "sparkle"
+        case .traeWork: return "briefcase"
+        }
+    }
+
+    var supportsSessions: Bool {
+        self == .workBuddy
+    }
+}
+
 enum AppSection: String, CaseIterable, Identifiable, Sendable {
     case overview
     case accounts

@@ -9,9 +9,9 @@
   <h1>WorkBuddy Switch</h1>
 
   <p>
-    <strong>切换 WorkBuddy 账号、继续任意对话、看清每一笔 Token 与 Credits。</strong>
+    <strong>在一个窗口中管理 WorkBuddy、Trae CN 与 TRAE Work。</strong>
     <br />
-    原生、轻量、本地优先的 macOS 管理器。
+    账号快切、WorkBuddy 跨账号续聊，以及清晰的用量与额度视图。
   </p>
 
   <p>
@@ -65,43 +65,47 @@
   />
 </p>
 
-## WorkBuddy 多账号，不必从头再来
+## 三个客户端，一个清晰入口
 
-WorkBuddy 会按账号隔离本地会话。切换账号后，旧对话通常仍在磁盘上，却不会出现在
-当前账号的界面里；同时，Token、Credits 和周期额度散落在本地记录与服务端接口中，
-很难快速看清。
+WorkBuddy、Trae CN 与 TRAE Work 各自维护登录状态和用量数据。需要在多个账号之间
+工作时，反复退出登录会打断当前节奏，也很难快速确认每个账号还剩多少可用额度。
 
-WorkBuddy Switch 把账号快切、跨账号续聊和用量分析放进一个原生 macOS 应用。
-你不需要反复登录，也不需要手动修改 SQLite 数据库。
+WorkBuddy Switch 用统一的提供方切换器把账号管理和用量视图放进一个原生 macOS
+应用。WorkBuddy 还可以浏览本地历史对话，并把选中的跨账号会话安全迁移到当前账号
+继续处理。
 
 ## 核心能力
 
 <table>
   <tr>
-    <th width="33%">账号快切</th>
-    <th width="34%">跨账号继续对话</th>
-    <th width="33%">Token 与 Credits</th>
+    <th width="33%">统一账号快切</th>
+    <th width="34%">WorkBuddy 继续对话</th>
+    <th width="33%">用量与额度</th>
   </tr>
   <tr>
     <td>
-      将当前登录状态安全保存到 macOS Keychain。一键切换时自动保存出站账号、
-      原子替换凭据并重启 WorkBuddy。
+      保存并切换 WorkBuddy、Trae CN 与 TRAE Work 账号。账号快照与凭据存入
+      macOS Keychain。
     </td>
     <td>
-      搜索、筛选和恢复历史对话。跨账号继续时，只迁移你选中的会话到当前账号，
-      不切回原账号。
+      搜索、筛选和恢复 WorkBuddy 历史对话。跨账号继续时，只迁移选中的会话到
+      当前账号，不切回原账号。
     </td>
     <td>
-      按账号、模型和日期查看输入、输出、缓存、思考 Token、Credits、请求数与排行，
-      并对照当前账号周期额度。
+      查看 WorkBuddy 的本地 Token、Credits 与周期额度，并展示 Trae API 返回的
+      用量或额度结果。
     </td>
   </tr>
 </table>
 
-- **今天优先**：默认展示当天数据，也可选择 7 天、30 天、全部或自定义日历区间。
-- **持续更新**：会话与本地用量每 15 秒刷新；额度可手动刷新或按设置周期更新。
-- **菜单栏入口**：不打开主窗口，也能查看摘要、刷新额度和快速切换账号。
-- **安全备份**：任何会话迁移前都会创建一致性数据库备份，并保留最近 5 份。
+- **WorkBuddy 今天优先**：默认展示当天数据，也可选择 7 天、30 天、全部或自定义
+  日历区间。
+- **持续更新**：应用以 15 秒为刷新目标；Trae 的远程结果取决于 Trae API
+  实际返回的数据。
+- **WorkBuddy 菜单栏入口**：不打开主窗口，也能查看摘要、刷新额度和快速切换账号。
+- **非破坏式切换**：Trae 账号切换不会删除设置、插件/扩展、工作区或对话，也不会
+  重置机器标识。
+- **安全备份**：WorkBuddy 会话迁移前会创建一致性数据库备份，并保留最近 5 份。
 
 <p align="center">
   <img
@@ -114,22 +118,23 @@ WorkBuddy Switch 把账号快切、跨账号续聊和用量分析放进一个原
 ## 快速开始
 
 > [!IMPORTANT]
-> 需要 macOS 13 Ventura 或更高版本，以及 WorkBuddy macOS 桌面版。
+> 需要 macOS 13 Ventura 或更高版本，以及至少一个受支持的桌面客户端：
+> WorkBuddy、Trae CN 或 TRAE Work。
 > 发布包为 Universal App，同时支持 Apple Silicon 和 Intel Mac。
 
 1. 前往 [最新 Release](https://github.com/koi128bit/WorkBuddy-Switch/releases/latest)。
 2. 下载 `WorkBuddy-Switch-<version>-universal.dmg`。
 3. 打开 DMG，将 `WorkBuddy Switch.app` 拖入 `Applications`。
-4. 启动 WorkBuddy Switch，在 WorkBuddy 中登录后选择“保存当前账号”。
+4. 在目标客户端登录账号，然后在 WorkBuddy Switch 中选择对应提供方并保存当前账号。
 
 > [!NOTE]
-> 当前 GitHub Release 使用 ad-hoc 签名，尚未经过 Apple 公证。首次启动时，请在
-> Finder 中右键应用并选择“打开”。后续可以正常双击启动。
+> 请以对应 Release 页面的签名与公证说明为准。如果下载的构建未经过 Apple 公证，
+> macOS 可能要求你先在 Finder 中右键应用并选择“打开”。
 
-保存第二个账号时，先在 WorkBuddy 中登录该账号，再回到 WorkBuddy Switch
-保存当前状态。之后即可在主窗口或菜单栏一键切换。
+保存第二个账号时，先在对应客户端中登录该账号，再回到 WorkBuddy Switch 保存当前
+状态。之后即可在主窗口或菜单栏一键切换。
 
-## 跨账号续聊如何保证安全
+## WorkBuddy 跨账号续聊如何保证安全
 
 当你在账号 B 登录状态下继续账号 A 的会话时，WorkBuddy Switch 会：
 
@@ -146,18 +151,19 @@ WorkBuddy Switch 把账号快切、跨账号续聊和用量分析放进一个原
 
 | 数据 | 处理方式 |
 |:---|:---|
-| WorkBuddy 凭据 | 账号快照存入 macOS Keychain；access token 和 refresh token 不展示、不记录日志 |
-| 对话元数据 | 只读取本机 `~/.workbuddy/workbuddy.db`；仅在恢复所选会话时写入 |
-| Token 用量 | 在本机流式解析 `~/.workbuddy/projects/**/*.jsonl`，不上传对话内容 |
-| 数据库备份 | 迁移前使用 SQLite online backup；备份权限为 `0600`，最近保留 5 份 |
-| 网络请求 | 只有额度刷新会访问 WorkBuddy 资源接口，使用当前登录账号凭据 |
+| 账号凭据 | WorkBuddy、Trae CN 与 TRAE Work 的账号快照存入 macOS Keychain；敏感令牌不展示、不记录日志 |
+| WorkBuddy 对话 | 只读取本机 `~/.workbuddy/workbuddy.db`；仅在恢复所选会话时写入 |
+| WorkBuddy Token | 在本机流式解析 `~/.workbuddy/projects/**/*.jsonl`，不上传对话内容 |
+| Trae 本地数据 | 账号切换不删除设置、插件/扩展、工作区或对话；不执行机器标识重置或状态清理 |
+| 数据库备份 | WorkBuddy 会话迁移前使用 SQLite online backup；备份权限为 `0600`，最近保留 5 份 |
+| 网络请求 | 用量或额度刷新会访问对应提供方接口，并使用当前登录账号的凭据 |
 
 完整安全说明和漏洞报告方式见 [SECURITY.md](SECURITY.md)。
 
 ## 用量口径
 
 <details>
-<summary><strong>Token 如何统计？</strong></summary>
+<summary><strong>WorkBuddy Token 如何统计？</strong></summary>
 
 每条 assistant 消息兼容读取 `providerData.rawUsage` 与 `providerData.usage`：
 
@@ -186,6 +192,15 @@ WorkBuddy 的额度接口只返回当前账号的周期总额，不提供模型�
 
 </details>
 
+<details>
+<summary><strong>Trae 用量如何统计？</strong></summary>
+
+Trae CN 与 TRAE Work 的用量视图展示 Trae API 为当前账号返回的结果。应用以 15 秒为
+刷新目标，但数据字段、统计周期和更新时效以 Trae 服务实际响应为准；WorkBuddy
+本地 Token 的计算公式不适用于 Trae。
+
+</details>
+
 ## 兼容性
 
 | 项目 | 支持情况 |
@@ -193,12 +208,14 @@ WorkBuddy 的额度接口只返回当前账号的周期总额，不提供模型�
 | macOS | 13 Ventura 或更高版本 |
 | Mac 芯片 | Apple Silicon 与 Intel |
 | WorkBuddy | macOS 桌面版；当前在 5.3.3 上验证 |
+| Trae CN | 账号切换与 Trae API 用量/额度视图；不支持对话浏览或恢复 |
+| TRAE Work | 账号切换与 Trae API 用量/额度视图；不支持对话浏览或恢复 |
 | 界面语言 | 简体中文 |
-| 刷新频率 | 本地会话与用量 15 秒；额度 5/10/30/60 分钟或手动 |
+| 刷新频率 | 应用目标为 15 秒；Trae 远程数据以 API 返回为准 |
 
-WorkBuddy 的本地格式可能随版本变化。如果升级 WorkBuddy 后出现数据库或用量解析问题，
-请附上 WorkBuddy 版本号提交 [Issue](https://github.com/koi128bit/WorkBuddy-Switch/issues/new)；
-不要上传凭据、数据库或包含对话内容的 JSONL 文件。
+客户端本地格式和远程接口可能随版本变化。如果升级后出现账号或用量问题，请附上
+客户端名称与版本号提交 [Issue](https://github.com/koi128bit/WorkBuddy-Switch/issues/new)；
+不要上传凭据、数据库或包含对话内容的日志文件。
 
 ## 本地构建
 
@@ -231,14 +248,15 @@ scripts/build-release.sh
 <details>
 <summary><strong>点击继续对话时，会切换到原账号吗？</strong></summary>
 
-不会。当前账号就是目标账号。不同账号的会话会先迁移所选记录，再在当前账号中打开。
+不会。此功能仅适用于 WorkBuddy，当前账号就是目标账号。不同账号的会话会先迁移
+所选记录，再在当前账号中打开。
 
 </details>
 
 <details>
 <summary><strong>会修改所有旧账号的对话吗？</strong></summary>
 
-不会。迁移使用会话 ID 和预期源账号双重条件，只更新你选中的一条记录。
+不会。WorkBuddy 迁移使用会话 ID 和预期源账号双重条件，只更新你选中的一条记录。
 
 </details>
 
@@ -251,10 +269,25 @@ scripts/build-release.sh
 </details>
 
 <details>
+<summary><strong>Trae 可以浏览或继续历史对话吗？</strong></summary>
+
+暂不支持。Trae CN 与 TRAE Work 当前只提供账号切换和用量/额度视图；对话浏览与
+跨账号恢复仅支持 WorkBuddy。
+
+</details>
+
+<details>
+<summary><strong>切换 Trae 账号会删除设置、插件或对话吗？</strong></summary>
+
+不会。切换过程不删除 Trae 设置、插件/扩展、工作区或对话，也不重置机器标识。
+
+</details>
+
+<details>
 <summary><strong>为什么 macOS 提示无法验证开发者？</strong></summary>
 
-当前公开构建尚未使用 Developer ID 公证。请确认文件来自本仓库的 Release 页面，
-然后在 Finder 中右键应用并选择“打开”。
+请先核对对应 Release 页面的签名与公证说明，并确认文件来自本仓库。如果该构建未
+经过 Apple 公证，可以在 Finder 中右键应用并选择“打开”。
 
 </details>
 
@@ -265,22 +298,23 @@ scripts/build-release.sh
 - 安全问题：[SECURITY.md](SECURITY.md)
 - 参考项目与固定修订：[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
-欢迎提交 Issue 和 Pull Request。涉及 WorkBuddy 本地格式的报告请先脱敏，不要提交
+欢迎提交 Issue 和 Pull Request。涉及客户端状态或本地格式的报告请先脱敏，不要提交
 access token、refresh token、账号快照、数据库或原始对话日志。
 
 ## 致谢与许可
 
 WorkBuddy Switch 参考了
 [workbuddy-account-migrate](https://github.com/xiaoliuzhuan666/workbuddy-account-migrate)、
-[usageBar](https://github.com/ChanningYuan/usageBar) 和
+[usageBar](https://github.com/ChanningYuan/usageBar)、
+[Trae-cc](https://github.com/HHH9201/Trae-cc)、
 [CC Switch](https://github.com/farion1231/cc-switch) 的兼容数据格式与交互思路。
 具体修订和许可证信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 本项目以 [MIT License](LICENSE) 发布。
 
-WorkBuddy Switch 是独立开源项目，不隶属于、未获腾讯、WorkBuddy、Kimi、CC Switch
-或 usageBar 官方认可或赞助。
+WorkBuddy Switch 是独立开源项目，没有复制上述项目或相关产品的商标素材，也不隶属
+于、未获 WorkBuddy、Trae、Kimi 或上述开源项目的官方认可或赞助。
 
 <div align="center">
-  <strong>如果它解决了你的问题，欢迎点一个 Star，让更多 WorkBuddy 用户找到它。</strong>
+  <strong>如果它解决了你的问题，欢迎点一个 Star，让更多需要多账号切换的用户找到它。</strong>
 </div>

@@ -2,26 +2,40 @@ import SwiftUI
 
 struct RootView: View {
     @ObservedObject var state: AppState
-    @ObservedObject private var accounts: AccountStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(state: AppState) {
         self.state = state
-        _accounts = ObservedObject(wrappedValue: state.accounts)
     }
 
     var body: some View {
-        NavigationSplitView {
-            sidebar
-                .navigationSplitViewColumnWidth(min: 196, ideal: 212, max: 230)
-        } detail: {
-            content
-                .id(state.selectedSection)
-                .transition(.opacity)
-                .animation(reduceMotion ? nil : .openUsageQuick, value: state.selectedSection)
+        VStack(spacing: 0) {
+            topBar
+                .zIndex(1)
+
+            Divider()
+
+            ZStack {
+                content
+                    .id(navigationIdentity)
+                    .transition(reduceMotion ? .identity : .opacity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .animation(
+                reduceMotion ? nil : .workbenchPageSwitch,
+                value: navigationIdentity
+            )
         }
-        .navigationSplitViewStyle(.balanced)
         .background(Color(nsColor: .windowBackgroundColor))
+        .onChange(of: state.selectedProvider) { provider in
+            guard !provider.supportsSessions,
+                  state.selectedSection == .sessions
+            else {
+                return
+            }
+            selectSection(.overview)
+        }
         .alert(item: $state.alert) { alert in
             Alert(
                 title: Text(alert.title),
@@ -31,111 +45,92 @@ struct RootView: View {
         }
     }
 
-    private var sidebar: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 11) {
-                AppIconView(size: 38)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("WorkBuddy Switch")
-                        .font(.system(size: 14, weight: .semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.82)
-                    Text("WorkBuddy")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .frame(height: 64)
-
-            VStack(spacing: 4) {
-                ForEach(AppSection.allCases) { section in
-                    Button {
-                        withAnimation(.openUsageQuick) {
-                            state.selectedSection = section
-                        }
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: section.systemImage)
-                                .font(.system(size: 13, weight: .medium))
-                                .frame(width: 18)
-                            Text(section.title)
-                                .font(.system(size: 13, weight: .medium))
-                            Spacer()
-                        }
-                        .foregroundStyle(
-                            state.selectedSection == section ? Color.primary : Color.secondary
-                        )
-                        .padding(.horizontal, 11)
-                        .frame(height: 36)
-                        .background {
-                            if state.selectedSection == section {
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .fill(Color.primary.opacity(0.075))
-                            }
-                        }
-                        .contentShape(Rectangle())
+    private var topBar: some View {
+        HStack(spacing: 18) {
+            Button {
+                selectSection(.overview)
+            } label: {
+                HStack(spacing: 10) {
+                    AppIconView(size: 34)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("WorkBuddy Switch")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Text(state.selectedProvider.title)
+                            .id(state.selectedProvider)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(
-                        state.selectedSection == section ? .isSelected : []
-                    )
                 }
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 10)
-            .padding(.top, 8)
+            .buttonStyle(.plain)
+            .help("返回概览")
+            .accessibilityLabel("WorkBuddy Switch，返回概览")
+            .frame(width: 190, alignment: .leading)
 
             Spacer()
 
-            if let current = accounts.currentAccount {
-                Button {
-                    state.selectedSection = .accounts
-                } label: {
-                    HStack(spacing: 10) {
-                        Text(current.initials)
-                            .font(.system(size: 12, weight: .semibold))
-                            .frame(width: 30, height: 30)
-                            .background(OpenUsageColors.blue.opacity(0.14))
-                            .foregroundStyle(OpenUsageColors.blue)
-                            .clipShape(Circle())
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(current.nickname)
-                                .font(.system(size: 12, weight: .semibold))
-                                .lineLimit(1)
-                            Text(current.shortID)
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(.tertiary)
-                        }
-                        Spacer()
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 7, height: 7)
-                            .accessibilityHidden(true)
+            ProviderSwitcherView(
+                selection: Binding(
+                    get: { state.selectedProvider },
+                    set: { provider in
+                        selectProvider(provider)
                     }
-                    .padding(10)
-                    .background(Color.primary.opacity(0.035))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                )
+            )
+            .frame(maxWidth: 420)
+
+            WorkbenchControlGroup {
+                HStack(spacing: 2) {
+                    ForEach(visibleSections) { section in
+                        WorkbenchNavigationButton(
+                            title: section.title,
+                            systemImage: section.systemImage,
+                            isSelected: state.selectedSection == section
+                        ) {
+                            selectSection(section)
+                        }
+                    }
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 12)
-            } else {
-                Button {
-                    state.selectedSection = .accounts
-                } label: {
-                    Label("添加 WorkBuddy 账号", systemImage: "person.badge.plus")
-                        .font(.system(size: 12, weight: .medium))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(11)
-                        .background(Color.primary.opacity(0.035))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .padding(10)
             }
         }
+        .padding(.horizontal, 22)
+        .frame(height: 68)
         .background(.ultraThinMaterial)
+    }
+
+    private var visibleSections: [AppSection] {
+        AppSection.allCases.filter {
+            $0 != .sessions || state.selectedProvider.supportsSessions
+        }
+    }
+
+    private var navigationIdentity: String {
+        "\(String(describing: state.selectedProvider)):\(state.selectedSection.rawValue)"
+    }
+
+    private func selectProvider(_ provider: ManagedProvider) {
+        guard provider != state.selectedProvider else { return }
+        withAnimation(reduceMotion ? nil : .workbenchProviderSwitch) {
+            state.selectProvider(provider)
+            if !provider.supportsSessions,
+               state.selectedSection == .sessions {
+                state.selectedSection = .overview
+            }
+        }
+    }
+
+    private func selectSection(_ section: AppSection) {
+        guard section != state.selectedSection else { return }
+        guard section != .sessions || state.selectedProvider.supportsSessions else {
+            return
+        }
+        withAnimation(reduceMotion ? nil : .workbenchPageSwitch) {
+            state.selectedSection = section
+        }
     }
 
     @ViewBuilder
@@ -144,7 +139,11 @@ struct RootView: View {
         case .overview:
             OverviewView(state: state)
         case .accounts:
-            AccountsView(state: state)
+            if let variant = state.selectedTraeVariant {
+                TraeAccountsView(state: state, variant: variant)
+            } else {
+                AccountsView(state: state)
+            }
         case .sessions:
             SessionsView(state: state)
         case .usage:

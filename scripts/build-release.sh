@@ -2,8 +2,8 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-version="${OPENUSAGE_VERSION:-0.1.4}"
-build_number="${OPENUSAGE_BUILD_NUMBER:-5}"
+version="${OPENUSAGE_VERSION:-0.2.0}"
+build_number="${OPENUSAGE_BUILD_NUMBER:-6}"
 sign_identity="${OPENUSAGE_SIGN_IDENTITY:--}"
 arch_list=(${=OPENUSAGE_ARCHS:-$(uname -m)})
 product_name="WorkBuddy Switch"

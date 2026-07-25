@@ -19,15 +19,15 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.4</string>
+    <string>0.2.0</string>
     <key>CFBundleVersion</key>
-    <string>5</string>
+    <string>6</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.developer-tools</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>WorkBuddy Switch can ask Terminal to resume a selected WorkBuddy conversation.</string>
+    <string>WorkBuddy Switch may use Apple Events to reopen WorkBuddy, Trae CN, and TRAE Work after account switching, and to continue selected WorkBuddy conversations in Terminal.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>

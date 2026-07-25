@@ -2,14 +2,20 @@
 
 ## Comparison Target
 
-- Source visual truth:
+- cc-switch source visual truth:
+  - `work/design-qa/reference-cc-switch-main-zh.png`
+- WorkBuddy usage visual truth:
   - `work/design-qa/reference-summary.png`
   - `work/design-qa/reference-trend.png`
-  - `work/design-qa/reference-icon.png`
-- Native implementation captures:
+- WorkBuddy Switch 0.2.0 native captures:
+  - `work/design-qa/implementation-v0.2.0-trae-cn-accounts.png`
+  - `work/design-qa/implementation-v0.2.0-trae-cn-usage.png`
+  - `work/design-qa/implementation-v0.2.0-trae-work-usage.png`
+  - `work/design-qa/implementation-v0.2.0-trae-work-settings.png`
   - `work/design-qa/implementation-kimi-30d.jpeg`
   - `work/design-qa/implementation-kimi-trend-30d.jpeg`
 - Combined comparison evidence:
+  - `work/design-qa/comparison-v0.2.0-cc-switch-trae.jpg`
   - `work/design-qa/comparison-summary.jpg`
   - `work/design-qa/comparison-trend.jpg`
 - App icon implementation:
@@ -17,57 +23,67 @@
 
 ## Viewport And State
 
-- Source screenshots: 1800 x 1576 px, raster density unknown.
-- Implementation screenshots: 1120 x 672 px native macOS window captures.
-- Normalization: comparison sheets fit each image to 1000 px width while preserving its aspect ratio. The source is a taller settings page; the implementation is the requested native cc-switch-style shell, so composition and component fidelity were compared instead of asserting pixel-identical chrome.
-- State: dark appearance, usage page, 30-day range, `kimi-k3-1` selected, current account quota loaded.
-- Expected values: 1,495,521 Token, 5 requests, 74.86 locally recorded model Credits, 2,200.96 current-account server Credits, and 2,107.09 unattributed Credits.
+- cc-switch source: 1870 x 1252 px, light appearance, account list.
+- Trae implementation captures: 1120 x 672 px native macOS window, light appearance.
+- WorkBuddy usage source: 1800 x 1576 px; usage implementation: 1120 x 672 px native macOS window, dark appearance.
+- CSS size: not applicable to the native SwiftUI application.
+- Density normalization: the cc-switch and Trae captures are aspect-fit into equal 1160 x 920 point boxes. The resulting comparison sheet is 4800 x 2000 px at the host's 2x backing scale. The source and implementation retain their original aspect ratios; the comparison assesses component hierarchy and visual language rather than claiming pixel-identical dimensions.
+- Trae state: Trae CN and TRAE Work provider tabs; account empty state; current-day usage; request-count quota with 3 used of 10; no local Token records.
+- WorkBuddy state: 30-day range, `kimi-k3-1` selected, current-account quota loaded.
 
 ## Interaction Evidence
 
-- A fresh launch defaults to `当天` and uses an hourly trend.
-- `30 天` updates both date fields to 2026/6/26 - 2026/7/25 and uses a daily trend.
-- Selecting `kimi-k3-1` updates the summary, trend, and model table consistently.
-- Editing the start date to 2026/7/23 switches the period to `自定义` and recalculates the visible range.
-- The refresh timestamp advanced from 00:41:40 to 00:41:56 without manual input, confirming the 15-second refresh loop.
-- Scrolling exposes the trend and model detail without clipping persistent navigation.
-- Two overview captures 1.2 seconds apart differed across 22.0% of pixels, concentrated in the animated header region, confirming the Kimi-inspired motion is active.
-- Accessibility labels expose the account/model filters, period segments, date fields, refresh action, chart summaries, and detail tabs.
+- The provider selector changes between WorkBuddy, Trae CN, and TRAE Work while preserving the selected feature page.
+- Trae CN and TRAE Work expose independent Keychain-backed account pages and independent usage states.
+- Trae pages do not expose WorkBuddy's conversation-resume action.
+- The Trae usage page defaults to `当天`, labels the trend as hourly, and exposes calendar start/end fields plus 7-day, 30-day, all, and custom ranges.
+- The visible Trae refresh timestamp advanced from 15:13:42 to 15:13:58 without manual input, confirming the 15-second refresh loop.
+- The request quota appears once as `当前账号周期已用 3`, with `总额 10` in the quota footer; the earlier duplicated request metric is absent.
+- The settings page labels its 5-60 minute control `完整刷新间隔`, while the lightweight usage/session refresh remains 15 seconds.
+- WorkBuddy still defaults to today's hourly trend, switches to daily buckets for multi-day periods, and refreshes sessions from the main refresh path.
+- WorkBuddy Kimi selection updates the summary, trend, and model table consistently; Token axes use K/M/B labels rather than scientific notation.
+- Accessibility labels expose provider, feature, account/model, period, date, refresh, chart, and detail controls.
 
 ## Full-View Comparison
 
-`work/design-qa/comparison-summary.jpg` shows that both designs use the same hierarchy: page title, compact filters, a large Token summary, request/cost metrics, four Token categories, a cache-hit progress indicator, and the trend immediately below. WorkBuddy Switch intentionally uses a persistent cc-switch-style sidebar in place of the reference app's settings tabs.
+`work/design-qa/comparison-v0.2.0-cc-switch-trae.jpg` places the actual cc-switch reference and the final Trae account screen in one image. Both use a light native utility shell with a prominent product switcher, a compact tool selector, restrained gray surfaces, blue selection, direct account actions, and a scan-first layout. WorkBuddy Switch intentionally uses a single account workspace rather than cc-switch's multi-provider card list because the selected provider is already represented by the top segmented control.
 
-## Focused Trend Comparison
+`work/design-qa/comparison-summary.jpg` and `work/design-qa/comparison-trend.jpg` show that the WorkBuddy usage flow preserves the reference hierarchy: compact filters, Token summary, requests and Credits, four Token categories, cache-hit progress, and the trend immediately below.
 
-`work/design-qa/comparison-trend.jpg` confirms the dark chart surface, four-series color coding, purple cache-hit area, restrained grid, compact legend, period label, and model detail placement. The implementation axis uses `K/M/B` labels (`1.0M`, `750K`, `500K`, `250K`) and does not emit scientific notation.
+## Focused Evidence
+
+- Provider and feature controls: the cc-switch-style segmented product picker and adjacent icon-only feature picker use matching compact radii, selected elevation, and restrained stroke weights.
+- Trae account state: the primary save command appears once in the toolbar and once in the actionable empty state; text remains centered and unclipped at the minimum window size.
+- Trae quota state: Token, interval requests, cycle usage, input/output/cache categories, cache-hit rate, and quota footer remain readable without duplicate cards or nested panels.
+- WorkBuddy trend: the chart uses four-series color coding, a restrained grid, compact legend, and K/M/B axis labels.
 
 ## Required Fidelity Surfaces
 
-- Fonts and typography: native San Francisco system typography preserves the reference hierarchy and remains legible at the smaller native window size. Values use rounded numerals; labels, captions, and table copy do not overlap or truncate.
-- Spacing and layout rhythm: 28 px page margins, 20 px panel padding, 8 px radii, aligned filter rows, and full-width un-nested sections reproduce the source density while fitting the cc-switch navigation shell.
-- Colors and visual tokens: blue selection, mint positive values, coral quota values, violet cache-hit trend, neutral dark surfaces, and subtle separators map directly to the reference intent with adequate contrast.
-- Image quality and asset fidelity: the user-supplied WorkBuddy icon is retained as a sharp 1024 x 1024 raster asset. All four outer corner alpha values are 0, with no opaque black corner box or visible transparency halo.
-- Copy and content: labels distinguish locally recorded model Credits from the current account's server total and explicitly state that WorkBuddy does not provide model-level billing.
-- Icons: visible controls use consistent native SF Symbols at aligned optical sizes; the supplied brand icon is used rather than recreated.
-- Responsiveness: the window enforces a 1120 x 620 minimum, and the content scrolls vertically at the minimum size without hiding the sidebar or toolbar.
-- Accessibility and motion: semantic native controls are keyboard-accessible, charts expose textual summaries, and the animated header honors macOS Reduce Motion.
+- Fonts and typography: native San Francisco typography matches the platform character of the references. Headings, controls, values, secondary labels, and empty-state text preserve a clear hierarchy with 0 letter spacing and no clipping.
+- Spacing and layout rhythm: the 1120 x 672 native window uses aligned top controls, compact 8 px-or-smaller radii, full-width content regions, and predictable page padding. No cards are nested inside decorative page cards.
+- Colors and visual tokens: blue WorkBuddy selection, cyan Trae CN, violet TRAE Work, mint positive quota values, coral used quota values, neutral gray surfaces, and subtle separators provide clear provider and semantic states without a one-note palette.
+- Image quality and asset fidelity: the supplied 1024 x 1024 WorkBuddy icon remains sharp. All four outer corner alpha values are 0, with no opaque corner box or transparency halo.
+- Copy and content: provider names, account state, API provenance, request-count versus Credits quota language, current-day period, and full refresh interval are explicit and internally consistent.
+- Icons: native SF Symbols provide a consistent optical weight for provider, navigation, refresh, date, account, model, and chart controls. The supplied brand icon is used rather than recreated.
+- Responsiveness: the application enforces a usable native minimum, scrolls long pages vertically, and keeps provider/feature navigation visible without overlap.
+- Accessibility and motion: semantic native controls are keyboard reachable, charts expose textual summaries, and the animated header honors macOS Reduce Motion.
 
 ## Comparison History
 
-1. Initial live pass found a P1 accounting presentation error: the UI used integer quota fields and displayed 2,201.00 server Credits with 2,107.13 unattributed.
-2. The quota parser was changed to prefer `CycleCapacitySizePrecise` and `CycleCapacityRemainPrecise`, with legacy numeric fields as fallback. The reconciliation labels were also clarified as current-account values.
-3. Post-fix native evidence in `work/design-qa/implementation-kimi-30d.jpeg` shows 2,200.96 server Credits and 2,107.09 unattributed, while preserving 74.86 as the separately labeled local Kimi value.
-4. The final summary and trend comparison sheets contain no remaining actionable P0, P1, or P2 mismatch.
+1. The earlier WorkBuddy usage pass found a P1 accounting presentation error caused by integer quota fields.
+2. The parser was changed to prefer precise quota fields, and the labels now separate local model Credits from current-account server Credits. Post-fix captures show 2,200.96 server Credits and 2,107.09 unattributed Credits.
+3. The initial Trae pass exposed a duplicated request-count summary and an ambiguous 5-60 minute `自动刷新` label.
+4. The duplicate quota metric was removed, and the setting was renamed to `完整刷新间隔`. The final Trae usage and settings captures confirm both fixes.
+5. The final combined cc-switch/Trae comparison contains no remaining actionable P0, P1, or P2 mismatch.
 
 ## Findings
 
 No actionable P0, P1, or P2 findings remain.
 
-The implementation is intentionally denser than the 1800 x 1576 reference because it is a resizable native utility window with a persistent account-switching sidebar. The hierarchy, visual language, and primary usage workflow remain equivalent.
+The native WorkBuddy Switch window is intentionally denser than the 1870 px cc-switch reference. This is an expected platform and viewport adaptation; provider switching, tool navigation, account actions, usage hierarchy, spacing, and visual tokens remain equivalent.
 
 ## Follow-Up Polish
 
-- P3: A wider optional window preset could provide more whitespace for users who prefer the reference page's spacious density, but the current minimum and default sizes are usable and visually balanced.
+- P3: A wider optional window preset could provide more whitespace for large displays, but the current default and minimum sizes are readable and balanced.
 
 final result: passed

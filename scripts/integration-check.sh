@@ -17,6 +17,8 @@ swiftc \
   "$repo_root/Sources/OpenUsage/UsageParser.swift" \
   "$repo_root/Sources/OpenUsage/UsageService.swift" \
   "$repo_root/Sources/OpenUsage/WorkBuddyController.swift" \
+  "$repo_root/Sources/OpenUsage/TraeSupport.swift" \
+  "$repo_root/Sources/OpenUsage/TraeUsageService.swift" \
   "$repo_root/Tests/IntegrationCheck.swift" \
   -framework AppKit \
   -framework Security \

@@ -14,12 +14,12 @@ struct OpenUsageApp: App {
         .commands {
             CommandGroup(after: .sidebar) {
                 Divider()
-                Button("刷新用量") {
+                Button("刷新 \(state.selectedProvider.title) 用量") {
                     Task { await state.refreshAll(force: true) }
                 }
                 .keyboardShortcut("r", modifiers: .command)
 
-                Button("捕获当前 WorkBuddy 账号") {
+                Button("保存当前 \(state.selectedProvider.title) 账号") {
                     state.captureCurrentAccount()
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])

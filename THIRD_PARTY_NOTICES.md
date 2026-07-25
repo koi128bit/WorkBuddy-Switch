@@ -1,8 +1,8 @@
 # Third-Party Notices
 
 WorkBuddy Switch is an independent implementation. It does not bundle source code,
-logos, screenshots, or other assets from WorkBuddy, CC Switch, Kimi Work, or
-usageBar.
+logos, screenshots, trademark artwork, or other assets from WorkBuddy, Trae CN,
+TRAE Work, Trae-cc, CC Switch, Kimi Work, or usageBar.
 
 The following open-source projects informed compatible data formats and
 interaction patterns:
@@ -28,9 +28,17 @@ interaction patterns:
 - License: MIT
 - Copyright notice: Copyright (c) 2025 Jason Young
 
+## Trae-cc
+
+- Repository: <https://github.com/HHH9201/Trae-cc>
+- Revision reviewed: `7f30fd4fc22edf538d36e736bad94c8ddb2c419d`
+- License: MIT
+- Copyright notice: Copyright (c) 2025 HJH
+
 The MIT license text applicable to those projects is reproduced in this
 repository's `LICENSE` file. Their project-specific copyright notices remain
 the property of their respective authors.
 
-WorkBuddy and Kimi are trademarks or products of their respective owners.
-WorkBuddy Switch is not affiliated with, endorsed by, or sponsored by those owners.
+WorkBuddy, Trae, TRAE, and Kimi are trademarks or products of their respective
+owners. WorkBuddy Switch is not affiliated with, endorsed by, or sponsored by
+those owners or by the open-source projects listed above.

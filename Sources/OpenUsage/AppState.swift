@@ -9,9 +9,11 @@ struct AppAlert: Identifiable {
 @MainActor
 final class AppState: ObservableObject {
     @Published var selectedSection: AppSection = .overview
+    @Published var selectedProvider: ManagedProvider = .workBuddy
     @Published private(set) var sessions: [SessionRecord] = []
     @Published private(set) var usage: UsageSnapshot = .empty
     @Published private(set) var quota: QuotaSnapshot?
+    @Published private(set) var traeQuota: TraeQuotaSummary?
     @Published private(set) var locallyAttributedCycleCredits: Double?
     @Published private(set) var quotaMessage: String?
     @Published private(set) var sessionMessage: String?
@@ -26,8 +28,10 @@ final class AppState: ObservableObject {
     @Published var alert: AppAlert?
 
     let accounts = AccountStore()
+    let traeAccounts = TraeAccountStore()
     private let sessionStore = SessionStore()
     private let usageService = UsageService()
+    private let traeUsageService = TraeUsageService()
     private let workBuddy = WorkBuddyController()
     private var startupTask: Task<Void, Never>?
     private var localRefreshTask: Task<Void, Never>?
@@ -40,6 +44,14 @@ final class AppState: ObservableObject {
         let today = Calendar.current.startOfDay(for: Date())
         usageStartDate = today
         usageEndDate = today
+        if
+            let rawProvider = UserDefaults.standard.string(
+                forKey: "selectedManagedProvider"
+            ),
+            let restoredProvider = ManagedProvider(rawValue: rawProvider)
+        {
+            selectedProvider = restoredProvider
+        }
     }
 
     deinit {
@@ -53,6 +65,69 @@ final class AppState: ObservableObject {
             customStart: usageStartDate,
             customEnd: usageEndDate
         )
+    }
+
+    var selectedTraeVariant: TraeVariant? {
+        selectedProvider.traeVariant
+    }
+
+    var activeAccountCount: Int {
+        guard let variant = selectedTraeVariant else {
+            return accounts.accounts.count
+        }
+        return traeAccounts.accounts(for: variant).count
+    }
+
+    var activeCurrentUserID: String? {
+        guard let variant = selectedTraeVariant else {
+            return accounts.currentUserID
+        }
+        return traeAccounts.currentUserID(for: variant)
+    }
+
+    var activeCurrentAccountName: String? {
+        guard let variant = selectedTraeVariant else {
+            return accounts.currentAccount?.nickname
+        }
+        return traeAccounts.currentAccount(for: variant)?.nickname
+    }
+
+    var activeCurrentAccountShortID: String? {
+        guard let variant = selectedTraeVariant else {
+            return accounts.currentAccount?.shortID
+        }
+        return traeAccounts.currentAccount(for: variant)?.shortID
+    }
+
+    var isActiveAccountSwitching: Bool {
+        guard let variant = selectedTraeVariant else {
+            return accounts.isSwitching
+        }
+        return traeAccounts.isSwitching(variant)
+    }
+
+    func selectProvider(_ provider: ManagedProvider) {
+        guard provider != selectedProvider else { return }
+        invalidateRefreshResults()
+        selectedProvider = provider
+        UserDefaults.standard.set(
+            provider.rawValue,
+            forKey: "selectedManagedProvider"
+        )
+        usageAccountID = nil
+        sessions = []
+        usage = .empty
+        quota = nil
+        traeQuota = nil
+        locallyAttributedCycleCredits = nil
+        sessionMessage = provider.supportsSessions
+            ? nil
+            : "\(provider.title) 暂不支持对话浏览或恢复。"
+        usageMessage = nil
+        quotaMessage = "正在读取 \(provider.title) 用量。"
+        Task { @MainActor [weak self] in
+            await self?.refreshAll(force: true)
+        }
     }
 
     func start() async {
@@ -71,7 +146,11 @@ final class AppState: ObservableObject {
 
     private func performStartup() async {
         if UserDefaults.standard.bool(forKey: "autoCaptureCurrentAccount") {
-            _ = try? accounts.captureCurrent()
+            if let variant = selectedTraeVariant {
+                _ = try? traeAccounts.captureCurrent(variant)
+            } else {
+                _ = try? accounts.captureCurrent()
+            }
         }
 
         localRefreshTask = Task { @MainActor [weak self] in
@@ -82,6 +161,9 @@ final class AppState: ObservableObject {
         }
 
         await refreshAll()
+        if selectedTraeVariant != nil {
+            return
+        }
 
         for delay in [300_000_000, 900_000_000, 1_800_000_000] as [UInt64] {
             guard sessions.isEmpty || usage.scannedFiles == 0 || usageMessage != nil else {
@@ -102,6 +184,12 @@ final class AppState: ObservableObject {
     }
 
     func refreshAll(force: Bool = false) async {
+        if let variant = selectedTraeVariant {
+            await refreshTraeAll(variant: variant, force: force)
+            return
+        }
+
+        traeQuota = nil
         refreshGeneration &+= 1
         sessionGeneration &+= 1
         usageGeneration &+= 1
@@ -193,6 +281,11 @@ final class AppState: ObservableObject {
     }
 
     func recalculateUsage() async {
+        if let variant = selectedTraeVariant {
+            await refreshTraeUsage(variant: variant, includeQuota: false)
+            return
+        }
+
         while isRefreshing || isUsageRefreshing {
             do {
                 try await Task.sleep(nanoseconds: 50_000_000)
@@ -221,6 +314,14 @@ final class AppState: ObservableObject {
     }
 
     func refreshUsageIfIdle(force: Bool = false) async {
+        if let variant = selectedTraeVariant {
+            await refreshTraeUsage(
+                variant: variant,
+                includeQuota: force
+            )
+            return
+        }
+
         guard !isRefreshing, !isUsageRefreshing else { return }
         isUsageRefreshing = true
         usageGeneration &+= 1
@@ -292,8 +393,15 @@ final class AppState: ObservableObject {
 
     func captureCurrentAccount() {
         do {
-            _ = try accounts.captureCurrent()
-            alert = AppAlert(title: "账号已保存", message: "登录快照已安全存入 macOS 钥匙串。")
+            if let variant = selectedTraeVariant {
+                _ = try traeAccounts.captureCurrent(variant)
+            } else {
+                _ = try accounts.captureCurrent()
+            }
+            alert = AppAlert(
+                title: "账号已保存",
+                message: "\(selectedProvider.title) 登录快照已安全存入 macOS 钥匙串。"
+            )
         } catch {
             present(error, title: "无法保存账号")
         }
@@ -333,6 +441,52 @@ final class AppState: ObservableObject {
         do {
             try accounts.remove(profile)
             if usageAccountID == profile.id {
+                usageAccountID = nil
+                Task { await recalculateUsage() }
+            }
+        } catch {
+            present(error, title: "移除失败")
+        }
+    }
+
+    func switchTraeAccount(to profile: TraeAccountProfile) async {
+        guard resumingSessionID == nil else {
+            alert = AppAlert(
+                title: "正在准备对话",
+                message: "WorkBuddy 对话操作完成后再切换 Trae 账号。"
+            )
+            return
+        }
+        invalidateRefreshResults()
+        do {
+            try await traeAccounts.switchAccount(to: profile)
+            usageAccountID = profile.userID
+            quota = nil
+            locallyAttributedCycleCredits = nil
+            quotaMessage = "正在刷新新账号用量。"
+            try await Task.sleep(nanoseconds: 500_000_000)
+            await refreshAll(force: true)
+        } catch {
+            present(error, title: "切换失败")
+        }
+    }
+
+    func renameTraeAccount(
+        _ profile: TraeAccountProfile,
+        nickname: String
+    ) {
+        do {
+            try traeAccounts.rename(profile, to: nickname)
+        } catch {
+            present(error, title: "重命名失败")
+        }
+    }
+
+    func removeTraeAccount(_ profile: TraeAccountProfile) {
+        do {
+            try traeAccounts.remove(profile)
+            if usageAccountID == profile.userID,
+               selectedTraeVariant == profile.variant {
                 usageAccountID = nil
                 Task { await recalculateUsage() }
             }
@@ -554,6 +708,186 @@ final class AppState: ObservableObject {
         }
     }
 
+    private func refreshTraeAll(
+        variant: TraeVariant,
+        force: Bool
+    ) async {
+        refreshGeneration &+= 1
+        usageGeneration &+= 1
+        let generation = refreshGeneration
+        let usageRequest = usageGeneration
+        let provider = variant.provider
+        let range = usageDateRange
+        isRefreshing = true
+        defer {
+            if refreshGeneration == generation {
+                isRefreshing = false
+            }
+        }
+
+        traeAccounts.refreshCurrentAccounts()
+        sessions = []
+        sessionMessage = "\(provider.title) 暂不支持对话浏览或恢复。"
+        if usageAccountID == nil {
+            usageAccountID = traeAccounts.currentUserID(for: variant)
+        }
+
+        do {
+            let report = try await loadTraeReport(
+                variant: variant,
+                range: range
+            )
+            guard
+                refreshGeneration == generation,
+                usageGeneration == usageRequest,
+                selectedProvider == provider
+            else {
+                return
+            }
+            usage = report.usage
+            traeQuota = report.quota
+            quota = report.quota.quotaSnapshot
+            locallyAttributedCycleCredits = nil
+            usageMessage = nil
+            quotaMessage = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            guard
+                refreshGeneration == generation,
+                selectedProvider == provider
+            else {
+                return
+            }
+            usageMessage = error.localizedDescription
+            quotaMessage = error.localizedDescription
+            quota = nil
+            traeQuota = nil
+            locallyAttributedCycleCredits = nil
+            if force {
+                present(error, title: "\(provider.title) 用量读取失败")
+            }
+        }
+    }
+
+    private func refreshTraeUsage(
+        variant: TraeVariant,
+        includeQuota: Bool
+    ) async {
+        while isRefreshing || isUsageRefreshing {
+            do {
+                try await Task.sleep(nanoseconds: 50_000_000)
+            } catch {
+                return
+            }
+        }
+        guard !Task.isCancelled else { return }
+
+        isUsageRefreshing = true
+        usageGeneration &+= 1
+        let request = usageGeneration
+        let provider = variant.provider
+        let range = usageDateRange
+        defer { isUsageRefreshing = false }
+
+        do {
+            let refreshedUsage: UsageSnapshot
+            let refreshedQuota: TraeQuotaSummary?
+            if includeQuota {
+                let report = try await loadTraeReport(
+                    variant: variant,
+                    range: range
+                )
+                refreshedUsage = report.usage
+                refreshedQuota = report.quota
+            } else {
+                refreshedUsage = try await loadTraeUsage(
+                    variant: variant,
+                    range: range
+                )
+                refreshedQuota = nil
+            }
+            guard
+                !Task.isCancelled,
+                usageGeneration == request,
+                selectedProvider == provider
+            else {
+                return
+            }
+            usage = refreshedUsage
+            usageMessage = nil
+            if let refreshedQuota {
+                traeQuota = refreshedQuota
+                quota = refreshedQuota.quotaSnapshot
+                quotaMessage = nil
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            guard
+                !Task.isCancelled,
+                usageGeneration == request,
+                selectedProvider == provider
+            else {
+                return
+            }
+            usageMessage = error.localizedDescription
+            if includeQuota {
+                quotaMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func loadTraeReport(
+        variant: TraeVariant,
+        range: UsageDateRange
+    ) async throws -> TraeUsageReport {
+        if let snapshot = try selectedTraeSnapshot(variant: variant) {
+            return try await traeUsageService.fetchReport(
+                snapshot: snapshot,
+                range: range
+            )
+        }
+        return try await traeUsageService.fetchReport(
+            for: variant,
+            range: range
+        )
+    }
+
+    private func loadTraeUsage(
+        variant: TraeVariant,
+        range: UsageDateRange
+    ) async throws -> UsageSnapshot {
+        if let snapshot = try selectedTraeSnapshot(variant: variant) {
+            return try await traeUsageService.fetchUsage(
+                snapshot: snapshot,
+                range: range
+            )
+        }
+        return try await traeUsageService.fetchUsage(
+            for: variant,
+            range: range
+        )
+    }
+
+    private func selectedTraeSnapshot(
+        variant: TraeVariant
+    ) throws -> TraeCredentialSnapshot? {
+        guard let accountID = usageAccountID else { return nil }
+        if traeAccounts.accounts(for: variant).contains(
+            where: { $0.userID == accountID }
+        ) {
+            return try traeAccounts.snapshot(
+                for: variant,
+                userID: accountID
+            )
+        }
+        if traeAccounts.currentUserID(for: variant) == accountID {
+            return nil
+        }
+        throw TraeSupportError.accountSnapshotMissing
+    }
+
     private func reloadSessions() async {
         sessionGeneration &+= 1
         let request = sessionGeneration
@@ -598,15 +932,26 @@ final class AppState: ObservableObject {
                 return
             }
             guard !Task.isCancelled else { return }
-            guard
-                !isRefreshing,
-                !accounts.isSwitching,
-                resumingSessionID == nil
-            else {
-                continue
+            if let variant = selectedTraeVariant {
+                guard
+                    !isRefreshing,
+                    !traeAccounts.isSwitching(variant)
+                else {
+                    continue
+                }
+                traeAccounts.refreshCurrentAccounts()
+                await refreshUsageIfIdle()
+            } else {
+                guard
+                    !isRefreshing,
+                    !accounts.isSwitching,
+                    resumingSessionID == nil
+                else {
+                    continue
+                }
+                await reloadSessions()
+                await refreshUsageIfIdle()
             }
-            await reloadSessions()
-            await refreshUsageIfIdle()
         }
     }
 
