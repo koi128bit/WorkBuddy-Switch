@@ -1,7 +1,6 @@
 # WorkBuddy Switch
 
-WorkBuddy Switch 是面向 WorkBuddy 的原生 macOS 账号、对话与用量管理器。界面借鉴
-CC Switch 的紧凑信息架构，并以原创的光谱流带实现清亮、低干扰的动态风格。
+WorkBuddy Switch 是面向 WorkBuddy 的原生 macOS 账号、对话与用量管理器。
 
 ## 功能
 
