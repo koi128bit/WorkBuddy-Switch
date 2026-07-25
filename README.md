@@ -159,15 +159,14 @@ WorkBuddy Switch 把账号快切、跨账号续聊和用量分析放进一个原
 <details>
 <summary><strong>Token 如何统计？</strong></summary>
 
-每条 assistant 消息读取 `providerData.rawUsage`：
+每条 assistant 消息兼容读取 `providerData.rawUsage` 与 `providerData.usage`：
 
 ```text
-净输入 = prompt_tokens - prompt_cache_hit_tokens
-输出   = completion_tokens
-缓存读 = prompt_cache_hit_tokens
-缓存写 = prompt_cache_creation_tokens
-思考   = completion_thinking_tokens（输出的子集）
-总量   = prompt_tokens + completion_tokens
+净输入 = prompt - 缓存读取 - 缓存写入
+输出   = completion
+思考   = 输出的一部分，不重复计入总量
+总量   = 净输入 + 缓存读取 + 缓存写入 + 输出
+       = prompt + completion
 ```
 
 会话 ID 通过 SQLite `sessions.user_id` 映射到账号。重复文件优先使用消息 ID 去重；
