@@ -261,7 +261,7 @@ struct SessionStore: Sendable {
     }
 
     private func resumeState(sessionID: String) throws -> ResumeState {
-        let database = try SQLiteDatabase(url: databaseURL, readOnly: true)
+        let database = try SQLiteDatabase(url: databaseURL, readOnly: false)
         return try resumeState(sessionID: sessionID, database: database)
     }
 

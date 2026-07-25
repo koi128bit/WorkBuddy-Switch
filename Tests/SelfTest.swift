@@ -583,6 +583,25 @@ enum OpenUsageSelfTest {
             "rejected migration leaves the selected session unchanged"
         )
 
+        // WorkBuddy can remove WAL sidecars while leaving the main database in WAL mode.
+        var stoppedWorkBuddyDatabase: SQLiteDatabase? = try SQLiteDatabase(
+            url: migrationDatabaseURL,
+            readOnly: false
+        )
+        try stoppedWorkBuddyDatabase?.checkpointWAL()
+        stoppedWorkBuddyDatabase = nil
+        for suffix in ["-wal", "-shm"] {
+            let sidecarURL = URL(fileURLWithPath: migrationDatabaseURL.path + suffix)
+            if FileManager.default.fileExists(atPath: sidecarURL.path) {
+                try FileManager.default.removeItem(at: sidecarURL)
+            }
+        }
+        try expect(
+            !FileManager.default.fileExists(atPath: migrationDatabaseURL.path + "-wal")
+                && !FileManager.default.fileExists(atPath: migrationDatabaseURL.path + "-shm"),
+            "stopped WorkBuddy fixture has no WAL sidecars"
+        )
+
         let migrated = try migrationStore.prepareSessionForResume(
             sessionID: "move-selected",
             expectedSourceUserID: "source-account",

@@ -1,5 +1,13 @@
 # WorkBuddy Switch Changelog
 
+## 0.1.4 - 2026-07-25
+
+- Allow the resume migration flow to recreate missing SQLite WAL sidecars after
+  WorkBuddy exits, preventing `unable to open database file` before backup and
+  session reassignment.
+- Add a regression fixture that checkpoints a WAL database, removes its WAL and
+  SHM sidecars, then verifies cross-account conversation migration and backup.
+
 ## 0.1.3 - 2026-07-25
 
 - Continue a cross-account conversation by migrating only the selected session
