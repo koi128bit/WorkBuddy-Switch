@@ -77,7 +77,9 @@ struct SettingsView: View {
                 HStack {
                     Link(
                         "GitHub",
-                        destination: URL(string: "https://github.com/koi128bit/openusage")!
+                        destination: URL(
+                            string: "https://github.com/koi128bit/WorkBuddy-Switch"
+                        )!
                     )
                     Spacer()
                     Text("非腾讯或 WorkBuddy 官方产品")

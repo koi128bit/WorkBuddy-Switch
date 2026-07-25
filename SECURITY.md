@@ -14,7 +14,8 @@ account is captured, switched, or its quota is refreshed.
 - If stopping, writing, indexing, or relaunching fails, the prior on-disk
   credential and account index are restored before the prior identity is
   relaunched.
-- Tokens are never logged, rendered, cached in quota history, or committed.
+- Access and refresh tokens are never logged, rendered, cached in quota history,
+  or committed.
 
 ## Local data
 
@@ -27,7 +28,7 @@ and at the configured refresh interval.
 ## Reports
 
 Please use the repository's
-[GitHub private vulnerability reporting form](https://github.com/koi128bit/openusage/security/advisories/new).
+[GitHub private vulnerability reporting form](https://github.com/koi128bit/WorkBuddy-Switch/security/advisories/new).
 Reports submitted there are handled as private GitHub Security Advisories, not
 public issues.
 
