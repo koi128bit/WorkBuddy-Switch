@@ -9,25 +9,25 @@
   <h1>WorkBuddy Switch</h1>
 
   <p>
-    <strong>在一个窗口中管理 WorkBuddy、Trae CN 与 TRAE Work。</strong>
+    <strong>一个原生 macOS 应用，统一管理 WorkBuddy、Trae CN 与 TRAE Work。</strong>
     <br />
-    账号快切、WorkBuddy 跨账号续聊，以及清晰的用量与额度视图。
+    三端账号一键切换 · WorkBuddy 跨账号续聊 · Token、Credits 与额度一屏看清。
   </p>
 
   <p>
-    <a href="https://github.com/koi128bit/WorkBuddy-Switch/releases/latest">
+    <a href="https://github.com/koi128bit/WorkBuddy-Switch/releases/tag/v0.2.0">
       <img
-        src="https://img.shields.io/badge/Download-Latest%20DMG-2ea44f?style=for-the-badge&logo=apple"
-        alt="Download latest DMG"
+        src="https://img.shields.io/badge/下载-v0.2.0%20预发布版-2ea44f?style=for-the-badge&logo=apple"
+        alt="下载 WorkBuddy Switch v0.2.0 预发布版"
       />
     </a>
   </p>
 
   <p>
-    <a href="https://github.com/koi128bit/WorkBuddy-Switch/releases/latest">
+    <a href="https://github.com/koi128bit/WorkBuddy-Switch/releases/tag/v0.2.0">
       <img
-        src="https://img.shields.io/github/v/release/koi128bit/WorkBuddy-Switch?style=flat-square&label=release"
-        alt="Latest release"
+        src="https://img.shields.io/badge/pre--release-v0.2.0-0969da?style=flat-square"
+        alt="Pre-release v0.2.0"
       />
     </a>
     <img
@@ -49,6 +49,8 @@
   <p>
     <a href="#快速开始">快速开始</a>
     ·
+    <a href="https://github.com/koi128bit/WorkBuddy-Switch/wiki">使用指南</a>
+    ·
     <a href="#安全与隐私">安全与隐私</a>
     ·
     <a href="CHANGELOG.md">更新日志</a>
@@ -61,7 +63,7 @@
   <img
     src=".github/assets/overview.jpeg"
     width="1120"
-    alt="WorkBuddy Switch overview showing token usage, credits, conversations, accounts, and quota"
+    alt="WorkBuddy Switch 总览：Token、Credits、对话、账号与周期额度"
   />
 </p>
 
@@ -98,10 +100,14 @@ WorkBuddy Switch 用统一的提供方切换器把账号管理和用量视图放
   </tr>
 </table>
 
+> [!NOTE]
+> 对话浏览与跨账号恢复仅支持 WorkBuddy；Trae CN 与 TRAE Work 当前支持账号切换和
+> 官方 API 用量/额度。
+
 - **WorkBuddy 今天优先**：默认展示当天数据，也可选择 7 天、30 天、全部或自定义
   日历区间。
-- **持续更新**：应用以 15 秒为刷新目标；Trae 的远程结果取决于 Trae API
-  实际返回的数据。
+- **15 秒自动刷新**：WorkBuddy 本地会话与用量、Trae API 用量每 15 秒轻量更新；
+  额度数据的时效以服务端返回为准。
 - **WorkBuddy 菜单栏入口**：不打开主窗口，也能查看摘要、刷新额度和快速切换账号。
 - **非破坏式切换**：Trae 账号切换不会删除设置、插件/扩展、工作区或对话，也不会
   重置机器标识。
@@ -111,7 +117,7 @@ WorkBuddy Switch 用统一的提供方切换器把账号管理和用量视图放
   <img
     src=".github/assets/usage-dashboard.png"
     width="1120"
-    alt="WorkBuddy Switch token and credit usage dashboard filtered by model"
+    alt="WorkBuddy Switch 按模型筛选的 Token 与 Credits 用量面板"
   />
 </p>
 
@@ -122,7 +128,7 @@ WorkBuddy Switch 用统一的提供方切换器把账号管理和用量视图放
 > WorkBuddy、Trae CN 或 TRAE Work。
 > 发布包为 Universal App，同时支持 Apple Silicon 和 Intel Mac。
 
-1. 前往 [最新 Release](https://github.com/koi128bit/WorkBuddy-Switch/releases/latest)。
+1. 前往 [v0.2.0 预发布版](https://github.com/koi128bit/WorkBuddy-Switch/releases/tag/v0.2.0)。
 2. 下载 `WorkBuddy-Switch-<version>-universal.dmg`。
 3. 打开 DMG，将 `WorkBuddy Switch.app` 拖入 `Applications`。
 4. 在目标客户端登录账号，然后在 WorkBuddy Switch 中选择对应提供方并保存当前账号。
@@ -211,7 +217,7 @@ Trae CN 与 TRAE Work 的用量视图展示 Trae API 为当前账号返回的结
 | Trae CN | 账号切换与 Trae API 用量/额度视图；不支持对话浏览或恢复 |
 | TRAE Work | 账号切换与 Trae API 用量/额度视图；不支持对话浏览或恢复 |
 | 界面语言 | 简体中文 |
-| 刷新频率 | 应用目标为 15 秒；Trae 远程数据以 API 返回为准 |
+| 刷新频率 | 本地会话/用量与 Trae API 用量每 15 秒自动更新；额度时效以服务端返回为准 |
 
 客户端本地格式和远程接口可能随版本变化。如果升级后出现账号或用量问题，请附上
 客户端名称与版本号提交 [Issue](https://github.com/koi128bit/WorkBuddy-Switch/issues/new)；
@@ -293,6 +299,7 @@ scripts/build-release.sh
 
 ## 反馈与贡献
 
+- 使用指南：[项目 Wiki](https://github.com/koi128bit/WorkBuddy-Switch/wiki)
 - Bug 或功能建议：[GitHub Issues](https://github.com/koi128bit/WorkBuddy-Switch/issues)
 - 版本变化：[CHANGELOG.md](CHANGELOG.md)
 - 安全问题：[SECURITY.md](SECURITY.md)
@@ -312,8 +319,8 @@ WorkBuddy Switch 参考了
 
 本项目以 [MIT License](LICENSE) 发布。
 
-WorkBuddy Switch 是独立开源项目，没有复制上述项目或相关产品的商标素材，也不隶属
-于、未获 WorkBuddy、Trae、Kimi 或上述开源项目的官方认可或赞助。
+WorkBuddy Switch 是独立开源项目，与 WorkBuddy、Trae、Kimi 及上述开源项目无隶属、
+认可或赞助关系；相关名称和商标归各自权利人所有。
 
 <div align="center">
   <strong>如果它解决了你的问题，欢迎点一个 Star，让更多需要多账号切换的用户找到它。</strong>
