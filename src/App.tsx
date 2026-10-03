@@ -8,42 +8,34 @@ import {
 } from "react";
 import {
   Activity,
-  ArrowDownToLine,
-  ArrowRight,
   ArrowUpRight,
   BarChart3,
-  Bell,
   BookOpen,
   Check,
   CheckCircle2,
-  ChevronDown,
-  CircleHelp,
-  Clock3,
   Database,
   Download,
-  Ellipsis,
   ExternalLink,
   Eye,
   EyeOff,
   FolderOpen,
   Gauge,
+  Gift,
+  CalendarCheck,
   Globe,
   HardDrive,
   History,
   Info,
-  LayoutDashboard,
   LockKeyhole,
   MessageSquare,
   Monitor,
   Moon,
   Palette,
-  Pin,
   Plus,
   RefreshCw,
   Search,
   Settings2,
   ShieldCheck,
-  Sparkles,
   Sun,
   Trash2,
   Upload,
@@ -77,22 +69,17 @@ import {
   Toggle,
 } from "./components";
 import appIcon from "../assets/icon.png";
+import { Accounts } from "./Accounts";
+import { RewardsPage } from "./Rewards";
 
 type Page = "overview" | "accounts" | "sessions" | "usage" | "settings";
 const nav = [
-  { id: "overview", label: "工作台", icon: LayoutDashboard },
-  { id: "accounts", label: "账号管理", icon: Users },
-  { id: "sessions", label: "对话记录", icon: MessageSquare },
-  { id: "usage", label: "用量分析", icon: BarChart3 },
+  { id: "accounts", label: "账号", icon: Users },
+  { id: "overview", label: "积分", icon: Gift },
+  { id: "sessions", label: "对话", icon: MessageSquare },
+  { id: "usage", label: "用量", icon: BarChart3 },
   { id: "settings", label: "设置", icon: Settings2 },
 ] as const;
-const subtitles: Record<Page, string> = {
-  overview: "把账号、对话与积分，放回同一个工作节奏。",
-  accounts: "安全保存登录状态，在不同工作身份间从容切换。",
-  sessions: "找到熟悉的上下文，让每一次对话接着往前。",
-  usage: "看清每个模型、每次对话的本地 Token 与记录积分。",
-  settings: "让 WorkBuddy Switch 更贴合你的工作方式。",
-};
 const emptyUsage: Usage = {
   total: {
     input: 0,
@@ -125,7 +112,7 @@ type Confirmation = {
 };
 
 export function App() {
-  const [page, setPage] = useState<Page>("overview"),
+  const [page, setPage] = useState<Page>("accounts"),
     [state, setState] = useState<Snapshot | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]),
     [usage, setUsage] = useState<Usage>(emptyUsage);
@@ -144,6 +131,9 @@ export function App() {
     [usageAccount, setUsageAccount] = useState("");
   const [customStart, setCustomStart] = useState(localDay),
     [customEnd, setCustomEnd] = useState(localDay);
+  const [selectedAccounts, setSelectedAccounts] = useState<string[] | null>(
+    null,
+  );
   const requestId = useRef(0),
     usageId = useRef(0),
     sessionId = useRef(0),
@@ -258,6 +248,26 @@ export function App() {
       setTask("");
     }
   }
+  function claim(ids: string[], kind: "all" | "checkin" | "travel" = "all") {
+    if (!ids.length) return;
+    void run("领取积分", async () => {
+      const result = await api.claimRewards(ids, kind);
+      setToast(
+        result.claimed
+          ? `已领取 ${result.claimed} 项奖励${result.unknownAmounts ? "，部分金额未返回" : ` · +${number(result.credit, 4)} 积分`}${result.failed ? `，${result.failed} 项失败` : ""}`
+          : result.failed
+            ? `${result.failed} 项任务失败，请在积分页查看原因`
+            : "当前没有可领取的奖励",
+      );
+    });
+  }
+  useEffect(
+    () =>
+      api?.onNavigate?.((target) => {
+        if (nav.some((item) => item.id === target)) setPage(target as Page);
+      }),
+    [api],
+  );
   const saveSettings = async (settings: Settings) => {
     if (task || state?.busy) return;
     setTask("保存设置");
@@ -309,9 +319,26 @@ export function App() {
         {error && <Button onClick={() => void reload()}>重新加载</Button>}
       </div>
     );
-  const privacy = state.settings.privacyMode,
-    current = state.accounts.find((a) => a.id === state.current?.id);
+  const privacy = state.settings.privacyMode;
   const disabled = !!task || state.busy;
+  const selected =
+    selectedAccounts === null
+      ? state.accounts.map((account) => account.id)
+      : selectedAccounts.filter((id) =>
+          state.accounts.some((account) => account.id === id),
+        );
+  const lastRefresh = Math.max(
+    0,
+    ...state.accounts.map((account) => account.quota?.fetchedAt || 0),
+  );
+  const clientStatus =
+    state.client.running === true
+      ? "WorkBuddy 运行中"
+      : state.client.running === null
+        ? "运行状态未知"
+        : state.client.installed
+          ? "WorkBuddy 未运行"
+          : "未找到 WorkBuddy";
   const name = (id: string) =>
     state.accounts.find((a) => a.id === id)?.nickname ||
     (state.current?.id === id ? state.current.nickname : mask(id, privacy));
@@ -327,10 +354,10 @@ export function App() {
           </span>
           <div>
             <strong>WorkBuddy</strong>
-            <span>SWITCH</span>
+            <span>Switch</span>
           </div>
         </div>
-        <div className="workspace-label">个人工作空间</div>
+
         <nav aria-label="主导航">
           {nav.map(({ id, label, icon: Icon }) => (
             <button
@@ -352,16 +379,16 @@ export function App() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="security-note">
-            <ShieldCheck size={17} />
-            <div>
-              <strong>凭据留在本机</strong>
-              <span>
-                {state.encryptionAvailable
-                  ? "系统级加密已就绪"
-                  : "加密服务待解锁"}
-              </span>
-            </div>
+          <div className="sidebar-current">
+            <small>当前账号</small>
+            <strong>
+              {state.current ? name(state.current.id) : "尚未登录"}
+            </strong>
+            <span>
+              {state.current
+                ? mask(state.current.id, privacy)
+                : "打开 WorkBuddy 登录"}
+            </span>
           </div>
           <button
             className="sidebar-help"
@@ -378,89 +405,74 @@ export function App() {
         </div>
       </aside>
       <main className="main">
-        <header className="topbar">
-          <div className="breadcrumb">
-            工作空间<span>/</span>
-            <strong>{nav.find((n) => n.id === page)?.label}</strong>
-          </div>
-          <div className="topbar-actions">
-            <Status ok={state.client.running === true}>
-              {state.client.running
-                ? "WorkBuddy 运行中"
-                : state.client.installed
-                  ? "WorkBuddy 已安装"
-                  : "待连接客户端"}
-            </Status>
-            <button
-              className="icon-button"
-              title={privacy ? "关闭隐私遮罩" : "开启隐私遮罩"}
-              aria-label={privacy ? "关闭隐私遮罩" : "开启隐私遮罩"}
-              onClick={() =>
-                void saveSettings({ ...state.settings, privacyMode: !privacy })
-              }
-              disabled={disabled}
-            >
-              {privacy ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-            <div className="topbar-avatar">W</div>
-          </div>
+        <header className="topbar window-drag">
+          <span>WorkBuddy Switch</span>
         </header>
         <div className="page-content">
           <div className="page-heading">
             <div>
-              <div className="eyebrow">YOUR WORK, IN SYNC</div>
               <h1>{nav.find((n) => n.id === page)?.label}</h1>
-              <p>{subtitles[page]}</p>
+              <span className="heading-context">
+                {page === "accounts"
+                  ? `${state.accounts.length} 个账号${state.demo ? " · 演示" : ""}`
+                  : page === "overview"
+                    ? "签到与旅行奖励"
+                    : page === "sessions"
+                      ? `${sessions.filter((item) => !item.deleted).length} 条本地对话`
+                      : page === "usage"
+                        ? "本地 Token 记录"
+                        : "偏好与自动任务"}
+              </span>
             </div>
             <div className="page-actions">
-              {page === "accounts" ? (
+              {page === "accounts" || page === "overview" ? (
                 <>
-                  <Button
-                    icon={Globe}
-                    disabled={disabled}
-                    onClick={() =>
-                      void run("发起网页登录", async () => {
-                        setLogin(await api.startLogin());
-                      })
-                    }
-                  >
-                    网页登录添加
-                  </Button>
                   <Button
                     icon={RefreshCw}
                     busy={state.refreshing}
                     disabled={disabled}
                     onClick={() =>
-                      void run("刷新积分", () => api.refreshQuotas())
+                      void run("刷新账号状态", async () => {
+                        await api.refreshQuotas();
+                        await api.refreshRewards();
+                      })
                     }
                   >
-                    刷新积分
+                    刷新
                   </Button>
+                  {page === "accounts" && (
+                    <Button
+                      icon={Plus}
+                      disabled={disabled}
+                      onClick={() =>
+                        void run("发起网页登录", async () =>
+                          setLogin(await api.startLogin()),
+                        )
+                      }
+                    >
+                      添加账号
+                    </Button>
+                  )}
                   <Button
-                    icon={Plus}
+                    icon={Gift}
                     primary
-                    disabled={disabled}
+                    disabled={
+                      disabled ||
+                      !(page === "accounts"
+                        ? selected.length
+                        : state.accounts.length)
+                    }
                     onClick={() =>
-                      void run(
-                        "保存账号",
-                        () => api.capture(),
-                        "当前账号已加密保存",
+                      claim(
+                        page === "accounts"
+                          ? selected
+                          : state.accounts.map((account) => account.id),
                       )
                     }
                   >
-                    保存当前账号
+                    一键领积分
                   </Button>
                 </>
-              ) : page === "overview" ? (
-                <Button
-                  icon={ArrowUpRight}
-                  disabled={disabled}
-                  onClick={() =>
-                    void run("启动 WorkBuddy", () => api.launchClient())
-                  }
-                >
-                  打开 WorkBuddy
-                </Button>
               ) : page === "usage" ? (
                 <Button
                   icon={Download}
@@ -498,29 +510,11 @@ export function App() {
             </div>
           )}
           {page === "overview" && (
-            <Overview
+            <RewardsPage
               state={state}
-              current={current}
-              usage={usage}
-              usageLabel={
-                period === "7"
-                  ? "最近 7 天"
-                  : period === "1"
-                    ? "今天的用量"
-                    : period === "30"
-                      ? "最近 30 天"
-                      : period === "all"
-                        ? "全部用量"
-                        : "自定义时间段"
-              }
-              usageScope={usageAccount ? name(usageAccount) : "全部账号"}
-              sessions={sessions}
-              name={name}
-              navigate={setPage}
-              resume={resume}
-              capture={() =>
-                void run("保存账号", () => api.capture(), "当前账号已加密保存")
-              }
+              disabled={disabled}
+              run={run}
+              claim={claim}
             />
           )}
           {page === "accounts" && (
@@ -531,6 +525,9 @@ export function App() {
               edit={setEdit}
               transfer={setTransfer}
               run={run}
+              selected={selected}
+              setSelected={setSelectedAccounts}
+              claim={claim}
               remove={(a) =>
                 setConfirmation({
                   title: "移除保存的账号",
@@ -577,20 +574,48 @@ export function App() {
               transfer={setTransfer}
             />
           )}
-          <footer className="page-footer">
-            <span>
-              <span className="tiny-dot" />
-              本地工作台 · {state.accounts.length} 个已保存账号
-            </span>
-            <span>
-              {task ||
-                (state.refreshing
-                  ? "正在查询积分…"
-                  : `数据读取于 ${date(usage.fetchedAt, true)}`)}
-            </span>
-          </footer>
         </div>
       </main>
+      <footer className="app-statusbar" aria-label="应用状态栏">
+        <Status ok={state.client.running === true}>{clientStatus}</Status>
+        <button disabled={disabled} onClick={() => setPage("settings")}>
+          自动任务{" "}
+          {state.settings.autoCheckin ||
+          state.settings.autoClaimTravel ||
+          state.settings.autoDepartTravel
+            ? "开启"
+            : "关闭"}
+        </button>
+        <span>
+          {task ||
+            (state.busy
+              ? "任务执行中…"
+              : state.refreshing
+                ? "正在刷新积分…"
+                : lastRefresh
+                  ? `上次刷新 ${new Date(lastRefresh).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`
+                  : "尚未查询积分")}
+        </span>
+        <button
+          className="statusbar-save"
+          disabled={disabled}
+          onClick={() =>
+            void run("保存当前账号", () => api.capture(), "当前账号已加密保存")
+          }
+        >
+          保存当前账号
+        </button>
+        <button
+          className="icon-button"
+          aria-label={privacy ? "关闭隐私遮罩" : "开启隐私遮罩"}
+          disabled={disabled}
+          onClick={() =>
+            void saveSettings({ ...state.settings, privacyMode: !privacy })
+          }
+        >
+          {privacy ? <EyeOff size={15} /> : <Eye size={15} />}
+        </button>
+      </footer>
       {toast && (
         <div role="status" className="toast">
           <CheckCircle2 size={17} />
@@ -685,510 +710,6 @@ export function App() {
         />
       )}
     </div>
-  );
-}
-
-function Overview({
-  state,
-  current,
-  usage,
-  usageLabel,
-  usageScope,
-  sessions,
-  name,
-  navigate,
-  resume,
-  capture,
-}: {
-  state: Snapshot;
-  current?: Account;
-  usage: Usage;
-  usageLabel: string;
-  usageScope: string;
-  sessions: Session[];
-  name: (id: string) => string;
-  navigate: (page: Page) => void;
-  resume: (s: Session) => void;
-  capture: () => void;
-}) {
-  const q = current?.quota,
-    urgent = state.accounts.filter(
-      (a) =>
-        a.quota?.expiresAt &&
-        a.quota.expiresAt - Date.now() <=
-          state.settings.expiryWarningDays * 86400000 &&
-        !a.quotaError,
-    );
-  const days = q?.expiresAt
-    ? Math.max(0, Math.ceil((q.expiresAt - Date.now()) / 86400000))
-    : null;
-  const recent = sessions.filter((s) => !s.deleted).slice(0, 4);
-  return (
-    <>
-      <div className="overview-main">
-        <section className="account-hero">
-          <div className="hero-top">
-            <span className="hero-tag">
-              <Zap size={14} />
-              当前工作身份
-            </span>
-            <span className="hero-label">WORKBUDDY</span>
-          </div>
-          <div className="hero-account">
-            <div className="account-avatar large">
-              {state.current?.nickname.slice(0, 1) || "W"}
-            </div>
-            <div>
-              <h2>
-                {state.current
-                  ? current?.nickname || state.current.nickname
-                  : "连接你的 WorkBuddy"}
-              </h2>
-              <p>
-                {state.current
-                  ? `${mask(state.current.id, state.settings.privacyMode)} · ${current ? "账号快照已保存" : "尚未保存账号快照"}`
-                  : "先在 WorkBuddy 登录，再保存当前账号"}
-              </p>
-            </div>
-          </div>
-          <div className="hero-balance">
-            <span>可用积分</span>
-            <div>
-              {current?.quotaError ? "—" : number(q?.remaining)}
-              <small>Credits</small>
-            </div>
-          </div>
-          <div className="balance-track">
-            <span
-              style={{
-                width: `${q && q.total > 0 ? Math.min(100, (q.remaining / q.total) * 100) : 0}%`,
-              }}
-            />
-          </div>
-          <div className="hero-detail">
-            <span>
-              {q
-                ? `周期额度 ${number(q.total)} · 已用 ${number(q.used)}`
-                : "保存账号后刷新积分，获取实时额度"}
-            </span>
-            <span>{days !== null ? `${days} 天后到期` : "到期时间待查询"}</span>
-          </div>
-          <div className="hero-bottom">
-            <span>
-              <LockKeyhole size={14} />
-              凭据由系统加密
-            </span>
-            {!current && state.current ? (
-              <button onClick={capture}>
-                保存这个账号
-                <ArrowRight size={14} />
-              </button>
-            ) : (
-              <button onClick={() => navigate("accounts")}>
-                管理账号
-                <ArrowRight size={14} />
-              </button>
-            )}
-          </div>
-        </section>
-        <section className="week-summary">
-          <SectionHeader title={usageLabel} detail={`本地记录 · ${usageScope}`}>
-            <span className="soft-icon">
-              <Activity size={19} />
-            </span>
-          </SectionHeader>
-          <div className="week-value">
-            {shortNumber(usage.total.total)}
-            <span>Tokens</span>
-          </div>
-          <UsageChart usage={usage} small />
-          <div className="summary-bottom">
-            <div>
-              <span>已记录积分</span>
-              <strong>{number(usage.credits)}</strong>
-            </div>
-            <div>
-              <span>请求次数</span>
-              <strong>{number(usage.total.requests, 0)}</strong>
-            </div>
-            <div>
-              <span>活跃模型</span>
-              <strong>{usage.models.length}</strong>
-            </div>
-          </div>
-          <TextLink onClick={() => navigate("usage")}>查看用量详情</TextLink>
-        </section>
-      </div>
-      <div className="quick-stats">
-        <Metric
-          label="已保存账号"
-          value={state.accounts.length}
-          detail="安全快照，随时切换"
-          icon={Users}
-        />
-        <Metric
-          label="本地对话"
-          value={sessions.filter((s) => !s.deleted).length}
-          detail="保留上下文，继续工作"
-          icon={MessageSquare}
-        />
-        <Metric
-          label="积分临期账号"
-          value={urgent.length}
-          detail={`${state.settings.expiryWarningDays} 天内存在到期积分`}
-          icon={Clock3}
-        />
-      </div>
-      <section className="panel">
-        <SectionHeader
-          title="继续最近的对话"
-          detail="上下文还在，工作可以接着来"
-        >
-          <TextLink onClick={() => navigate("sessions")}>全部对话</TextLink>
-        </SectionHeader>
-        {recent.length ? (
-          <div className="recent-list">
-            {recent.map((s) => (
-              <div className="recent-row" key={s.id}>
-                <span className="session-icon">
-                  <MessageSquare size={18} />
-                </span>
-                <div className="recent-info">
-                  <strong>{s.title}</strong>
-                  <span>
-                    {name(s.userId)}
-                    <i>·</i>
-                    {s.model || "自动模型"}
-                  </span>
-                </div>
-                <time>{date(s.updatedAt, true)}</time>
-                <button
-                  className="icon-button"
-                  aria-label={`继续 ${s.title}`}
-                  disabled={state.busy || !state.current}
-                  onClick={() => resume(s)}
-                >
-                  <ArrowUpRight size={18} />
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <Empty
-            icon={MessageSquare}
-            title="从一段对话开始"
-            detail="WorkBuddy 的本地历史对话会显示在这里。"
-          />
-        )}
-      </section>
-      {urgent.length > 0 && (
-        <div className="notice warn">
-          <Bell size={17} />
-          <span>{urgent.length} 个账号存在即将到期的积分，建议优先使用。</span>
-          <TextLink onClick={() => navigate("accounts")}>查看账号</TextLink>
-        </div>
-      )}
-    </>
-  );
-}
-
-function Accounts({
-  state,
-  disabled,
-  switchTo,
-  edit,
-  transfer,
-  run,
-  remove,
-}: {
-  state: Snapshot;
-  disabled: boolean;
-  switchTo: (a: Account) => void;
-  edit: (a: Account) => void;
-  transfer: (m: "import" | "export") => void;
-  run: (
-    label: string,
-    action: () => Promise<unknown>,
-    success?: string,
-  ) => Promise<void>;
-  remove: (a: Account) => void;
-}) {
-  const [search, setSearch] = useState(""),
-    [sort, setSort] = useState("recent"),
-    [filter, setFilter] = useState("all"),
-    [openMenu, setOpenMenu] = useState("");
-  const accounts = useMemo(
-    () =>
-      state.accounts
-        .filter(
-          (a) =>
-            `${a.nickname} ${a.note} ${a.id}`
-              .toLowerCase()
-              .includes(search.toLowerCase()) &&
-            (filter !== "favorites" || a.favorite),
-        )
-        .sort((a, b) => {
-          if (a.id === state.current?.id) return -1;
-          if (b.id === state.current?.id) return 1;
-          if (sort === "balance")
-            return (b.quota?.remaining ?? -1) - (a.quota?.remaining ?? -1);
-          if (sort === "expiry")
-            return (
-              (a.quota?.expiresAt ?? Infinity) -
-              (b.quota?.expiresAt ?? Infinity)
-            );
-          return b.lastUsedAt - a.lastUsedAt;
-        }),
-    [state.accounts, state.current, search, sort, filter],
-  );
-  const valid = state.accounts.filter((a) => a.quota && !a.quotaError),
-    balance = valid.reduce((n, a) => n + a.quota!.remaining, 0);
-  return (
-    <>
-      <div className="account-summary-strip">
-        <div>
-          <span className="soft-icon">
-            <Users size={18} />
-          </span>
-          <span>
-            已保存 <strong>{state.accounts.length}</strong> 个账号
-          </span>
-        </div>
-        <span className="strip-divider" />
-        <div>
-          <span>已查询可用积分</span>
-          <strong>{number(balance)}</strong>
-          <small>Credits</small>
-        </div>
-        <span className="summary-caption">
-          {valid.length}/{state.accounts.length} 个账号已获取有效额度
-        </span>
-      </div>
-      <div className="filter-toolbar">
-        <div className="tabs">
-          <button
-            className={filter === "all" ? "selected" : ""}
-            onClick={() => setFilter("all")}
-          >
-            全部账号<span>{state.accounts.length}</span>
-          </button>
-          <button
-            className={filter === "favorites" ? "selected" : ""}
-            onClick={() => setFilter("favorites")}
-          >
-            <Pin size={14} />
-            已收藏
-          </button>
-        </div>
-        <div className="toolbar-right">
-          <div className="search">
-            <Search size={16} />
-            <input
-              aria-label="搜索账号"
-              placeholder="搜索账号、备注"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <select
-            aria-label="账号排序"
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-          >
-            <option value="recent">最近使用</option>
-            <option value="balance">积分余额</option>
-            <option value="expiry">到期优先</option>
-          </select>
-        </div>
-      </div>
-      {accounts.length ? (
-        <div className="accounts-grid">
-          {accounts.map((a, i) => {
-            const active = a.id === state.current?.id,
-              q = a.quota,
-              days = q?.expiresAt
-                ? Math.ceil((q.expiresAt - Date.now()) / 86400000)
-                : null,
-              urgent =
-                days !== null && days <= state.settings.expiryWarningDays;
-            return (
-              <article
-                className={`account-card ${active ? "current-card" : ""}`}
-                key={a.id}
-              >
-                <div className="account-card-top">
-                  <div className={`account-avatar color-${i % 4}`}>
-                    {a.nickname.slice(0, 1).toUpperCase()}
-                  </div>
-                  <div className="account-title">
-                    <h3>
-                      {a.nickname}
-                      {a.favorite && <Pin size={12} fill="currentColor" />}
-                    </h3>
-                    <span>{mask(a.id, state.settings.privacyMode)}</span>
-                  </div>
-                  <div className="card-menu">
-                    <button
-                      className="icon-button"
-                      aria-label={`${a.nickname}的更多操作`}
-                      aria-expanded={openMenu === a.id}
-                      onClick={() => setOpenMenu(openMenu === a.id ? "" : a.id)}
-                    >
-                      <Ellipsis size={18} />
-                    </button>
-                    {openMenu === a.id && (
-                      <div className="dropdown">
-                        <button
-                          onClick={() => {
-                            edit(a);
-                            setOpenMenu("");
-                          }}
-                        >
-                          编辑名称与备注
-                        </button>
-                        <button
-                          onClick={() => {
-                            void run("更新收藏", () =>
-                              window.workbuddy.editAccount(a.id, {
-                                favorite: !a.favorite,
-                              }),
-                            );
-                            setOpenMenu("");
-                          }}
-                        >
-                          {a.favorite ? "取消收藏" : "收藏账号"}
-                        </button>
-                        <button
-                          onClick={() => {
-                            void run("刷新账号积分", () =>
-                              window.workbuddy.refreshQuotas(a.id),
-                            );
-                            setOpenMenu("");
-                          }}
-                        >
-                          刷新这个账号
-                        </button>
-                        <button
-                          className="red"
-                          onClick={() => {
-                            remove(a);
-                            setOpenMenu("");
-                          }}
-                        >
-                          移除账号
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="card-status-row">
-                  {active ? (
-                    <span className="badge green">
-                      <span className="tiny-dot" />
-                      当前使用
-                    </span>
-                  ) : (
-                    <span className="badge">
-                      {a.accountType || "已保存账号"}
-                    </span>
-                  )}
-                  {a.tokenExpiresAt && a.tokenExpiresAt < Date.now() && (
-                    <span className="badge amber">登录可能过期</span>
-                  )}
-                </div>
-                <div className="card-balance">
-                  <span>可用积分</span>
-                  <strong>
-                    {a.quotaError ? "—" : number(q?.remaining)}
-                    <small>Credits</small>
-                  </strong>
-                </div>
-                <div className="card-meter">
-                  <span
-                    style={{
-                      width: `${q && q.total ? Math.min(100, (q.remaining / q.total) * 100) : 0}%`,
-                    }}
-                  />
-                </div>
-                <div className="card-quota-detail">
-                  <span>
-                    {q && !a.quotaError
-                      ? `总额度 ${number(q.total)}`
-                      : a.quotaError
-                        ? "查询未成功"
-                        : "尚未查询积分"}
-                  </span>
-                  <span>
-                    {q ? `更新 ${date(q.fetchedAt, true)}` : "等待刷新"}
-                  </span>
-                </div>
-                {a.quotaError ? (
-                  <div className="card-alert">{a.quotaError}</div>
-                ) : (
-                  <div className={`expiry-row ${urgent ? "urgent" : ""}`}>
-                    <Clock3 size={14} />
-                    <span>
-                      {days !== null
-                        ? `${days <= 0 ? "即将" : `${days} 天后`}到期 · ${date(q?.expiresAt)}`
-                        : "到期时间未提供"}
-                    </span>
-                    {urgent && <span>优先使用</span>}
-                  </div>
-                )}
-                {a.note && <p className="account-note">{a.note}</p>}
-                <div className="card-footer">
-                  <span>
-                    <ShieldCheck size={13} />
-                    本机加密
-                  </span>
-                  <Button
-                    primary={!active}
-                    disabled={disabled || active}
-                    icon={active ? Check : ArrowRight}
-                    onClick={() => switchTo(a)}
-                  >
-                    {active ? "当前账号" : "切换账号"}
-                  </Button>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      ) : (
-        <Empty
-          icon={Users}
-          title={
-            search || filter === "favorites"
-              ? "没有匹配的账号"
-              : "保存你的第一个账号"
-          }
-          detail="在 WorkBuddy 完成登录后，点击右上角「保存当前账号」。切换前也会保存正在使用的身份。"
-        />
-      )}
-      <div className="account-transfer">
-        <div>
-          <HardDrive size={18} />
-          <span>账号备份与迁移</span>
-          <small>密码加密，可跨设备导入</small>
-        </div>
-        <div>
-          <Button
-            icon={Upload}
-            disabled={disabled}
-            onClick={() => transfer("import")}
-          >
-            导入备份
-          </Button>
-          <Button
-            icon={ArrowDownToLine}
-            disabled={disabled || !state.accounts.length}
-            onClick={() => transfer("export")}
-          >
-            导出备份
-          </Button>
-        </div>
-      </div>
-    </>
   );
 }
 
@@ -1892,6 +1413,7 @@ function SettingsPage({
       void save({ ...settings, [key]: value });
   const settingsNav = [
     { id: "general", label: "常规", icon: Monitor },
+    { id: "automation", label: "自动任务", icon: CalendarCheck },
     { id: "appearance", label: "外观与隐私", icon: Palette },
     { id: "connection", label: "连接与路径", icon: Wifi },
     { id: "data", label: "数据与备份", icon: HardDrive },
@@ -1923,7 +1445,7 @@ function SettingsPage({
           <>
             {section(
               "启动与窗口",
-              "按你的习惯，留在手边或安静待命。",
+              "系统启动、托盘与账号保存。",
               <>
                 <Toggle
                   label="登录系统时启动"
@@ -1938,6 +1460,13 @@ function SettingsPage({
                   checked={settings.closeToTray}
                   onChange={(v) => change("closeToTray", v)}
                   disabled={disabled}
+                />
+                <Toggle
+                  label="菜单栏显示当前积分"
+                  description="macOS 在猫咪图标旁显示当前账号的已查询余额。"
+                  checked={settings.menuBarBalance}
+                  onChange={(v) => change("menuBarBalance", v)}
+                  disabled={disabled || state.platform !== "darwin"}
                 />
                 <Toggle
                   label="启动时保存当前账号"
@@ -2043,6 +1572,93 @@ function SettingsPage({
             )}
           </>
         )}
+        {tab === "automation" && (
+          <>
+            {section(
+              "签到",
+              "应用运行时执行，签到时间按北京时间计算。",
+              <>
+                <Toggle
+                  label="自动签到领积分"
+                  description="到指定时间后查询官方状态，为尚未签到的账号领取奖励。"
+                  checked={settings.autoCheckin}
+                  onChange={(value) => change("autoCheckin", value)}
+                  disabled={disabled}
+                />
+                <div className="setting-row">
+                  <div>
+                    <div className="setting-label">每日签到时间</div>
+                    <div className="setting-description">
+                      错过时间后，在下一次检查时补签。
+                    </div>
+                  </div>
+                  <input
+                    className="time-input"
+                    type="time"
+                    aria-label="每日签到时间"
+                    disabled={disabled}
+                    value={`${String(settings.checkinHour).padStart(2, "0")}:${String(settings.checkinMinute).padStart(2, "0")}`}
+                    onChange={(event) => {
+                      if (!event.target.value) return;
+                      const [checkinHour, checkinMinute] = event.target.value
+                        .split(":")
+                        .map(Number);
+                      void save({ ...settings, checkinHour, checkinMinute });
+                    }}
+                  />
+                </div>
+              </>,
+            )}
+            {section(
+              "猫猫旅行",
+              "领取和出发分别控制，每个账号可选择旅行地点。",
+              <>
+                <Toggle
+                  label="自动领取旅行奖励"
+                  description="官方状态变为已到达时领取奖励。"
+                  checked={settings.autoClaimTravel}
+                  onChange={(value) => change("autoClaimTravel", value)}
+                  disabled={disabled}
+                />
+                <Toggle
+                  label="自动派出猫猫旅行"
+                  description="仅对已选择地点的账号出发，遵循官方每日次数限制。"
+                  checked={settings.autoDepartTravel}
+                  onChange={(value) => change("autoDepartTravel", value)}
+                  disabled={disabled}
+                />
+                <div className="setting-row">
+                  <div>
+                    <div className="setting-label">自动任务检查间隔</div>
+                    <div className="setting-description">
+                      查询与领取按账号依次执行，避免重复提交。
+                    </div>
+                  </div>
+                  <select
+                    aria-label="自动任务检查间隔"
+                    value={settings.automationIntervalMinutes}
+                    disabled={disabled}
+                    onChange={(event) =>
+                      change(
+                        "automationIntervalMinutes",
+                        Number(event.target.value),
+                      )
+                    }
+                  >
+                    {[5, 15, 30, 60].map((value) => (
+                      <option key={value} value={value}>
+                        {value} 分钟
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>,
+            )}
+            <p className="quiet-note">
+              三个自动任务开关默认关闭。在积分页可单独关闭某个账号的自动任务。关闭主窗口并保留在菜单栏或托盘时，自动任务继续执行；退出应用或电脑休眠期间不执行。
+            </p>
+          </>
+        )}
         {tab === "appearance" && (
           <>
             {section(
@@ -2064,14 +1680,6 @@ function SettingsPage({
                         change("theme", value as Settings["theme"])
                       }
                     >
-                      <div className="theme-preview">
-                        <span />
-                        <div>
-                          <i />
-                          <i />
-                          <i />
-                        </div>
-                      </div>
                       <span>
                         <Icon size={15} />
                         {label}
@@ -2082,7 +1690,7 @@ function SettingsPage({
                 </div>
                 <Toggle
                   label="紧凑布局"
-                  description="缩小卡片间距，在同一窗口看到更多内容。"
+                  description="缩小表格行高和间距，显示更多内容。"
                   checked={settings.compactMode}
                   onChange={(v) => change("compactMode", v)}
                   disabled={disabled}

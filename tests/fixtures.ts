@@ -18,6 +18,13 @@ export function fixtureState(): Snapshot {
     dataPath: "",
     executablePath: "",
     backupLimit: 10,
+    autoCheckin: false,
+    autoClaimTravel: false,
+    autoDepartTravel: false,
+    automationIntervalMinutes: 15,
+    checkinHour: 9,
+    checkinMinute: 0,
+    menuBarBalance: true,
   };
   const accounts = [
     {
@@ -56,6 +63,45 @@ export function fixtureState(): Snapshot {
     lastUsedAt: now - i * 3600000,
     tokenExpiresAt: null,
     quotaError: null,
+    automaticRewards: true,
+    travelLocationId: "2",
+    rewards: {
+      checkin: {
+        checkedIn: i !== 1,
+        day: new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Shanghai",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(now),
+        fetchedAt: now,
+      },
+      checkinError: null,
+      travel: {
+        state:
+          i === 0
+            ? ("arrived" as const)
+            : i === 1
+              ? ("idle" as const)
+              : ("traveling" as const),
+        locationId: 2,
+        locationName: "海边",
+        departAt: now - 3600000,
+        arriveAt: i === 0 ? now - 300000 : now + 3600000,
+        serverNow: now,
+        dailyLimitReached: false,
+        recordId: 47 + i,
+        rewardCredit: null,
+        fetchedAt: now,
+      },
+      travelError: null,
+      configError: null,
+      travelEnabled: true,
+      locations: [
+        { id: 2, name: "海边" },
+        { id: 3, name: "山间" },
+      ],
+    },
     quota: {
       total: a.total,
       remaining: a.remaining,
@@ -77,6 +123,7 @@ export function fixtureState(): Snapshot {
     },
   }));
   return {
+    demo: true,
     accounts,
     current: {
       id: accounts[0].id,
@@ -99,6 +146,7 @@ export function fixtureState(): Snapshot {
     busy: false,
     refreshing: false,
     events: [],
+    rewardHistory: [],
     authError: null,
     version: "1.0.0",
     platform: "darwin",

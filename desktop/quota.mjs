@@ -111,7 +111,7 @@ export function apiOrigin(document) {
 export async function fetchQuota(document, request = fetch) {
   if (!document.token)
     throw new Error(
-      "此登录凭据由 WorkBuddy 客户端加密。请通过「网页登录添加」重新授权后查询积分。",
+      "此登录凭据由 WorkBuddy 客户端加密，请点击「添加账号」完成官方网页登录授权后查询积分。",
     );
   const origin = apiOrigin(document);
   const options = (body) => ({

@@ -38,6 +38,21 @@ test("cache and reasoning tokens are subsets, never double counted", () => {
   assert.equal(parsed.tokens.input, 60);
   assert.equal(parsed.tokens.cacheRead, 40);
 });
+test("billable tool calls are counted independently within the same user turn", () => {
+  const messages = [
+    parseUsage(
+      line({ type: "function_call", role: undefined, uuid: "tool-1" }),
+    ),
+    parseUsage(
+      line({ type: "function_call", role: undefined, uuid: "tool-2" }),
+    ),
+    parseUsage(line({ uuid: "text-3" })),
+  ];
+  assert.equal(aggregateUsage([...messages, messages[0]], []).total.total, 360);
+  assert.equal(aggregateUsage(messages, []).records, 3);
+  assert.equal(parseUsage(line({ type: "function_call_result" })), null);
+  assert.equal(parseUsage(line({ timestamp: Infinity })), null);
+});
 test("normalised and missing aggregate prompt formats are supported", () => {
   const parsed = parseUsage(
     line({

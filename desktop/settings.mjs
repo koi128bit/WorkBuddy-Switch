@@ -17,6 +17,13 @@ export const defaults = Object.freeze({
   dataPath: "",
   executablePath: "",
   backupLimit: 10,
+  autoCheckin: false,
+  autoClaimTravel: false,
+  autoDepartTravel: false,
+  automationIntervalMinutes: 15,
+  checkinHour: 9,
+  checkinMinute: 0,
+  menuBarBalance: true,
 });
 
 export function validateSettings(value) {
@@ -44,6 +51,18 @@ export function validateSettings(value) {
       throw new Error("余额提醒阈值无效。");
     if (key === "backupLimit" && ![5, 10, 20, 50].includes(raw))
       throw new Error("备份保留数量无效。");
+    if (key === "automationIntervalMinutes" && ![5, 15, 30, 60].includes(raw))
+      throw new Error("自动任务检查间隔无效。");
+    if (
+      key === "checkinHour" &&
+      (!Number.isInteger(raw) || raw < 0 || raw > 23)
+    )
+      throw new Error("签到小时应为 0–23。");
+    if (
+      key === "checkinMinute" &&
+      (!Number.isInteger(raw) || raw < 0 || raw > 59)
+    )
+      throw new Error("签到分钟应为 0–59。");
     if (
       key.endsWith("Path") &&
       (raw.length > 4096 ||

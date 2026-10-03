@@ -27,10 +27,14 @@ export function parseUsage(line) {
     return null;
   }
   if (
-    row.type !== "message" ||
-    row.role !== "assistant" ||
+    !(
+      (row.type === "message" && row.role === "assistant") ||
+      row.type === "function_call"
+    ) ||
     !row.sessionId ||
-    !(Number(row.timestamp) > 0)
+    !(Number(row.timestamp) > 0) ||
+    !Number.isFinite(Number(row.timestamp)) ||
+    !Number.isFinite(new Date(Number(row.timestamp)).getTime())
   )
     return null;
   const p = row.providerData;
@@ -83,7 +87,9 @@ export function parseUsage(line) {
       requests: Math.max(1, max(r.requests, u.requests)),
       total: prompt + output,
     },
-    credits: Math.max(0, Number(r.credit) || 0),
+    credits: Number.isFinite(Number(r.credit))
+      ? Math.max(0, Number(r.credit))
+      : 0,
   };
 }
 

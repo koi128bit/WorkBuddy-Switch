@@ -13,6 +13,12 @@ contextBridge.exposeInMainWorld("workbuddy", {
   editAccount: call("edit"),
   removeAccount: call("remove"),
   refreshQuotas: call("refresh"),
+  refreshRewards: call("rewards-refresh"),
+  claimRewards: call("rewards-claim"),
+  departTravel: call("travel-depart"),
+  openPage: call("open-page"),
+  traySwitch: call("tray-switch"),
+  quit: call("quit"),
   sessions: call("sessions"),
   usage: call("usage"),
   resume: call("resume"),
@@ -37,5 +43,10 @@ contextBridge.exposeInMainWorld("workbuddy", {
     const listener = () => callback();
     ipcRenderer.on("wb:changed", listener);
     return () => ipcRenderer.removeListener("wb:changed", listener);
+  },
+  onNavigate(callback) {
+    const listener = (_event, page) => callback(page);
+    ipcRenderer.on("wb:navigate", listener);
+    return () => ipcRenderer.removeListener("wb:navigate", listener);
   },
 });

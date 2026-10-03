@@ -15,6 +15,13 @@ export interface Settings {
   dataPath: string;
   executablePath: string;
   backupLimit: number;
+  autoCheckin: boolean;
+  autoClaimTravel: boolean;
+  autoDepartTravel: boolean;
+  automationIntervalMinutes: number;
+  checkinHour: number;
+  checkinMinute: number;
+  menuBarBalance: boolean;
 }
 export interface Resource {
   id: string;
@@ -48,6 +55,46 @@ export interface Account {
   quota: Quota | null;
   quotaError: string | null;
   protectedToken?: boolean;
+  rewards?: RewardState | null;
+  automaticRewards?: boolean;
+  travelLocationId?: string;
+}
+export interface RewardState {
+  checkin: { checkedIn: boolean; day: string; fetchedAt: number } | null;
+  checkinError: string | null;
+  travel: {
+    state: "idle" | "traveling" | "arrived";
+    locationId: string | number | null;
+    locationName: string;
+    departAt: number | null;
+    arriveAt: number | null;
+    serverNow: number | null;
+    dailyLimitReached: boolean;
+    recordId: number | null;
+    rewardCredit: number | null;
+    fetchedAt: number;
+  } | null;
+  travelError: string | null;
+  configError: string | null;
+  travelEnabled: boolean | null;
+  locations: { id: string | number; name: string }[];
+}
+export interface RewardEntry {
+  id: string;
+  accountId: string;
+  task: "checkin" | "travel" | "depart";
+  result: "claimed" | "already" | "departed" | "error";
+  credit: number | null;
+  detail: string;
+  automatic: boolean;
+  at: number;
+}
+export interface ClaimResult {
+  results: RewardEntry[];
+  claimed: number;
+  failed: number;
+  credit: number;
+  unknownAmounts: number;
 }
 export interface Session {
   id: string;
@@ -86,6 +133,7 @@ export interface UsageQuery {
   until: number | null;
 }
 export interface Snapshot {
+  demo?: boolean;
   accounts: Account[];
   current: { id: string; nickname: string; phoneHint: string } | null;
   settings: Settings;
@@ -99,6 +147,7 @@ export interface Snapshot {
   busy: boolean;
   refreshing: boolean;
   events: { id: string; at: number; message: string; level: string }[];
+  rewardHistory: RewardEntry[];
   authError: string | null;
   version: string;
   platform: string;
@@ -119,10 +168,31 @@ export interface Bridge {
   switchAccount(id: string): Promise<void>;
   editAccount(
     id: string,
-    patch: Partial<Pick<Account, "nickname" | "note" | "favorite">>,
+    patch: Partial<
+      Pick<
+        Account,
+        | "nickname"
+        | "note"
+        | "favorite"
+        | "automaticRewards"
+        | "travelLocationId"
+      >
+    >,
   ): Promise<void>;
   removeAccount(id: string): Promise<void>;
   refreshQuotas(id?: string): Promise<void>;
+  refreshRewards(ids?: string[] | null): Promise<void>;
+  claimRewards(
+    ids?: string[] | null,
+    kind?: "all" | "checkin" | "travel",
+  ): Promise<ClaimResult>;
+  departTravel(id: string, locationId: string): Promise<void>;
+  openPage(
+    page: "accounts" | "overview" | "sessions" | "usage" | "settings",
+  ): Promise<void>;
+  traySwitch(id: string): Promise<boolean>;
+  quit(): Promise<void>;
+  onNavigate(callback: (page: string) => void): () => void;
   sessions(): Promise<Session[]>;
   usage(query: UsageQuery): Promise<Usage>;
   resume(id: string): Promise<void>;
@@ -137,7 +207,9 @@ export interface Bridge {
   importLegacy(): Promise<{ imported: number; skipped: number }>;
   exportUsage(query: UsageQuery): Promise<boolean>;
   checkUpdate(): Promise<{ available: boolean; version: string }>;
-  openLink(name: "github" | "wiki" | "releases" | "privacy"): Promise<void>;
+  openLink(
+    name: "github" | "wiki" | "releases" | "privacy" | "growth",
+  ): Promise<void>;
   launchClient(): Promise<void>;
   onChange(callback: () => void): () => void;
   startLogin(): Promise<{ id: string; expiresAt: number }>;

@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
 
-export const number = (value: number | null | undefined, digits = 1) =>
+export const number = (value: number | null | undefined, digits = 4) =>
   value === null || value === undefined
     ? "—"
     : new Intl.NumberFormat("zh-CN", { maximumFractionDigits: digits }).format(

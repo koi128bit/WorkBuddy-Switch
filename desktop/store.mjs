@@ -7,6 +7,16 @@ import { encodeBackup, decodeBackup } from "./backup.mjs";
 import { fetchQuota, renewAuth } from "./quota.mjs";
 import { loadSessions, prepareSession, backupDatabase } from "./sessions.mjs";
 import { UsageScanner } from "./usage.mjs";
+import {
+  getCheckinStatus,
+  checkIn,
+  getTravelConfig,
+  getTravelStatus,
+  departTravel,
+  claimTravel,
+  rewardDay,
+} from "./rewards.mjs";
+import { randomUUID } from "node:crypto";
 
 export class Store {
   records = [];
@@ -15,6 +25,8 @@ export class Store {
   scanner = new UsageScanner();
   events = [];
   refreshPromise = null;
+  rewardHistory = [];
+  lastAutomationAt = 0;
   constructor({
     directory,
     vault,
@@ -70,6 +82,34 @@ export class Store {
       } catch {
         throw new Error(
           "账号库损坏，已停止读取。请保留 vault.json 并从加密备份恢复。",
+        );
+      }
+    }
+    const history = await readOptional(
+      path.join(this.directory, "rewards-history.json"),
+    );
+    if (history) {
+      try {
+        const data = JSON.parse(history);
+        if (
+          data.version !== 1 ||
+          !Array.isArray(data.entries) ||
+          data.entries.some(
+            (entry) =>
+              typeof entry.id !== "string" ||
+              typeof entry.accountId !== "string" ||
+              !Number.isFinite(entry.at) ||
+              !["checkin", "travel", "depart"].includes(entry.task) ||
+              !["claimed", "already", "departed", "error"].includes(
+                entry.result,
+              ),
+          )
+        )
+          throw new Error("invalid");
+        this.rewardHistory = data.entries.slice(0, 500);
+      } catch {
+        throw new Error(
+          "积分领取记录损坏，请保留 rewards-history.json 后修复。账号库不受影响。",
         );
       }
     }
@@ -154,6 +194,9 @@ export class Store {
       quota: existing?.profile.quota ?? null,
       quotaError: null,
       protectedToken: document.protectedToken,
+      rewards: existing?.profile.rewards ?? null,
+      automaticRewards: existing?.profile.automaticRewards ?? true,
+      travelLocationId: existing?.profile.travelLocationId ?? "",
     };
     const record = { profile, encrypted: this.encrypt(document.raw) };
     // A fresh desktop snapshot may contain a device-bound envelope. Retain a
@@ -184,7 +227,14 @@ export class Store {
       if (
         !patch ||
         Object.keys(patch).some(
-          (key) => !["nickname", "note", "favorite"].includes(key),
+          (key) =>
+            ![
+              "nickname",
+              "note",
+              "favorite",
+              "automaticRewards",
+              "travelLocationId",
+            ].includes(key),
         )
       )
         throw new Error("账号信息格式无效。");
@@ -202,6 +252,18 @@ export class Store {
         throw new Error("备注最多 300 个字符。");
       if ("favorite" in patch && typeof patch.favorite !== "boolean")
         throw new Error("收藏设置无效。");
+      if (
+        "automaticRewards" in patch &&
+        typeof patch.automaticRewards !== "boolean"
+      )
+        throw new Error("自动任务设置无效。");
+      if (
+        "travelLocationId" in patch &&
+        (typeof patch.travelLocationId !== "string" ||
+          (patch.travelLocationId !== "" &&
+            !/^[\w-]{1,80}$/.test(patch.travelLocationId)))
+      )
+        throw new Error("旅行地点设置无效。");
       if (!this.records.some((r) => r.profile.id === id))
         throw new Error("未找到该账号。");
       await this.saveRecords(
@@ -312,57 +374,7 @@ export class Store {
         .filter((r) => !id || r.profile.id === id)
         .map((r) => r.profile.id);
       for (const accountId of targets) {
-        let quota = null,
-          error = null;
-        try {
-          const record = this.records.find((r) => r.profile.id === accountId);
-          let document = record.apiEncrypted
-            ? parseAuth(
-                this.vault.decrypt(Buffer.from(record.apiEncrypted, "base64")),
-              )
-            : this.document(accountId);
-          if (document.id !== accountId)
-            throw new Error("查询凭据身份不一致，已停止操作。");
-          try {
-            quota = await fetchQuota(document, this.request);
-          } catch (e) {
-            if (!document.token || !e.message.includes("失效")) throw e;
-            document = await renewAuth(document, this.request);
-            const encrypted = this.encrypt(document.raw);
-            await this.saveRecords(
-              this.records.map((r) =>
-                r.profile.id === accountId
-                  ? {
-                      ...r,
-                      apiEncrypted: encrypted,
-                      ...(r.profile.protectedToken ? {} : { encrypted }),
-                      profile: {
-                        ...r.profile,
-                        tokenExpiresAt: document.tokenExpiresAt,
-                      },
-                    }
-                  : r,
-              ),
-            );
-            quota = await fetchQuota(document, this.request);
-          }
-        } catch (e) {
-          error = e.message;
-        }
-        const records = this.records.map((r) =>
-          r.profile.id === accountId
-            ? {
-                ...r,
-                profile: {
-                  ...r.profile,
-                  ...(quota ? { quota } : {}),
-                  quotaError: error,
-                },
-              }
-            : r,
-        );
-        await this.saveRecords(records);
-        this.onChange();
+        await this.refreshAccountQuota(accountId);
       }
       this.log(
         "积分查询已完成。",
@@ -375,6 +387,445 @@ export class Store {
       this.refreshPromise = null;
       this.onChange();
     }
+  }
+  apiDocument(id) {
+    const record = this.records.find((r) => r.profile.id === id);
+    if (!record) throw new Error("未找到该账号。");
+    const document = record.apiEncrypted
+      ? parseAuth(
+          this.vault.decrypt(Buffer.from(record.apiEncrypted, "base64")),
+        )
+      : this.document(id);
+    if (document.id !== id) throw new Error("查询凭据身份不一致，已停止操作。");
+    return document;
+  }
+  async authorized(id, operation) {
+    let document = this.apiDocument(id);
+    try {
+      return await operation(document);
+    } catch (error) {
+      if (
+        !document.token ||
+        !(
+          error.kind === "auth" ||
+          (!error.kind && error.message.includes("失效"))
+        )
+      )
+        throw error;
+      document = await renewAuth(document, this.request);
+      if (document.id !== id)
+        throw new Error("续期凭据身份不一致，已停止操作。");
+      const encrypted = this.encrypt(document.raw);
+      await this.saveRecords(
+        this.records.map((record) =>
+          record.profile.id === id
+            ? {
+                ...record,
+                apiEncrypted: encrypted,
+                ...(record.profile.protectedToken ? {} : { encrypted }),
+                profile: {
+                  ...record.profile,
+                  tokenExpiresAt: document.tokenExpiresAt,
+                },
+              }
+            : record,
+        ),
+      );
+      return operation(document);
+    }
+  }
+  async patchProfile(id, patch) {
+    await this.saveRecords(
+      this.records.map((record) =>
+        record.profile.id === id
+          ? { ...record, profile: { ...record.profile, ...patch } }
+          : record,
+      ),
+    );
+    this.onChange();
+  }
+  async refreshAccountQuota(id) {
+    try {
+      const quota = await this.authorized(id, (document) =>
+        fetchQuota(document, this.request),
+      );
+      await this.patchProfile(id, { quota, quotaError: null });
+    } catch (error) {
+      await this.patchProfile(id, { quotaError: error.message });
+    }
+  }
+  rewardTargets(ids = null, automatic = false) {
+    if (
+      ids !== null &&
+      (!Array.isArray(ids) ||
+        ids.length > 500 ||
+        ids.some((id) => typeof id !== "string"))
+    )
+      throw new Error("账号选择无效。");
+    const requested = ids === null ? null : new Set(ids);
+    if (
+      requested &&
+      [...requested].some(
+        (id) => !this.records.some((record) => record.profile.id === id),
+      )
+    )
+      throw new Error("部分账号已移除，请刷新后重新选择。");
+    return this.records
+      .filter(
+        (record) =>
+          (!requested || requested.has(record.profile.id)) &&
+          (!automatic || record.profile.automaticRewards !== false),
+      )
+      .map((record) => record.profile.id);
+  }
+  async rewardEntry(
+    accountId,
+    task,
+    result,
+    credit = null,
+    detail = "",
+    automatic = false,
+  ) {
+    const entry = {
+      id: randomUUID(),
+      accountId,
+      task,
+      result,
+      credit,
+      detail: detail.slice(0, 200),
+      automatic,
+      at: Date.now(),
+    };
+    const entries = [entry, ...this.rewardHistory].slice(0, 500);
+    await atomicWrite(
+      path.join(this.directory, "rewards-history.json"),
+      JSON.stringify({ version: 1, entries }, null, 2),
+    );
+    this.rewardHistory = entries;
+    this.onChange();
+    return entry;
+  }
+  async fetchRewardState(id) {
+    const profile = this.records.find(
+      (record) => record.profile.id === id,
+    )?.profile;
+    if (!profile) throw new Error("未找到该账号。");
+    const state = {
+      checkin: null,
+      travel: null,
+      locations: [],
+      travelEnabled: null,
+      ...profile.rewards,
+      checkinError: null,
+      travelError: null,
+      configError: null,
+    };
+    try {
+      state.checkin = await this.authorized(id, (document) =>
+        getCheckinStatus(document, this.request),
+      );
+    } catch (error) {
+      state.checkinError = error.message;
+    }
+    try {
+      const config = await this.authorized(id, (document) =>
+        getTravelConfig(document, this.request),
+      );
+      state.locations = config.locations;
+      state.travelEnabled = config.enabled;
+    } catch (error) {
+      state.configError = error.message;
+    }
+    if (state.travelEnabled === false && !state.configError) {
+      state.travel = null;
+      state.travelError = "当前账号的旅行活动尚未开放，请到官方成长中心查看。";
+    } else {
+      try {
+        state.travel = await this.authorized(id, (document) =>
+          getTravelStatus(document, this.request),
+        );
+      } catch (error) {
+        state.travelError = error.message;
+      }
+    }
+    await this.patchProfile(id, { rewards: state });
+    return state;
+  }
+  refreshRewards(ids = null) {
+    return this.exclusive(async () => {
+      for (const id of this.rewardTargets(ids)) await this.fetchRewardState(id);
+      this.log("签到和旅行状态已更新。", "info");
+    });
+  }
+  async performClaims(
+    ids,
+    { checkin = true, travel = true, automatic = false } = {},
+  ) {
+    const results = [];
+    for (const id of this.rewardTargets(ids, automatic)) {
+      let state = await this.fetchRewardState(id);
+      if (checkin) {
+        if (state.checkinError || !state.checkin) {
+          results.push(
+            await this.rewardEntry(
+              id,
+              "checkin",
+              "error",
+              null,
+              state.checkinError || "未取得签到状态。",
+              automatic,
+            ),
+          );
+        } else if (!state.checkin.checkedIn) {
+          try {
+            const result = await this.authorized(id, (document) =>
+              checkIn(document, this.request),
+            );
+            // A successful POST establishes completion, even when the response
+            // omits an amount. Repeated-day responses never become new rewards.
+            state = {
+              ...state,
+              checkin: {
+                checkedIn: true,
+                day: rewardDay(),
+                fetchedAt: Date.now(),
+              },
+              checkinError: null,
+            };
+            await this.patchProfile(id, { rewards: state });
+            results.push(
+              await this.rewardEntry(
+                id,
+                "checkin",
+                result.already ? "already" : "claimed",
+                result.credit,
+                "",
+                automatic,
+              ),
+            );
+          } catch (error) {
+            state = { ...state, checkinError: error.message };
+            await this.patchProfile(id, { rewards: state });
+            results.push(
+              await this.rewardEntry(
+                id,
+                "checkin",
+                "error",
+                null,
+                error.message,
+                automatic,
+              ),
+            );
+          }
+        }
+      }
+      if (travel) {
+        if (state.travelError || !state.travel) {
+          results.push(
+            await this.rewardEntry(
+              id,
+              "travel",
+              "error",
+              null,
+              state.travelError || "未取得旅行状态。",
+              automatic,
+            ),
+          );
+        } else if (state.travel.state === "arrived") {
+          try {
+            const result = await this.authorized(id, (document) =>
+              claimTravel(document, this.request),
+            );
+            results.push(
+              await this.rewardEntry(
+                id,
+                "travel",
+                "claimed",
+                result.credit,
+                "",
+                automatic,
+              ),
+            );
+            try {
+              state = {
+                ...state,
+                travel: await this.authorized(id, (document) =>
+                  getTravelStatus(document, this.request),
+                ),
+                travelError: null,
+              };
+            } catch (error) {
+              state = {
+                ...state,
+                travelError: `奖励已领取，但状态刷新失败：${error.message}`,
+              };
+            }
+            await this.patchProfile(id, { rewards: state });
+          } catch (error) {
+            state = { ...state, travelError: error.message };
+            await this.patchProfile(id, { rewards: state });
+            results.push(
+              await this.rewardEntry(
+                id,
+                "travel",
+                "error",
+                null,
+                error.message,
+                automatic,
+              ),
+            );
+          }
+        }
+      }
+      if (
+        results.some(
+          (entry) => entry.accountId === id && entry.result === "claimed",
+        )
+      )
+        await this.refreshAccountQuota(id);
+    }
+    return {
+      results,
+      claimed: results.filter((entry) => entry.result === "claimed").length,
+      failed: results.filter((entry) => entry.result === "error").length,
+      credit: results
+        .filter((entry) => entry.result === "claimed")
+        .reduce((sum, entry) => sum + (entry.credit ?? 0), 0),
+      unknownAmounts: results.filter(
+        (entry) => entry.result === "claimed" && entry.credit === null,
+      ).length,
+    };
+  }
+  claimRewards(ids = null, kind = "all") {
+    if (!["all", "checkin", "travel"].includes(kind))
+      throw new Error("领取任务无效。");
+    return this.exclusive(async () => {
+      const result = await this.performClaims(ids, {
+        checkin: kind !== "travel",
+        travel: kind !== "checkin",
+      });
+      this.log(
+        `领取完成：${result.claimed} 项成功，${result.failed} 项失败。`,
+        result.failed ? "info" : "success",
+      );
+      return result;
+    });
+  }
+  async performDepart(id, locationId, automatic = false) {
+    const state = await this.fetchRewardState(id);
+    if (state.travelError || state.configError)
+      throw new Error(state.travelError || state.configError);
+    if (!state.travel || state.travel.state !== "idle")
+      throw new Error("猫猫正在旅行或有奖励待领取，请先刷新状态。");
+    if (state.travel.dailyLimitReached)
+      throw new Error("今日旅行次数已达上限，请明天再来。");
+    const location = state.locations.find(
+      (item) => String(item.id) === String(locationId),
+    );
+    if (!location)
+      throw new Error("该地点暂不可用，请从官方地点列表重新选择。");
+    await this.authorized(id, (document) =>
+      departTravel(document, location.id, this.request),
+    );
+    await this.patchProfile(id, { travelLocationId: String(location.id) });
+    await this.rewardEntry(
+      id,
+      "depart",
+      "departed",
+      null,
+      location.name,
+      automatic,
+    );
+    try {
+      state.travel = await this.authorized(id, (document) =>
+        getTravelStatus(document, this.request),
+      );
+      state.travelError = null;
+    } catch (error) {
+      state.travelError = `已出发，但状态刷新失败：${error.message}`;
+    }
+    await this.patchProfile(id, { rewards: state });
+  }
+  depart(id, locationId) {
+    return this.exclusive(async () => {
+      await this.performDepart(id, locationId);
+      this.log("猫猫已出发，奖励到账后可领取。");
+    });
+  }
+  async runAutomation(now = Date.now()) {
+    if (
+      this.busy ||
+      this.refreshPromise ||
+      !this.records.length ||
+      !(
+        this.settings.autoCheckin ||
+        this.settings.autoClaimTravel ||
+        this.settings.autoDepartTravel
+      ) ||
+      (this.lastAutomationAt &&
+        now - this.lastAutomationAt <
+          this.settings.automationIntervalMinutes * 60000)
+    )
+      return null;
+    this.lastAutomationAt = now;
+    return this.exclusive(async () => {
+      const clock = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Shanghai",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      })
+        .format(now)
+        .split(":")
+        .map(Number);
+      const checkin =
+        this.settings.autoCheckin &&
+        clock[0] * 60 + clock[1] >=
+          this.settings.checkinHour * 60 + this.settings.checkinMinute;
+      const result =
+        checkin || this.settings.autoClaimTravel
+          ? await this.performClaims(null, {
+              checkin,
+              travel: this.settings.autoClaimTravel,
+              automatic: true,
+            })
+          : null;
+      if (this.settings.autoDepartTravel) {
+        for (const id of this.rewardTargets(null, true)) {
+          const profile = this.records.find(
+            (record) => record.profile.id === id,
+          ).profile;
+          if (!profile.travelLocationId) continue;
+          const state = await this.fetchRewardState(id);
+          if (
+            state.travelError ||
+            state.configError ||
+            !state.travel ||
+            state.travel.state !== "idle" ||
+            state.travel.dailyLimitReached
+          )
+            continue;
+          try {
+            await this.performDepart(id, profile.travelLocationId, true);
+          } catch (error) {
+            await this.rewardEntry(
+              id,
+              "depart",
+              "error",
+              null,
+              error.message,
+              true,
+            );
+          }
+        }
+      }
+      if (result?.claimed || result?.failed)
+        this.log(
+          `自动领取：${result.claimed} 项成功，${result.failed} 项失败。`,
+          result.failed ? "info" : "success",
+        );
+      return result;
+    });
   }
   async sessions() {
     if (!(await exists(this.paths.database))) return [];
@@ -465,6 +916,9 @@ export class Store {
           quota: null,
           quotaError: null,
           protectedToken: auth.protectedToken,
+          rewards: null,
+          automaticRewards: true,
+          travelLocationId: "",
         };
         next.push({ profile, encrypted: this.encrypt(auth.raw) });
       }
@@ -570,6 +1024,7 @@ export class Store {
       busy: this.busy,
       refreshing: !!this.refreshPromise,
       events: this.events,
+      rewardHistory: this.rewardHistory,
       authError,
     };
   }

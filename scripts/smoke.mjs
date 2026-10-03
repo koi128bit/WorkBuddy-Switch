@@ -34,11 +34,20 @@ try {
       WB_SWITCH_DEV_URL: "",
     },
   });
-  const page = await desktop.firstWindow();
+  await desktop.firstWindow();
+  let page;
+  for (let i = 0; i < 80; i++) {
+    page = desktop
+      .windows()
+      .find((window) => window.url() === "workbuddy-switch://app/index.html");
+    if (page) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.ok(page, "main application window is loaded");
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page
-    .getByRole("heading", { name: "工作台", exact: true })
+    .getByRole("heading", { name: "账号", exact: true })
     .waitFor({ timeout: 20000 });
   const security = await desktop.evaluate(({ BrowserWindow }) => {
     const p =
@@ -58,6 +67,30 @@ try {
   assert.equal(initial.current.id, "isolated-fixture");
   assert.equal(initial.accounts.length, 0);
   assert.ok(!JSON.stringify(initial).includes("fake-test-credential"));
+  const popup = desktop
+    .windows()
+    .find((window) => window.url().endsWith("#tray"));
+  assert.ok(popup, "menu-bar panel is loaded");
+  await popup.locator(".tray-footer").waitFor({ state: "attached" });
+  await desktop.evaluate(({ BrowserWindow }) => {
+    const panel = BrowserWindow.getAllWindows().find((window) =>
+      window.webContents.getURL().endsWith("#tray"),
+    );
+    panel.setSize(346, 346);
+  });
+  await popup.waitForFunction(() => innerHeight === 346);
+  const panelLayout = await popup.evaluate(() => ({
+    headerTop: document.querySelector(".tray-heading").getBoundingClientRect()
+      .top,
+    footerBottom: document.querySelector(".tray-footer").getBoundingClientRect()
+      .bottom,
+    height: innerHeight,
+  }));
+  assert.ok(panelLayout.headerTop >= 0, "empty popup header stays visible");
+  assert.ok(
+    panelLayout.footerBottom <= panelLayout.height,
+    "empty popup footer stays visible",
+  );
   await page.evaluate(() => window.workbuddy.capture());
   const after = await page.evaluate(() => window.workbuddy.snapshot());
   assert.equal(after.accounts.length, 1);
@@ -83,8 +116,13 @@ try {
   assert.equal(saved.theme, "dark");
   assert.equal(saved.compactMode, true);
   assert.deepEqual(errors, []);
+  const popupState = await popup.evaluate(() => window.workbuddy.snapshot());
+  assert.equal(popupState.accounts.length, 1);
+  assert.ok(!JSON.stringify(popupState).includes("fake-test-credential"));
+  await popup.evaluate(() => window.workbuddy.openPage("settings"));
+  await page.getByRole("heading", { name: "设置", exact: true }).waitFor();
   console.log(
-    "PASS: native desktop launch, isolated IPC, system encryption, capture and persisted settings",
+    "PASS: native desktop launch, isolated main/popup IPC, system encryption, capture, settings and tray navigation",
   );
 } finally {
   await desktop?.close();

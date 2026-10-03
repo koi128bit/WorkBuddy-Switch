@@ -1,7 +1,7 @@
 {
   "name": "workbuddy-switch",
   "version": "1.0.0",
-  "description": "WorkBuddy 多账号工作台：安全快切、积分到期提醒、跨账号续聊与用量分析",
+  "description": "WorkBuddy 多账号管理：一键领积分、猫猫旅行、安全切换、对话续接与用量分析",
   "author": "koi128bit",
   "license": "MIT",
   "private": true,

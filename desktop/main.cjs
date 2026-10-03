@@ -13,6 +13,7 @@ const {
   net,
   session,
   Notification,
+  screen,
 } = require("electron");
 const path = require("node:path");
 const os = require("node:os");
@@ -22,10 +23,13 @@ const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const exec = promisify(execFile);
 let mainWindow,
+  trayWindow,
+  trayMenu,
   store,
   tray,
   quitting = false,
   refreshTimer,
+  automationTimer,
   tickBusy = false;
 const noticeKeys = new Map();
 const root = path.join(__dirname, "..");
@@ -39,6 +43,7 @@ const links = {
   releases: "https://github.com/koi128bit/WorkBuddy-Switch/releases/latest",
   privacy:
     "https://github.com/koi128bit/WorkBuddy-Switch/blob/main/SECURITY.md",
+  growth: "https://www.codebuddy.cn/profile/growth-center",
 };
 app.setName("WorkBuddy Switch");
 protocol.registerSchemesAsPrivileged([
@@ -66,6 +71,7 @@ else {
 app.on("before-quit", () => {
   quitting = true;
   clearInterval(refreshTimer);
+  clearInterval(automationTimer);
 });
 app.on("window-all-closed", () => {
   if (!store?.settings.closeToTray) app.quit();
@@ -75,14 +81,105 @@ app.on("activate", () => showWindow());
 function changed() {
   if (mainWindow && !mainWindow.isDestroyed())
     mainWindow.webContents.send("wb:changed");
+  if (trayWindow && !trayWindow.isDestroyed())
+    trayWindow.webContents.send("wb:changed");
   updateTray();
 }
 function showWindow() {
+  trayWindow?.hide();
   if (!mainWindow || mainWindow.isDestroyed()) createWindow();
   else {
     mainWindow.show();
     mainWindow.focus();
   }
+}
+function openPage(page) {
+  if (!["accounts", "overview", "sessions", "usage", "settings"].includes(page))
+    throw new Error("页面无效。");
+  showWindow();
+  const navigate = () => mainWindow.webContents.send("wb:navigate", page);
+  if (mainWindow.webContents.isLoadingMainFrame())
+    mainWindow.webContents.once("did-finish-load", navigate);
+  else navigate();
+}
+function createApplicationMenu() {
+  const mac = process.platform === "darwin";
+  app.setAboutPanelOptions({
+    applicationName: "WorkBuddy Switch",
+    applicationVersion: app.getVersion(),
+    copyright: "© koi128bit · MIT License",
+    iconPath: path.join(root, "assets/icon.png"),
+  });
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: mac ? "WorkBuddy Switch" : "应用",
+        submenu: [
+          { label: "关于 WorkBuddy Switch", role: "about" },
+          {
+            label: "设置…",
+            accelerator: "CmdOrCtrl+,",
+            click: () => openPage("settings"),
+          },
+          { type: "separator" },
+          ...(mac
+            ? [
+                { label: "隐藏 WorkBuddy Switch", role: "hide" },
+                { label: "隐藏其他应用", role: "hideOthers" },
+                { label: "显示全部", role: "unhide" },
+                { type: "separator" },
+              ]
+            : []),
+          { label: "退出 WorkBuddy Switch", role: "quit" },
+        ],
+      },
+      {
+        label: "编辑",
+        submenu: [
+          { label: "撤销", role: "undo" },
+          { label: "重做", role: "redo" },
+          { type: "separator" },
+          { label: "剪切", role: "cut" },
+          { label: "复制", role: "copy" },
+          { label: "粘贴", role: "paste" },
+          { label: "全选", role: "selectAll" },
+        ],
+      },
+      {
+        label: "窗口",
+        submenu: [
+          {
+            label: "显示主窗口",
+            accelerator: "CmdOrCtrl+1",
+            click: showWindow,
+          },
+          {
+            label: "菜单栏快捷面板",
+            accelerator: "CmdOrCtrl+Shift+M",
+            click: showTray,
+          },
+          { type: "separator" },
+          { label: "最小化", role: "minimize" },
+          { label: "缩放", role: "zoom" },
+          { label: "关闭窗口", role: "close" },
+        ],
+      },
+      {
+        label: "帮助",
+        submenu: [
+          { label: "使用指南", click: () => shell.openExternal(links.wiki) },
+          {
+            label: "GitHub 仓库",
+            click: () => shell.openExternal(links.github),
+          },
+          {
+            label: "下载更新",
+            click: () => shell.openExternal(links.releases),
+          },
+        ],
+      },
+    ]),
+  );
 }
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -92,7 +189,7 @@ function createWindow() {
     minHeight: 640,
     show: false,
     title: "WorkBuddy Switch",
-    backgroundColor: "#f8faf7",
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#252525" : "#fafafa",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     trafficLightPosition: { x: 20, y: 22 },
     icon: path.join(root, "assets/icon.png"),
@@ -114,6 +211,8 @@ function createWindow() {
     if (!quitting && store.settings.closeToTray && tray) {
       event.preventDefault();
       mainWindow.hide();
+    } else if (!quitting) {
+      app.quit();
     }
   });
   mainWindow.webContents.on("render-process-gone", () => {
@@ -129,16 +228,19 @@ function createWindow() {
   else mainWindow.loadURL("workbuddy-switch://app/index.html");
 }
 function trusted(event) {
-  if (
-    !mainWindow ||
-    event.sender !== mainWindow.webContents ||
-    event.senderFrame !== event.sender.mainFrame
-  )
-    return false;
+  const source = [mainWindow, trayWindow].find(
+    (window) =>
+      window && !window.isDestroyed() && event.sender === window.webContents,
+  );
+  if (!source || event.senderFrame !== event.sender.mainFrame) return false;
   const url = event.senderFrame.url;
-  return devURL
-    ? url === `${devURL}/`
-    : url === "workbuddy-switch://app/index.html";
+  const suffix = source === trayWindow ? "#tray" : "";
+  return (
+    url ===
+    (devURL
+      ? `${devURL}/${suffix}`
+      : `workbuddy-switch://app/index.html${suffix}`)
+  );
 }
 function handle(name, action) {
   ipcMain.handle(`wb:${name}`, async (event, ...args) => {
@@ -269,6 +371,13 @@ async function start() {
   handle("edit", (id, patch) => store.editAccount(string(id, 200), patch));
   handle("remove", (id) => store.removeAccount(string(id, 200)));
   handle("refresh", (id) => store.refreshQuotas(id ? string(id, 200) : null));
+  handle("rewards-refresh", (ids) => store.refreshRewards(ids ?? null));
+  handle("rewards-claim", (ids, kind) =>
+    store.claimRewards(ids ?? null, kind ?? "all"),
+  );
+  handle("travel-depart", (id, locationId) =>
+    store.depart(string(id, 200), string(locationId, 80)),
+  );
   handle("sessions", () => store.sessions());
   handle("usage", (q) => store.usage(query(q)));
   handle("resume", (id) =>
@@ -277,6 +386,30 @@ async function start() {
     ),
   );
   handle("launch", () => controller.launch());
+  handle("open-page", openPage);
+  handle("tray-switch", async (id) => {
+    string(id, 200);
+    if (store.busy) throw new Error("已有任务正在执行，请稍候。");
+    if (!store.records.some((record) => record.profile.id === id))
+      throw new Error("未找到该账号。");
+    trayWindow?.hide();
+    if ((await store.active())?.id === id) {
+      await controller.launch();
+      return true;
+    }
+    const result = await dialog.showMessageBox({
+      type: "question",
+      title: "切换 WorkBuddy 账号",
+      message: "切换将关闭 WorkBuddy。请先结束正在运行的任务。",
+      buttons: ["取消", "切换账号"],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    if (result.response !== 1) return false;
+    await store.switchAccount(id);
+    return true;
+  });
+  handle("quit", () => app.quit());
   handle("diagnostics", () => store.diagnostics());
   handle("backups", () => store.backups());
   handle("backup-sessions", () => store.backupSessions());
@@ -319,6 +452,7 @@ async function start() {
       }
       nativeTheme.themeSource = value.theme;
       scheduleRefresh();
+      scheduleAutomation();
       updateTray();
       return value;
     }),
@@ -433,6 +567,8 @@ async function start() {
   handle("update", checkUpdate);
   createWindow();
   createTray();
+  createTrayWindow();
+  createApplicationMenu();
   scheduleRefresh();
   if (store.settings.autoCapture) {
     try {
@@ -441,61 +577,155 @@ async function start() {
       store.log(safeMessage(e), "error");
     }
   }
+  scheduleAutomation();
 }
 function createTray() {
   const image = nativeImage.createFromPath(path.join(root, "assets/icon.png"));
   tray = new Tray(image.resize({ width: 20, height: 20 }));
   tray.setToolTip("WorkBuddy Switch");
-  tray.on("click", showWindow);
+  tray.on("click", showTray);
+  tray.on("right-click", () => {
+    if (process.platform === "darwin" && trayMenu)
+      tray.popUpContextMenu(trayMenu);
+  });
   updateTray();
+}
+function createTrayWindow() {
+  trayWindow = new BrowserWindow({
+    title: "WorkBuddy Switch 菜单栏",
+    width: 346,
+    height: 470,
+    show: false,
+    frame: false,
+    resizable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    transparent: true,
+    ...(process.platform === "darwin"
+      ? { vibrancy: "popover", visualEffectState: "active" }
+      : {}),
+    backgroundColor: "#00000000",
+    roundedCorners: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
+    },
+  });
+  trayWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  trayWindow.webContents.on("page-title-updated", (event) =>
+    event.preventDefault(),
+  );
+  trayWindow.webContents.on("will-navigate", (event) => event.preventDefault());
+  trayWindow.on("blur", () => trayWindow?.hide());
+  trayWindow.on("close", (event) => {
+    if (!quitting) {
+      event.preventDefault();
+      trayWindow.hide();
+    }
+  });
+  trayWindow.webContents.on("render-process-gone", () => {
+    if (!quitting) trayWindow?.destroy();
+  });
+  if (devURL) trayWindow.loadURL(`${devURL}/#tray`);
+  else trayWindow.loadURL("workbuddy-switch://app/index.html#tray");
+}
+function showTray() {
+  if (!trayWindow || trayWindow.isDestroyed()) createTrayWindow();
+  if (trayWindow.isVisible()) {
+    trayWindow.hide();
+    return;
+  }
+  const bounds = tray.getBounds();
+  const work = screen.getDisplayMatching(bounds).workArea;
+  const width = 346,
+    height = Math.min(
+      560,
+      300 + Math.max(1, Math.min(8, store.records.length)) * 46,
+      work.height - 12,
+    );
+  const x = Math.max(
+    work.x + 6,
+    Math.min(
+      work.x + work.width - width - 6,
+      Math.round(bounds.x + bounds.width / 2 - width / 2),
+    ),
+  );
+  const y =
+    bounds.y < work.y + work.height / 2
+      ? Math.max(work.y + 4, bounds.y + bounds.height + 4)
+      : Math.max(work.y + 6, bounds.y - height - 4);
+  trayWindow.setBounds({ x, y, width, height });
+  trayWindow.show();
+  trayWindow.focus();
+  trayWindow.webContents.send("wb:changed");
 }
 function updateTray() {
   if (!tray) return;
   const accounts = [...store.records]
     .sort((a, b) => b.profile.lastUsedAt - a.profile.lastUsedAt)
     .slice(0, 8);
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: "打开 WorkBuddy Switch", click: showWindow },
-      { type: "separator" },
-      ...accounts.map((r, i) => ({
-        label: store.settings.privacyMode
-          ? `账号 ${i + 1}`
-          : r.profile.nickname,
-        enabled: !store.busy,
-        click: async () => {
-          const result = await dialog.showMessageBox({
-            type: "question",
-            title: "切换 WorkBuddy 账号",
-            message: "切换将关闭 WorkBuddy。请先结束正在运行的任务。",
-            buttons: ["取消", "切换账号"],
-            defaultId: 0,
-            cancelId: 0,
-          });
-          if (result.response === 1) {
-            try {
-              await store.switchAccount(r.profile.id);
-            } catch (error) {
-              dialog.showErrorBox("切换未完成", safeMessage(error));
-            }
-          }
-          updateTray();
-        },
-      })),
-      { type: "separator" },
-      {
-        label: "打开 WorkBuddy",
-        click: async () => {
+  trayMenu = Menu.buildFromTemplate([
+    { label: "打开 WorkBuddy Switch", click: showWindow },
+    { type: "separator" },
+    ...accounts.map((r, i) => ({
+      label: store.settings.privacyMode ? `账号 ${i + 1}` : r.profile.nickname,
+      enabled: !store.busy,
+      click: async () => {
+        const result = await dialog.showMessageBox({
+          type: "question",
+          title: "切换 WorkBuddy 账号",
+          message: "切换将关闭 WorkBuddy。请先结束正在运行的任务。",
+          buttons: ["取消", "切换账号"],
+          defaultId: 0,
+          cancelId: 0,
+        });
+        if (result.response === 1) {
           try {
-            await store.controller.launch();
-          } catch (e) {
-            dialog.showErrorBox("启动未完成", safeMessage(e));
+            await store.switchAccount(r.profile.id);
+          } catch (error) {
+            dialog.showErrorBox("切换未完成", safeMessage(error));
           }
-        },
+        }
+        updateTray();
       },
-      { label: "退出", click: () => app.quit() },
-    ]),
-  );
+    })),
+    { type: "separator" },
+    {
+      label: "打开 WorkBuddy",
+      click: async () => {
+        try {
+          await store.controller.launch();
+        } catch (e) {
+          dialog.showErrorBox("启动未完成", safeMessage(e));
+        }
+      },
+    },
+    { label: "退出", click: () => app.quit() },
+  ]);
+  if (process.platform !== "darwin") tray.setContextMenu(trayMenu);
+  if (process.platform === "darwin") {
+    void store
+      .active()
+      .then((active) => {
+        if (quitting || !tray || tray.isDestroyed()) return;
+        const profile = store.records.find(
+          (record) => record.profile.id === active?.id,
+        )?.profile;
+        tray.setTitle(
+          store.settings.menuBarBalance && profile?.quota && !profile.quotaError
+            ? new Intl.NumberFormat("zh-CN", {
+                maximumFractionDigits: 4,
+              }).format(profile.quota.remaining)
+            : "",
+        );
+      })
+      .catch(() => {
+        if (!quitting && tray && !tray.isDestroyed()) tray.setTitle("");
+      });
+  }
 }
 function scheduleRefresh() {
   clearInterval(refreshTimer);
@@ -513,6 +743,27 @@ function scheduleRefresh() {
       tickBusy = false;
     }
   }, store.settings.refreshSeconds * 1000);
+}
+function scheduleAutomation() {
+  clearInterval(automationTimer);
+  if (
+    testMode ||
+    !(
+      store.settings.autoCheckin ||
+      store.settings.autoClaimTravel ||
+      store.settings.autoDepartTravel
+    )
+  )
+    return;
+  const run = async () => {
+    try {
+      await store.runAutomation();
+    } catch (error) {
+      store.log(safeMessage(error), "error");
+    }
+  };
+  automationTimer = setInterval(run, 60000);
+  void run();
 }
 function notifyBalances() {
   if (!store.settings.notifications || !Notification.isSupported()) return;
