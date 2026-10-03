@@ -76,9 +76,12 @@ try {
     const panel = BrowserWindow.getAllWindows().find((window) =>
       window.webContents.getURL().endsWith("#tray"),
     );
-    panel.setSize(346, 346);
+    panel.setContentSize(346, 346);
+    panel.show();
   });
-  await popup.waitForFunction(() => innerHeight === 346);
+  await popup.waitForFunction(
+    () => Math.abs(innerWidth - 346) <= 1 && Math.abs(innerHeight - 346) <= 1,
+  );
   const panelLayout = await popup.evaluate(() => ({
     headerTop: document.querySelector(".tray-heading").getBoundingClientRect()
       .top,
