@@ -1,0 +1,117 @@
+{
+  "name": "workbuddy-switch",
+  "version": "1.0.0",
+  "description": "WorkBuddy 多账号工作台：安全快切、积分到期提醒、跨账号续聊与用量分析",
+  "author": "koi128bit",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.cjs",
+  "engines": {
+    "node": ">=22.16"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "tsc --noEmit && vite build && node scripts/licenses.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/test.mjs",
+    "test:desktop": "node scripts/desktop-check.mjs",
+    "test:ui": "playwright test",
+    "test:smoke": "node scripts/smoke.mjs",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip --arm64 --x64 --publish never",
+    "dist:win": "npm run build && electron-builder --win nsis portable --x64 --publish never",
+    "dist:dir": "npm run build && electron-builder --dir --publish never"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/koi128bit/WorkBuddy-Switch.git"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3",
+    "lucide-react": "1.51.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.2"
+  },
+  "build": {
+    "appId": "com.koi128bit.workbuddy-switch",
+    "productName": "WorkBuddy Switch",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "renderer/**",
+      "desktop/**",
+      "assets/icon.png",
+      "package.json",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md"
+    ],
+    "asar": true,
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "grantFileProtocolExtraPrivileges": false
+    },
+    "artifactName": "WorkBuddy-Switch-${version}-${os}-${arch}.${ext}",
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "assets/icon.png",
+      "minimumSystemVersion": "13.0",
+      "identity": "-",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "WorkBuddy Switch ${version}",
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 150,
+          "y": 180
+        },
+        {
+          "x": 390,
+          "y": 180,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "win": {
+      "icon": "assets/icon.png",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "artifactName": "WorkBuddy-Switch-${version}-windows-${arch}-setup.exe",
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "WorkBuddy-Switch-${version}-windows-${arch}-portable.exe"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "koi128bit",
+      "repo": "WorkBuddy-Switch"
+    }
+  }
+}

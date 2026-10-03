@@ -1,67 +1,35 @@
-# WorkBuddy Switch Changelog
+# 更新日志
 
-## 0.2.0 - 2026-07-25
+## 1.0.0 — 2026-10-03
 
-- Add a unified provider switcher for WorkBuddy, Trae CN, and TRAE Work.
-- Add Keychain-backed account capture and switching for Trae CN and TRAE Work,
-  alongside the existing WorkBuddy account workflow.
-- Add Trae usage and allowance views based on data returned by the corresponding
-  Trae APIs, with a 15-second application refresh target.
-- Keep Trae switching non-destructive: settings, plugins/extensions, workspaces,
-  conversations, and machine identifiers are not reset or removed.
-- Keep conversation browsing and cross-account resume explicitly WorkBuddy-only;
-  Trae conversations are not read, migrated, or resumed.
-- Refresh the interface around the unified provider workflow and update release
-  metadata for the 0.2.0 build.
+### 新的 WorkBuddy 工作台
 
-## 0.1.4 - 2026-07-25
+- 产品范围收敛为 WorkBuddy，重新组织工作台、账号、对话、用量和设置五个页面。
+- 统一浅色与深色主题，增加紧凑布局、隐私遮罩、账号搜索、收藏、备注和排序。
+- 支持 macOS Apple Silicon / Intel，以及 Windows x64 安装版与便携版。
 
-- Allow the resume migration flow to recreate missing SQLite WAL sidecars after
-  WorkBuddy exits, preventing `unable to open database file` before backup and
-  session reassignment.
-- Add a regression fixture that checkpoints a WAL database, removes its WAL and
-  SHM sidecars, then verifies cross-account conversation migration and backup.
+### 账号与积分
 
-## 0.1.3 - 2026-07-25
+- 本机账号库使用系统加密；可保存当前客户端登录，或通过官方网页登录添加账号。
+- 识别并保留 WorkBuddy 5.6 的加密凭据封装；独立保留网页登录授权，供积分查询与跨设备备份使用。
+- 切换前保存原账号，正常退出客户端；写入后校验身份，启动失败时尝试恢复原登录。
+- 积分支持精确字段、临期提示、低余额提醒、自动刷新与授权续期；失败时显示具体状态。
+- 密码加密账号备份，导入时保留已有账号；macOS 可迁入 0.x 的钥匙串账号快照。
 
-- Continue a cross-account conversation by migrating only the selected session
-  to the currently logged-in WorkBuddy account instead of switching credentials
-  back to the session's original account.
-- Stop WorkBuddy before migration, verify the active identity again, checkpoint
-  WAL, and create a consistent SQLite backup before the guarded transaction.
-- Restore deleted sessions and reassign ownership atomically, prevent duplicate
-  resume operations, and clarify migration behavior across every resume entry.
-- Make initial session and usage loading survive SwiftUI task cancellation,
-  distinguish an uninitialized usage cache from a genuine zero, retry transient
-  empty sources, and refresh local sessions and usage globally every 15 seconds.
+### 对话与用量
 
-## 0.1.2 - 2026-07-25
+- 对话支持搜索、归属筛选、分页、回收站恢复和迁移到当前账号继续。
+- 迁移前使用 SQLite online backup，包含 WAL；事务只修改选中记录，检查失败只撤销该记录。
+- 本地 Token 按消息 ID 去重，缓存与推理不重复计数；支持日期筛选、模型与对话排行、CSV 导出。
+- 本地日志 Credits 与官方积分分别展示，缺失记录不按 Token 推算。
 
-- Label the headline Token value explicitly as the total for the selected date
-  range, including the active model and range when a model filter is applied.
-- Clarify that model Credits are only the locally attributable subset while the
-  precise server figure represents all models for the current account's billing
-  cycle.
+### 设置与交付
 
-## 0.1.1 - 2026-07-25
+- 系统登录启动、关闭到托盘、启动保存、切换后重启、主题和紧凑模式均持久化。
+- 可配置积分刷新、提醒阈值、路径、连接诊断和数据库备份保留数量。
+- 加入 Electron 隔离 IPC、自定义安全协议、固定外链与发布包 fuses 限制。
+- 更新 README、隐私说明、Wiki 和双平台 GitHub Actions 构建流程。
 
-- Redesign usage analytics with account, model, and period filters; token
-  breakdowns; cache hit rate; multi-series trends; and model/session details.
-- Default usage analytics to today, add an inclusive custom calendar range, and
-  refresh local usage incrementally every 15 seconds while the page is open.
-- Add model-level request, input, output, cache-read, cache-write, and daily
-  aggregation, including normalized WorkBuddy usage payload support.
-- Reconcile locally attributable Credits with the current account's precise
-  server-side cycle total without inventing unsupported model-level billing.
-- Format chart axes with K/M/B units instead of scientific notation.
-- Rename the user-facing product to WorkBuddy Switch.
-- Replace the application icon and remove the opaque outer corner background.
+## 0.x
 
-## 0.1.0 - 2026-07-24
-
-- Add Keychain-backed WorkBuddy account capture and atomic switching.
-- Add account-aware conversation browsing, trash restoration, deep-link resume,
-  and CLI fallback.
-- Add local token, cache, reasoning, credit, model, and session analytics.
-- Add WorkBuddy quota refresh and menu-bar quick actions.
-- Add native macOS packaging, signing, DMG creation, and self-tests.
+早期 macOS 原生版本的源代码与安装包保留在 Git 历史和已有 Releases 中。1.0 使用独立应用数据目录；旧版账号可手动迁入。

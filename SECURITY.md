@@ -1,62 +1,52 @@
-# Security
+# 安全与隐私
 
-## Credential handling
+WorkBuddy Switch 是本地桌面工具。使用已保存账号进行切换前，界面会说明需要退出 WorkBuddy；对话迁移前会说明归属变化，并创建完整数据库备份。
 
-WorkBuddy Switch handles authentication state for WorkBuddy, Trae CN, and TRAE
-Work only when an account is captured, switched, or its usage or allowance is
-refreshed.
+## 凭据如何保存
 
-- Account snapshots and credentials are stored as generic-password items in
-  macOS Keychain.
-- The account index contains only display metadata, never access or refresh
-  tokens.
-- WorkBuddy switching validates the destination snapshot before stopping
-  WorkBuddy. Its destination document is written through a same-directory
-  temporary file with mode `0600` and an atomic replacement.
-- If WorkBuddy stopping, writing, indexing, or relaunching fails, the prior
-  on-disk credential and account index are restored before the prior identity
-  is relaunched.
-- Access and refresh tokens are never logged, rendered, cached in quota history,
-  or committed.
+- 登录快照只在主进程读取，以 Electron `safeStorage` 加密后写入应用数据目录的 `vault.json`。
+- macOS 的加密密钥由系统钥匙串保护，Windows 使用 DPAPI。系统加密不可用时，应用拒绝保存，没有明文账号库降级。
+- 账号名称、备注、账号 ID 和查询缓存属于本机元数据；账号库内这些元数据不是额外加密字段。界面的隐私遮罩也不会隐藏账号名称和对话标题。
+- Token 不通过 IPC 返回给界面，不写入操作日志。主窗口只得到必要的账号资料、设置和用量数据。
+- WorkBuddy 5.6 的 `$wbEncrypted` 本机封装保持原样；应用不提取内置密钥或尝试猜测解密。积分查询和可移植备份可通过官方网页登录重新授权。
+- 切换目标是 WorkBuddy 客户端自己的登录文件，写入它时会包含该客户端可读取的凭据。这与本工具加密的账号库是不同的文件。
 
-## Trae data preservation
+## 备份与本地数据
 
-Trae CN and TRAE Work account switching changes only the authentication state
-required for the selected saved account. It does not:
+`.wbsbackup` 使用 scrypt 派生密钥、随机盐和 nonce、AES-256-GCM 加密与认证。密码至少 8 个字符，遗忘后无法恢复。导入会验证文件大小、版本、认证标签和账号身份；已有账号不会被覆盖。
 
-- delete or reset application settings;
-- delete plugins or extensions;
-- delete workspaces or conversations;
-- reset machine identifiers; or
-- perform destructive state cleanup.
+会话数据库备份包含本地对话资料，**不是密码加密的文件**。请不要公开分享。macOS 为应用写入的敏感文件设置 `0600`，Windows 使用当前用户数据目录的系统权限；操作系统账号或恶意软件已被控制时，这些措施无法替代系统安全。
 
-WorkBuddy Switch does not browse, migrate, or resume Trae conversations.
+对话迁移采用参数绑定事务，只改变选中会话；写入前检查归属和删除状态，写入后校验并完成 WAL checkpoint。后续检查失败时尝试仅撤销本次修改的记录，保留备份；不会以整库替换覆盖其他会话。数据库备份默认保留 10 份，超出设置的数量会删除最早的备份。
 
-## Local data
+## 网络访问
 
-Conversation metadata and token totals are read from the user's local
-`~/.workbuddy` directory for WorkBuddy only. WorkBuddy Switch does not upload
-WorkBuddy message content.
+应用没有遥测、广告或第三方凭据上传服务。网络访问限于：
 
-WorkBuddy quota refreshes access the WorkBuddy resource endpoint. Trae usage and
-allowance refreshes access the corresponding Trae APIs. These requests use the
-currently selected provider account. The application targets a 15-second
-refresh schedule, while Trae fields and freshness depend on the data returned
-by Trae.
+1. `https://www.codebuddy.cn`、`https://www.workbuddy.cn` 的官方登录、资料、授权续期和积分接口。
+2. 用户打开官方授权页时，由系统浏览器完成登录。
+3. 用户检查新版本时访问本仓库 GitHub Releases API；打开仓库、Wiki、下载与安全说明使用固定 GitHub 地址。
 
-Before a WorkBuddy cross-account conversation migration, the application
-checkpoints SQLite WAL state and creates a consistent backup. Trae conversation
-data is never migrated.
+请求禁用自动跨站重定向，登录 URL 校验协议、主机、用户信息和端口。浏览器授权请求在主进程内存中保存，5 分钟过期，可取消。网络使用 Electron 系统代理。
 
-## Reports
+本地 Token、会话标题和目录在本机统计，不上传对话内容。官方积分接口收到对应账号的授权凭据。服务端是否使令牌失效、是否允许授权续期，以 WorkBuddy 官方行为为准。
 
-Please use the repository's
-[GitHub private vulnerability reporting form](https://github.com/koi128bit/WorkBuddy-Switch/security/advisories/new).
-Reports submitted there are handled as private GitHub Security Advisories, not
-public issues.
+## 桌面边界
 
-If GitHub does not show the private reporting form, private vulnerability
-reporting may not yet be enabled for the repository. Do not include credentials,
-tokens, conversation data, or other sensitive details in a public issue.
-Instead, contact the repository owner through their GitHub profile and request
-a private reporting channel.
+渲染进程启用 `contextIsolation`、sandbox 和 `webSecurity`，关闭 Node 集成。IPC 验证发送窗口、主 Frame 和本地页面来源，限制参数、文件类别及可打开的外链。生产版本关闭 DevTools，使用自定义本地协议、CSP 和 ASAR 完整性验证，并禁用 RunAsNode、NODE_OPTIONS 与主进程 CLI 调试入口。
+
+客户端退出采用正常关闭，退出失败会停止修改。存在交互式 CLI 时不继续切换；应用不使用强制终止来跳过该检查。
+
+## 构建依赖审计
+
+2026-10-03 的 `npm audit` 在打包工具的开发依赖链中报告 `http-cache-semantics` 的 [GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp)，上游尚无修复版本。它涉及共享 HTTP 缓存的 `max-stale`，不是本应用的凭据请求实现。本应用使用 Electron `net.fetch`，不会把该构建依赖链打入应用 ASAR；构建任务也不使用共享的已认证账号响应缓存。`npm audit --omit=dev` 当前为 0，但这不代表开发依赖不存在告警。后续会随上游修复更新锁定版本。
+
+## 安装包签名
+
+当前 macOS 发布包采用 ad-hoc 签名，没有 Developer ID 公证。Windows 发布包没有 Authenticode 签名。请只从本仓库 Releases 下载，并按同页的 SHA-256 清单检查文件完整性。
+
+## 报告问题
+
+安全问题请通过仓库 [Security 页面](https://github.com/koi128bit/WorkBuddy-Switch/security) 中可用的私密报告渠道提交。若未开放私密报告，请先提交不包含敏感信息的 issue 请求联系维护者。
+
+不要在公开 issue、附件或截图中提供 Token、登录 `.info` 文件、`vault.json`、`.wbsbackup`、完整账号 ID 或对话数据库。普通缺陷请描述系统、WorkBuddy 版本、操作步骤与脱敏错误信息。

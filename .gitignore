@@ -1,4 +1,12 @@
 .DS_Store
+node_modules/
+renderer/
+test-results/
+playwright-report/
+.cache/
+*.wbsbackup
+vault.json
+settings.json
 .build/
 .swiftpm/
 DerivedData/

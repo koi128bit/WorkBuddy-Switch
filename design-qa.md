@@ -1,89 +1,24 @@
-# WorkBuddy Switch Design QA
+# WorkBuddy Switch 1.0 验收记录
 
-## Comparison Target
+## 产品与界面
 
-- cc-switch source visual truth:
-  - `work/design-qa/reference-cc-switch-main-zh.png`
-- WorkBuddy usage visual truth:
-  - `work/design-qa/reference-summary.png`
-  - `work/design-qa/reference-trend.png`
-- WorkBuddy Switch 0.2.0 native captures:
-  - `work/design-qa/implementation-v0.2.0-trae-cn-accounts.png`
-  - `work/design-qa/implementation-v0.2.0-trae-cn-usage.png`
-  - `work/design-qa/implementation-v0.2.0-trae-work-usage.png`
-  - `work/design-qa/implementation-v0.2.0-trae-work-settings.png`
-  - `work/design-qa/implementation-kimi-30d.jpeg`
-  - `work/design-qa/implementation-kimi-trend-30d.jpeg`
-- Combined comparison evidence:
-  - `work/design-qa/comparison-v0.2.0-cc-switch-trae.jpg`
-  - `work/design-qa/comparison-summary.jpg`
-  - `work/design-qa/comparison-trend.jpg`
-- App icon implementation:
-  - `Sources/OpenUsage/Resources/AppIcon.png`
+应用围绕 WorkBuddy 组织五个页面：工作台、账号管理、对话记录、用量分析、设置。默认浅色森林绿界面，支持深色、跟随系统及紧凑布局。保留原项目的猫咪应用图标，使用同一源 PNG 生成 macOS、Windows 图标，并在主界面、托盘、关于页面和 README 中展示。
 
-## Viewport And State
+发布截图位于 `.github/assets/`，采用测试夹具中的演示账号与模拟统计，未使用真实凭据或真实对话。
 
-- cc-switch source: 1870 x 1252 px, light appearance, account list.
-- Trae implementation captures: 1120 x 672 px native macOS window, light appearance.
-- WorkBuddy usage source: 1800 x 1576 px; usage implementation: 1120 x 672 px native macOS window, dark appearance.
-- CSS size: not applicable to the native SwiftUI application.
-- Density normalization: the cc-switch and Trae captures are aspect-fit into equal 1160 x 920 point boxes. The resulting comparison sheet is 4800 x 2000 px at the host's 2x backing scale. The source and implementation retain their original aspect ratios; the comparison assesses component hierarchy and visual language rather than claiming pixel-identical dimensions.
-- Trae state: Trae CN and TRAE Work provider tabs; account empty state; current-day usage; request-count quota with 3 used of 10; no local Token records.
-- WorkBuddy state: 30-day range, `kimi-k3-1` selected, current-account quota loaded.
+## 自动检查
 
-## Interaction Evidence
+- 35 个后端测试覆盖登录文件解析、加密备份、身份校验、账号切换与失败恢复、退出时保存续期凭据、积分响应、授权续期、本地用量去重与缓存、SQLite WAL 备份和单行迁移。
+- 10 个界面测试覆盖五页面导航、账号搜索和编辑、切换确认、设置持久化、对话筛选、日期范围、备份密码、网页登录流程、弹窗键盘焦点、深色与最小窗口布局。
+- 独立 Electron 桌面验证使用临时目录与测试登录文件，检查原生启动、sandbox / context isolation / Node 隔离、IPC 返回值无 Token、系统加密保存和设置落盘。
+- 1260 × 860 浅色页面、深色设置以及 940 × 640 最小窗口均生成截图，逐张检查布局、选中状态、文字和溢出。
 
-- The provider selector changes between WorkBuddy, Trae CN, and TRAE Work while preserving the selected feature page.
-- Trae CN and TRAE Work expose independent Keychain-backed account pages and independent usage states.
-- Trae pages do not expose WorkBuddy's conversation-resume action.
-- The Trae usage page defaults to `当天`, labels the trend as hourly, and exposes calendar start/end fields plus 7-day, 30-day, all, and custom ranges.
-- The visible Trae refresh timestamp advanced from 15:13:42 to 15:13:58 without manual input, confirming the 15-second refresh loop.
-- The request quota appears once as `当前账号周期已用 3`, with `总额 10` in the quota footer; the earlier duplicated request metric is absent.
-- The settings page labels its 5-60 minute control `完整刷新间隔`, while the lightweight usage/session refresh remains 15 seconds.
-- WorkBuddy still defaults to today's hourly trend, switches to daily buckets for multi-day periods, and refreshes sessions from the main refresh path.
-- WorkBuddy Kimi selection updates the summary, trend, and model table consistently; Token axes use K/M/B labels rather than scientific notation.
-- Accessibility labels expose provider, feature, account/model, period, date, refresh, chart, and detail controls.
+可复现命令见 README 和 Wiki 的本地构建页面。GitHub Actions 在 macOS 与 Windows 上分别执行后端及 Electron 测试，并产出各系统安装包。
 
-## Full-View Comparison
+## 当前证据边界
 
-`work/design-qa/comparison-v0.2.0-cc-switch-trae.jpg` places the actual cc-switch reference and the final Trae account screen in one image. Both use a light native utility shell with a prominent product switcher, a compact tool selector, restrained gray surfaces, blue selection, direct account actions, and a scan-first layout. WorkBuddy Switch intentionally uses a single account workspace rather than cc-switch's multi-provider card list because the selected provider is already represented by the top segmented control.
+本机只读确认 WorkBuddy 5.6 的加密登录格式与 SQLite sessions 结构。官方网页登录的授权请求创建已通过真实服务验证；账号授权后保存与查询使用模拟响应测试。测试没有退出正在使用的 WorkBuddy、切换真实账号或迁移用户真实数据库，也不声称这些真实账号操作已完成端到端验收。
 
-`work/design-qa/comparison-summary.jpg` and `work/design-qa/comparison-trend.jpg` show that the WorkBuddy usage flow preserves the reference hierarchy: compact filters, Token summary, requests and Credits, four Token categories, cache-hit progress, and the trend immediately below.
+窗口交互测试使用模拟桥接；真实桌面验证另行检查实际 IPC、系统加密和落盘。Windows 构建及测试由 Windows runner 执行，客户端版本和安装位置差异仍可能影响真实用户使用。
 
-## Focused Evidence
-
-- Provider and feature controls: the cc-switch-style segmented product picker and adjacent icon-only feature picker use matching compact radii, selected elevation, and restrained stroke weights.
-- Trae account state: the primary save command appears once in the toolbar and once in the actionable empty state; text remains centered and unclipped at the minimum window size.
-- Trae quota state: Token, interval requests, cycle usage, input/output/cache categories, cache-hit rate, and quota footer remain readable without duplicate cards or nested panels.
-- WorkBuddy trend: the chart uses four-series color coding, a restrained grid, compact legend, and K/M/B axis labels.
-
-## Required Fidelity Surfaces
-
-- Fonts and typography: native San Francisco typography matches the platform character of the references. Headings, controls, values, secondary labels, and empty-state text preserve a clear hierarchy with 0 letter spacing and no clipping.
-- Spacing and layout rhythm: the 1120 x 672 native window uses aligned top controls, compact 8 px-or-smaller radii, full-width content regions, and predictable page padding. No cards are nested inside decorative page cards.
-- Colors and visual tokens: blue WorkBuddy selection, cyan Trae CN, violet TRAE Work, mint positive quota values, coral used quota values, neutral gray surfaces, and subtle separators provide clear provider and semantic states without a one-note palette.
-- Image quality and asset fidelity: the supplied 1024 x 1024 WorkBuddy icon remains sharp. All four outer corner alpha values are 0, with no opaque corner box or transparency halo.
-- Copy and content: provider names, account state, API provenance, request-count versus Credits quota language, current-day period, and full refresh interval are explicit and internally consistent.
-- Icons: native SF Symbols provide a consistent optical weight for provider, navigation, refresh, date, account, model, and chart controls. The supplied brand icon is used rather than recreated.
-- Responsiveness: the application enforces a usable native minimum, scrolls long pages vertically, and keeps provider/feature navigation visible without overlap.
-- Accessibility and motion: semantic native controls are keyboard reachable, charts expose textual summaries, and the animated header honors macOS Reduce Motion.
-
-## Comparison History
-
-1. The earlier WorkBuddy usage pass found a P1 accounting presentation error caused by integer quota fields.
-2. The parser was changed to prefer precise quota fields, and the labels now separate local model Credits from current-account server Credits. Post-fix captures show 2,200.96 server Credits and 2,107.09 unattributed Credits.
-3. The initial Trae pass exposed a duplicated request-count summary and an ambiguous 5-60 minute `自动刷新` label.
-4. The duplicate quota metric was removed, and the setting was renamed to `完整刷新间隔`. The final Trae usage and settings captures confirm both fixes.
-5. The final combined cc-switch/Trae comparison contains no remaining actionable P0, P1, or P2 mismatch.
-
-## Findings
-
-No actionable P0, P1, or P2 findings remain.
-
-The native WorkBuddy Switch window is intentionally denser than the 1870 px cc-switch reference. This is an expected platform and viewport adaptation; provider switching, tool navigation, account actions, usage hierarchy, spacing, and visual tokens remain equivalent.
-
-## Follow-Up Polish
-
-- P3: A wider optional window preset could provide more whitespace for large displays, but the current default and minimum sizes are readable and balanced.
-
-final result: passed
+构建依赖审计存在尚未修复的 `http-cache-semantics` 开发依赖告警，实际应用不包含该依赖链，范围与出处见 SECURITY.md。发布包无 Developer ID / Authenticode 身份签名，macOS ad-hoc 签名不等于 Apple 公证。
