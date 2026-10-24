@@ -477,3 +477,34 @@ test("partial reward failures remain separate and never become granted credits",
   );
   assert.equal(f.store.busy, false);
 });
+
+function growthServer(store){
+  const base=rewardServer(store),original=store.request,states=new Map();
+  const tasks=id=>{if(!states.has(id))states.set(id,[{task_code:'ready',title:'已完成任务',accept_status:'completed',progress:{current:1,target:1}},{task_code:'todo',title:'客户端体验任务',accept_status:'not_accepted',progress:{current:0,target:1}},{task_code:'locked',title:'未解锁任务',accept_status:'not_accepted',locked:true}]);return states.get(id);};
+  store.request=async(url,options)=>{
+    const id=options.headers['X-User-Id'];
+    if(url.endsWith('/v2/activity/growth/tasks'))return {ok:true,status:200,json:async()=>({code:0,data:{tasks:tasks(id)}})};
+    if(url.endsWith('/growth/tasks/accept')){base.calls.push({id,url,body:options.body});for(const code of JSON.parse(options.body).task_codes){const task=tasks(id).find(task=>task.task_code===code);assert.ok(!task.locked);task.accept_status='accepted';}return {ok:true,status:200,json:async()=>({code:0,data:{}})};}
+    if(url.includes('/growth/tasks/')&&url.endsWith('/claim')){base.calls.push({id,url,body:options.body});const task=tasks(id).find(task=>url.includes('/'+task.task_code+'/'));assert.equal(task.accept_status,'completed');task.accept_status='claimed';base.stateFor(id).balance+=2.5;return {ok:true,status:200,json:async()=>({code:0,data:{credit:2.5,energy:1}})};}
+    return original(url,options);
+  };return {...base,tasks};
+}
+test('one-click task run accepts eligible growth tasks, claims confirmed rewards and preserves task progress',async t=>{
+  const f=await fixture(t);await f.store.capture(parseAuth(auth('a')));await f.store.capture(parseAuth(auth('b')));const server=growthServer(f.store);assert.equal(typeof f.store.runTasks,'function');
+  const result=await f.store.runTasks(['a']);assert.equal(result.status,'completed');assert.equal(result.summary.claimed,3);assert.equal(result.summary.accepted,1);assert.equal(result.summary.credit,21.35);assert.equal(result.summary.energy,1);assert.ok(result.results.some(entry=>entry.code==='todo'&&entry.status==='pending'));assert.ok(!server.calls.some(call=>call.id==='b'));assert.ok(!server.calls.some(call=>/report|completions/.test(call.url)));
+  const second=await f.store.runTasks(['a']);assert.equal(second.summary.claimed,0);assert.equal(server.calls.filter(call=>call.url.includes('/tasks/ready/claim')).length,1);
+  const reopened=new Store({directory:f.directory,vault:f.vault,controller:f.controller});await reopened.init();assert.equal((await reopened.snapshot()).taskRun.id,second.id);assert.ok(!JSON.stringify(await reopened.snapshot()).includes('test-secret'));
+});
+test('one-click task run starts only the saved official travel destination and respects the server daily limit',async t=>{
+  const f=await fixture(t);await f.store.capture(parseAuth(auth('a')));const server=growthServer(f.store);server.stateFor('a').travel='idle';await f.store.editAccount('a',{travelLocationId:'2'});assert.equal(typeof f.store.runTasks,'function');const result=await f.store.runTasks(['a']);assert.equal(result.summary.departed,1);assert.equal(server.stateFor('a').travel,'traveling');
+  server.stateFor('a').travel='idle';server.stateFor('a').limit=true;await f.store.runTasks(['a']);assert.equal(server.calls.filter(call=>call.url.endsWith('/depart')).length,1);
+});
+test('canceling a task run finishes the current request and stops later claims and accounts',async t=>{
+  const f=await fixture(t);await f.store.capture(parseAuth(auth('a')));await f.store.capture(parseAuth(auth('b')));const server=growthServer(f.store),original=f.store.request;assert.equal(typeof f.store.runTasks,'function');
+  f.store.request=async(url,options)=>{const response=await original(url,options);if(url.endsWith('/daily-checkin'))f.store.cancelTasks(f.store.tasks.snapshot().id);return response;};
+  const result=await f.store.runTasks(['a','b']);assert.equal(result.status,'cancelled');assert.equal(result.summary.claimed,1);assert.ok(server.calls.every(call=>call.id==='a'));assert.ok(!server.calls.some(call=>call.url.endsWith('/claim')||call.url.endsWith('/depart')));assert.equal(f.store.busy,false);
+});
+test('task acceptance failure remains visible while independent rewards can still finish',async t=>{
+  const f=await fixture(t);await f.store.capture(parseAuth(auth('a')));const server=growthServer(f.store),original=f.store.request;assert.equal(typeof f.store.runTasks,'function');f.store.request=async(url,options)=>url.endsWith('/growth/tasks/accept')?{ok:false,status:503}:original(url,options);
+  const result=await f.store.runTasks(['a']);assert.equal(result.status,'completed');assert.equal(result.summary.failed,1);assert.ok(result.results.some(entry=>entry.code==='accept'&&entry.status==='error'));assert.equal(server.tasks('a').find(task=>task.task_code==='ready').accept_status,'claimed');
+});
