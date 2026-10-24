@@ -1,6 +1,17 @@
 import { test, expect } from "@playwright/test";
 import { fixtureState, fixtureSessions, fixtureUsage } from "./fixtures";
 
+test('one-click tasks respect account selection and expose confirmed and pending results',async({page})=>{
+  await page.getByRole('checkbox',{name:'选择日常开发',exact:true}).uncheck();await page.getByRole('checkbox',{name:'选择团队协作',exact:true}).uncheck();
+  await page.getByRole('button',{name:'一键做任务',exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as unknown as {taskIds:string[]}).taskIds)).toEqual(['wb-sample-002']);
+  await expect(page.getByRole('region',{name:'任务执行进度'})).toContainText('执行结束');await expect(page.getByRole('region',{name:'任务执行进度'})).toContainText('客户端体验任务');await expect(page.getByRole('region',{name:'任务执行进度'})).toContainText('待完成');
+});
+test('a running one-click task can be stopped without losing its completed result',async({page})=>{
+  await page.evaluate(()=>{(window as unknown as {holdTasks:boolean}).holdTasks=true;});await page.getByRole('button',{name:'一键做任务',exact:true}).click();
+  await expect(page.getByRole('button',{name:'停止后续任务',exact:true})).toBeEnabled();await page.getByRole('button',{name:'停止后续任务',exact:true}).click();await expect(page.getByRole('region',{name:'任务执行进度'})).toContainText('已停止');await expect(page.getByRole('region',{name:'任务执行进度'})).toContainText('每日签到');
+});
+
 test("all six clients can be selected and editor OAuth controls are visible", async ({
   page,
 }) => {
