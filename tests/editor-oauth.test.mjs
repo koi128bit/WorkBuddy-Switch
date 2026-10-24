@@ -260,6 +260,7 @@ test("Trae browser context, callback state, UID and allowlisted token host are c
   assert.equal((await fetch(callback)).status, 200);
   const account = await service.poll("trae-cn", ticket.id);
   assert.equal(account.uid, "42");
+  assert.equal(account.deviceId,context.deviceId);
   const body = JSON.parse(request.options.body);
   assert.equal(body.DeviceInfo.DeviceID, context.deviceId);
   assert.equal(body.IDEVersion, context.appVersion);
@@ -287,4 +288,8 @@ test("Trae callback account mismatch fails without exposing raw server fields", 
   callback.searchParams.set("loginTraceID", flow.state);
   await fetch(callback);
   await assert.rejects(service.poll("trae-global", ticket.id), /身份/);
+});
+test('Trae refresh refuses a changed device before sending refresh credentials',async()=>{
+  let calls=0;const service=new EditorOAuth({context:async()=>({...context,deviceId:'different-device',privateKey:'fixture'}),request:async()=>{calls++;throw new Error('must not send');}});
+  await assert.rejects(service.refresh('trae-cn',{uid:'42',nickname:'A',token:'old',refreshToken:'old-refresh',deviceId:'original-device'}),/设备.*授权|设备.*一致/);assert.equal(calls,0);
 });
