@@ -28,7 +28,7 @@ export function validateEditorDirectory(provider, directory) {
     expected.toLowerCase()
   )
     throw new Error(
-      `请选择国内版数据根目录 ${expected}，不可使用国际版或其他客户端目录。`,
+      `请选择 ${editorDefinition(provider).name} 的数据根目录 ${expected}，不可混用地区或其他客户端目录。`,
     );
 }
 async function read(file, directory) {
@@ -81,7 +81,11 @@ async function qoderBinding(directory, platform) {
   if (platform !== "win32")
     return hash(
       Buffer.concat([
-        Buffer.from("macos-keychain-local:"),
+        Buffer.from(
+          platform === "linux"
+            ? "linux-keyring-local:"
+            : "macos-keychain-local:",
+        ),
         (await read(path.join(directory, "auth.machine-id"), directory)) ||
           Buffer.alloc(0),
       ]),
@@ -107,7 +111,8 @@ export function validateEditorAuth(document, provider) {
     typeof document.binding !== "string"
   )
     throw new Error("登录快照格式或客户端标识无效。");
-  const allowed = provider === "trae-cn" ? traeKeys : qoderFiles;
+  const trae = editorDefinition(provider).product === "trae";
+  const allowed = trae ? traeKeys : qoderFiles;
   if (
     document.binding.length > 100 ||
     allowed.some((key) => !Object.hasOwn(document.entries, key))
@@ -118,27 +123,26 @@ export function validateEditorAuth(document, provider) {
       !allowed.includes(key) ||
       (value !== null &&
         typeof value !== "string" &&
-        (provider !== "trae-cn" ||
-          typeof value !== "object" ||
-          Array.isArray(value)))
+        (!trae || typeof value !== "object" || Array.isArray(value)))
     )
       throw new Error("登录快照包含不支持的字段。");
     if (JSON.stringify(value).length > limit) throw new Error("登录快照过大。");
   }
-  if (provider === "qoder-cn")
+  if (!trae)
     for (const [key, value] of Object.entries(document.entries)) {
       if (value === null) continue;
       const bytes = Buffer.from(value, "base64");
       if (
         key === "auth.v1.dat" &&
-        (bytes.length < 19 || bytes.toString("ascii", 0, 3) !== "v10")
+        (bytes.length < 19 ||
+          !["v10", "v11"].includes(bytes.toString("ascii", 0, 3)))
       )
         throw new Error("Qoder CN 登录文件的加密格式暂不支持，未修改文件。");
     }
   return document;
 }
 export function hasEditorLogin(document) {
-  return document.provider === "trae-cn"
+  return editorDefinition(document.provider).product === "trae"
     ? loggedIn(document.entries)
     : !!document.entries["auth.v1.dat"];
 }
@@ -149,8 +153,8 @@ export async function readEditorAuth(
 ) {
   validateEditorDirectory(provider, directory);
   const entries = {};
-  let binding = "trae-cn-local";
-  if (provider === "trae-cn") {
+  let binding = `${provider}-local`;
+  if (editorDefinition(provider).product === "trae") {
     const { root } = await storage(directory);
     for (const key of traeKeys)
       entries[key] = Object.hasOwn(root, key) ? root[key] : null;
@@ -161,7 +165,10 @@ export async function readEditorAuth(
           "base64",
         ) ?? null;
     if (entries["auth.v1.dat"]) {
-      const length = Buffer.from(entries["auth.v1.dat"], "base64").length;
+      const bytes = Buffer.from(entries["auth.v1.dat"], "base64"),
+        length = bytes.length;
+      if (platform !== "linux" && bytes.toString("ascii", 0, 3) !== "v10")
+        throw new Error("客户端加密格式与当前系统不符。");
       if (platform === "win32" ? length < 31 : (length - 3) % 16 !== 0)
         throw new Error("Qoder CN 登录文件不完整，请退出客户端后重新保存。");
     }
@@ -195,7 +202,7 @@ export async function writeEditorAuth(
     editorDefinition(provider).data.toLowerCase()
   )
     throw new Error("国内版数据根目录指向其他客户端，已停止写入。");
-  if (provider === "trae-cn") {
+  if (editorDefinition(provider).product === "trae") {
     const { file, root } = await storage(directory);
     const resolvedParent = await fs.realpath(path.dirname(file));
     if (!resolvedParent.startsWith(resolvedRoot + path.sep))

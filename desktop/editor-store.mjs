@@ -2,10 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { atomicWrite, readOptional } from "./files.mjs";
-import {
-  editorDefinition,
-  editorDataPath,
-} from "./editor-controller.mjs";
+import { editorDefinition, editorDataPath } from "./editor-controller.mjs";
 import {
   authFingerprint,
   hasEditorLogin,
@@ -231,7 +228,7 @@ export class EditorStore {
       await controller.assertStopped();
       const latest = await readEditorAuth(provider, directory, context);
       if (
-        provider === "qoder-cn" &&
+        editorDefinition(provider).product === "qoder" &&
         latest.entries["auth-profile-overlays.v1.dat"] &&
         !target.entries["auth-profile-overlays.v1.dat"]
       )

@@ -31,6 +31,13 @@ export const defaults = Object.freeze({
   traeExecutablePath: "",
   qoderDataPath: "",
   qoderExecutablePath: "",
+  workbuddyGlobalAuthPath: "",
+  workbuddyGlobalDataPath: "",
+  workbuddyGlobalExecutablePath: "",
+  traeGlobalDataPath: "",
+  traeGlobalExecutablePath: "",
+  qoderGlobalDataPath: "",
+  qoderGlobalExecutablePath: "",
 });
 
 export function validateSettings(value) {
@@ -44,11 +51,7 @@ export function validateSettings(value) {
       throw new Error("设置值类型无效。");
     if (key === "theme" && !["system", "light", "dark"].includes(raw))
       throw new Error("主题设置无效。");
-    if (
-      key === "activeProvider" &&
-      !["workbuddy", "trae-cn", "qoder-cn"].includes(raw)
-    )
-      throw new Error("客户端选择无效。");
+    if (key === "activeProvider") clientDefinition(raw);
     if (key === "refreshSeconds" && ![0, 30, 60, 300, 600, 1800].includes(raw))
       throw new Error("刷新间隔无效。");
     if (
@@ -89,7 +92,12 @@ export function validateSettings(value) {
 
 export function resolvePaths(
   settings,
-  { platform = process.platform, home = os.homedir(), env = process.env, provider = "workbuddy" } = {},
+  {
+    platform = process.platform,
+    home = os.homedir(),
+    env = process.env,
+    provider = "workbuddy",
+  } = {},
 ) {
   const definition = clientDefinition(provider);
   const authRoot = workBuddyAuthRoot({ platform, home, env });

@@ -4,6 +4,13 @@ import fs from "node:fs/promises";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
+import { clientDefinition } from "./client-registry.mjs";
+import { assertPlatform } from "./platform.mjs";
+import {
+  linuxProcesses,
+  linuxExecutable,
+  sameLinuxExecutable,
+} from "./linux-processes.mjs";
 
 const exec = promisify(execFile);
 export class WorkBuddyController {
@@ -13,12 +20,17 @@ export class WorkBuddyController {
       platform = process.platform,
       home = os.homedir(),
       env = process.env,
+      provider = "workbuddy",
     } = {},
   ) {
     this.settings = settings;
     this.platform = platform;
     this.home = home;
     this.env = env;
+    this.definition = clientDefinition(provider);
+    assertPlatform(platform);
+    if (this.definition.product !== "workbuddy")
+      throw new Error("请选择 WorkBuddy 客户端。");
   }
   async executable() {
     const custom = this.settings().executablePath;
@@ -28,18 +40,29 @@ export class WorkBuddyController {
       ? [custom]
       : this.platform === "darwin"
         ? [
-            "/Applications/WorkBuddy.app",
-            path.join(this.home, "Applications", "WorkBuddy.app"),
+            path.join("/Applications", this.definition.app),
+            path.join(this.home, "Applications", this.definition.app),
           ]
-        : [
-            path.join(local, "Programs", "WorkBuddy", "WorkBuddy.exe"),
-            path.join(local, "WorkBuddy", "WorkBuddy.exe"),
-            path.join(
-              this.env.ProgramFiles || "C:\\Program Files",
-              "WorkBuddy",
-              "WorkBuddy.exe",
-            ),
-          ];
+        : this.platform === "linux"
+          ? this.definition.linuxExecutables
+          : [
+              path.join(
+                local,
+                "Programs",
+                this.definition.app.replace(/\.app$/, ""),
+                this.definition.executable,
+              ),
+              path.join(
+                local,
+                this.definition.app.replace(/\.app$/, ""),
+                this.definition.executable,
+              ),
+              path.join(
+                this.env.ProgramFiles || "C:\\Program Files",
+                this.definition.app.replace(/\.app$/, ""),
+                this.definition.executable,
+              ),
+            ];
     for (const file of candidates) {
       try {
         const stat = await fs.stat(file);
@@ -49,6 +72,8 @@ export class WorkBuddyController {
           stat.isDirectory()
         )
           return file;
+        if (this.platform === "linux" && stat.isFile())
+          return await linuxExecutable(file);
         if (
           this.platform === "win32" &&
           file.toLowerCase().endsWith(".exe") &&
@@ -64,6 +89,8 @@ export class WorkBuddyController {
   }
   async processes() {
     try {
+      if (this.platform === "linux")
+        return await linuxProcesses(this.definition.linuxNames);
       if (this.platform === "darwin") {
         const { stdout } = await exec("/bin/ps", ["-axo", "pid=,command="], {
           timeout: 8000,
@@ -116,6 +143,8 @@ export class WorkBuddyController {
     };
   }
   mainProcesses(processes, executable) {
+    if (this.platform === "linux")
+      return processes.filter((item) => sameLinuxExecutable(item, executable));
     if (this.platform === "darwin")
       return processes.filter(
         (p) =>
@@ -138,10 +167,20 @@ export class WorkBuddyController {
       if (this.platform === "darwin")
         await exec(
           "/usr/bin/osascript",
-          ["-e", 'tell application id "com.workbuddy.workbuddy" to quit'],
+          ["-e", `tell application id "${this.definition.bundle}" to quit`],
           { timeout: 10000 },
         );
-      else
+      else if (this.platform === "linux") {
+        for (const item of active.filter(
+          (item) => !/(^|\s)--type(?:=|\s)/.test(item.command),
+        )) {
+          try {
+            process.kill(item.pid, "SIGTERM");
+          } catch (error) {
+            if (error.code !== "ESRCH") throw error;
+          }
+        }
+      } else
         for (const p of active)
           await exec("taskkill.exe", ["/PID", String(p.pid)], {
             windowsHide: true,

@@ -4,12 +4,20 @@ import os from "node:os";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
-import { editorDefinitions as editors, editorDefinition } from "./client-registry.mjs";
+import {
+  editorDefinitions as editors,
+  editorDefinition,
+} from "./client-registry.mjs";
 import { configRoot, assertPlatform } from "./platform.mjs";
+import {
+  linuxProcesses,
+  linuxExecutable,
+  sameLinuxExecutable,
+} from "./linux-processes.mjs";
 export { editors, editorDefinition };
 
 const exec = promisify(execFile);
-export function parseQoderLauncher(raw) {
+export function parseQoderLauncher(raw, expectedExecutable = "Qoder CN.exe") {
   const text = (
     raw[0] === 0xff && raw[1] === 0xfe
       ? raw.subarray(2).toString("utf16le")
@@ -40,7 +48,8 @@ export function parseQoderLauncher(raw) {
   if (
     relative.startsWith("..") ||
     path.win32.isAbsolute(relative) ||
-    path.win32.basename(destination).toLowerCase() !== "qoder cn.exe"
+    path.win32.basename(destination).toLowerCase() !==
+      expectedExecutable.toLowerCase()
   )
     return null;
   return destination;
@@ -52,7 +61,8 @@ export function editorDataPath(
 ) {
   const definition = editorDefinition(provider);
   return (
-    settings[`${definition.key}DataPath`] || path.join(configRoot({ platform, home, env }), definition.data)
+    settings[`${definition.key}DataPath`] ||
+    path.join(configRoot({ platform, home, env }), definition.data)
   );
 }
 
@@ -75,39 +85,51 @@ export class EditorController {
             path.join("/Applications", d.app),
             path.join(this.home, "Applications", d.app),
           ]
-        : d.windows.flatMap((folder) => [
-            path.join(
-              this.env.LOCALAPPDATA || path.join(this.home, "AppData", "Local"),
-              "Programs",
-              folder,
-              d.executable,
-            ),
-            path.join(
-              this.env.ProgramFiles || "C:\\Program Files",
-              folder,
-              d.executable,
-            ),
-          ]);
-    if (!custom && this.platform === "win32" && d.key === "qoder") {
+        : this.platform === "linux"
+          ? d.linuxExecutables
+          : d.windows.flatMap((folder) => [
+              path.join(
+                this.env.LOCALAPPDATA ||
+                  path.join(this.home, "AppData", "Local"),
+                "Programs",
+                folder,
+                d.executable,
+              ),
+              path.join(
+                this.env.ProgramFiles || "C:\\Program Files",
+                folder,
+                d.executable,
+              ),
+            ]);
+    if (!custom && this.platform === "win32" && d.product === "qoder") {
       const local =
         this.env.LOCALAPPDATA || path.join(this.home, "AppData", "Local");
       try {
         const launcher = path.join(
           local,
-          "Qoder CN",
-          "Qoder CN Launcher",
+          d.region === "cn" ? "Qoder CN" : "Qoder",
+          d.region === "cn" ? "Qoder CN Launcher" : "Qoder Launcher",
           "state.ini",
         );
         const stat = await fs.stat(launcher);
         if (stat.size <= 65536) {
-          const file = parseQoderLauncher(await fs.readFile(launcher));
+          const file = parseQoderLauncher(
+            await fs.readFile(launcher),
+            d.executable,
+          );
           if (file) candidates.unshift(file);
         }
       } catch (error) {
         if (error.code !== "ENOENT")
           throw new Error("无法读取 Qoder CN 启动器配置，请指定安装路径。");
       }
-      candidates.push(path.join(local, "Qoder CN", d.executable));
+      candidates.push(
+        path.join(
+          local,
+          d.region === "cn" ? "Qoder CN" : "Qoder",
+          d.executable,
+        ),
+      );
     }
     for (const file of candidates) {
       try {
@@ -130,9 +152,11 @@ export class EditorController {
             { timeout: 5000 },
           );
           if (stdout.trim() !== d.bundle)
-            throw new Error(`${d.name} 安装路径与国内版标识不符。`);
+            throw new Error(`${d.name} 安装路径与地区标识不符。`);
           return file;
         }
+        if (this.platform === "linux" && stat.isFile())
+          return await linuxExecutable(file);
         if (
           this.platform === "win32" &&
           stat.isFile() &&
@@ -142,13 +166,17 @@ export class EditorController {
         if (custom) throw new Error(`请选择 ${d.name} 的客户端应用。`);
       } catch (error) {
         if (error.code !== "ENOENT")
-          throw new Error(`无法验证 ${d.name} 安装路径，请选择国内版客户端。`);
+          throw new Error(
+            `无法验证 ${d.name} 安装路径，请选择对应地区的客户端。`,
+          );
       }
     }
     return null;
   }
   async processes() {
     try {
+      if (this.platform === "linux")
+        return await linuxProcesses(this.definition.linuxNames);
       if (this.platform === "darwin") {
         const { stdout } = await exec("/bin/ps", ["-axo", "pid=,command="], {
           timeout: 8000,
@@ -194,7 +222,9 @@ export class EditorController {
     return processes.filter((item) =>
       this.platform === "darwin"
         ? item.command.startsWith(`${executable}/Contents/`)
-        : item.executable.toLowerCase() === executable.toLowerCase(),
+        : this.platform === "linux"
+          ? sameLinuxExecutable(item, executable)
+          : item.executable.toLowerCase() === executable.toLowerCase(),
     );
   }
   async status() {
@@ -220,7 +250,17 @@ export class EditorController {
           ["-e", `tell application id "${this.definition.bundle}" to quit`],
           { timeout: 10000 },
         );
-      else
+      else if (this.platform === "linux") {
+        for (const item of current.filter(
+          (item) => !/(^|\s)--type(?:=|\s)/.test(item.command),
+        )) {
+          try {
+            process.kill(item.pid, "SIGTERM");
+          } catch (error) {
+            if (error.code !== "ESRCH") throw error;
+          }
+        }
+      } else
         for (const item of current.filter(
           (item) => !/(^|\s)--type(?:=|\s)/.test(item.command),
         ))
