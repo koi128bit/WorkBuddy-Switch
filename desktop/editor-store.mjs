@@ -360,6 +360,23 @@ export class EditorStore {
     const before = await readEditorAuth(provider, directory, context);
     if (await readOptional(this.recoveryPath(provider)))
       throw new Error("上次切换有待恢复记录，请先恢复切换前登录。");
+    if (record.profile.uid && this.identities && hasEditorLogin(before)) {
+      let currentIdentity = null;
+      try {
+        currentIdentity = await this.identities.identify(
+          provider,
+          before,
+          directory,
+        );
+      } catch {
+        /* Opaque compatibility remains available if a vendor changes its format. */
+      }
+      if (currentIdentity?.uid === record.profile.uid) {
+        await this.capture(provider, record.profile.nickname, false, before);
+        await controller.launch();
+        return;
+      }
+    }
     if (authFingerprint(before) === record.fingerprint) {
       await controller.launch();
       return;
