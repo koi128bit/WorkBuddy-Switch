@@ -18,7 +18,7 @@
     "test:desktop": "node scripts/desktop-check.mjs",
     "test:ui": "playwright test",
     "test:smoke": "node scripts/smoke.mjs",
-    "dist:mac": "npm run build && electron-builder --mac dmg zip --arm64 --x64 --publish never",
+    "dist:mac": "npm run build && electron-builder --mac pkg dmg zip --arm64 --x64 --publish never",
     "dist:win": "npm run build && electron-builder --win nsis portable --x64 --publish never",
     "dist:dir": "npm run build && electron-builder --dir --publish never",
     "dist:linux": "npm run build && electron-builder --linux AppImage deb --publish never"
@@ -97,14 +97,17 @@
       "target": [
         "nsis",
         "portable"
-      ]
+      ],
+      "executableName": "WorkBuddy Switch"
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "artifactName": "WorkBuddy-Switch-${version}-windows-${arch}-setup.exe",
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "guid": "cff115b9-d86e-58de-afc6-4752a9c78ba4",
+      "shortcutName": "WorkBuddy Switch"
     },
     "portable": {
       "artifactName": "WorkBuddy-Switch-${version}-windows-${arch}-portable.exe"
@@ -123,6 +126,19 @@
       "category": "Development",
       "executableName": "workbuddy-switch",
       "maintainer": "koi128bit <koi128bit@users.noreply.github.com>"
+    },
+    "pkg": {
+      "installLocation": "/Applications",
+      "allowAnywhere": false,
+      "allowCurrentUserHome": false,
+      "allowRootDirectory": true,
+      "isRelocatable": false,
+      "isVersionChecked": true,
+      "hasStrictIdentifier": true,
+      "overwriteAction": "upgrade",
+      "mustClose": [
+        "com.koi128bit.workbuddy-switch"
+      ]
     }
   }
 }

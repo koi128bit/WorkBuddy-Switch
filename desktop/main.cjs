@@ -33,6 +33,7 @@ let mainWindow,
   refreshTimer,
   automationTimer,
   tickBusy = false;
+let quitGate;
 const noticeKeys = new Map();
 const workbuddyStores = new Map();
 let clientDefinitions = {};
@@ -66,6 +67,8 @@ const links = {
   growth: "https://www.codebuddy.cn/profile/growth-center",
 };
 app.setName("WorkBuddy Switch");
+if (process.platform === "win32")
+  app.setAppUserModelId("com.koi128bit.workbuddy-switch");
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "workbuddy-switch",
@@ -74,7 +77,32 @@ protocol.registerSchemesAsPrivileged([
 ]);
 const testMode = !app.isPackaged && process.env.WB_SWITCH_TEST_DIR;
 if (testMode) app.setPath("userData", testMode);
-if (!app.requestSingleInstanceLock()) app.quit();
+const temporaryMacCopy =
+  process.platform === "darwin" &&
+  app.isPackaged &&
+  path.dirname(path.dirname(path.dirname(process.execPath))) !==
+    "/Applications/WorkBuddy Switch.app";
+if (temporaryMacCopy) {
+  app
+    .whenReady()
+    .then(async () => {
+      const { offerMacInstallation } = await import("./installation.mjs");
+      await offerMacInstallation({
+        app,
+        dialog,
+        shell,
+        executable: process.execPath,
+      });
+      app.quit();
+    })
+    .catch(() => {
+      dialog.showErrorBox(
+        "安装未完成",
+        "请使用 PKG 安装包覆盖安装到应用程序目录。",
+      );
+      app.quit();
+    });
+} else if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on("second-instance", () => showWindow());
   app
@@ -88,7 +116,8 @@ else {
       app.quit();
     });
 }
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
+  if (quitGate && !quitGate.request(event)) return;
   editorOAuth?.close();
   quitting = true;
   clearInterval(refreshTimer);
@@ -100,6 +129,7 @@ app.on("window-all-closed", () => {
 app.on("activate", () => showWindow());
 
 function changed() {
+  quitGate?.changed();
   if (mainWindow && !mainWindow.isDestroyed())
     mainWindow.webContents.send("wb:changed");
   if (trayWindow && !trayWindow.isDestroyed())
@@ -308,6 +338,12 @@ function query(value) {
   };
 }
 async function start() {
+  const { QuitGate } = await import("./installation.mjs");
+  quitGate = new QuitGate({
+    isBusy: () => Boolean(store?.busy || tickBusy),
+    onWait: () => store?.log("正在完成当前操作，完成后退出。", "info"),
+    onQuit: () => app.quit(),
+  });
   const [
     { Store },
     { WorkBuddyController },
@@ -1077,7 +1113,8 @@ function scheduleRefresh() {
   clearInterval(refreshTimer);
   if (!store.settings.refreshSeconds) return;
   refreshTimer = setInterval(async () => {
-    if (store.busy || tickBusy || !store.records.length) return;
+    if (store.busy || tickBusy || quitGate?.pending || !store.records.length)
+      return;
     tickBusy = true;
     try {
       await store.refreshQuotas();
@@ -1087,6 +1124,7 @@ function scheduleRefresh() {
       store.log(safeMessage(e), "error");
     } finally {
       tickBusy = false;
+      quitGate?.changed();
     }
   }, store.settings.refreshSeconds * 1000);
 }
@@ -1102,6 +1140,7 @@ function scheduleAutomation() {
   )
     return;
   const run = async () => {
+    if (quitGate?.pending) return;
     try {
       await store.runAutomation();
     } catch (error) {
