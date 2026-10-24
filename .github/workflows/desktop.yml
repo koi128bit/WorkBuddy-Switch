@@ -17,6 +17,10 @@ jobs:
             platform: mac
           - os: windows-latest
             platform: win
+          - os: ubuntu-24.04
+            platform: linux-x64
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -25,10 +29,20 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - if: startsWith(matrix.platform, 'linux')
+        name: Prepare native Linux desktop and secure keyring
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb gnome-keyring libsecret-tools libnss3 libgbm1 libasound2t64 libgtk-3-0t64 libnotify4 libfuse2t64
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: npm test
       - run: npm run test:desktop
       - run: npm run build
-      - run: npm run test:smoke
+      - if: '!startsWith(matrix.platform, ''linux'')'
+        run: npm run test:smoke
+      - if: startsWith(matrix.platform, 'linux')
+        name: Native Linux Electron smoke with system encryption
+        run: dbus-run-session -- bash scripts/linux-smoke.sh
       - if: matrix.platform == 'mac'
         run: npx playwright install chromium
       - if: matrix.platform == 'mac'
@@ -41,6 +55,8 @@ jobs:
         run: npm run dist:win
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - if: startsWith(matrix.platform, 'linux')
+        run: npm run dist:linux
       - uses: actions/upload-artifact@v4
         with:
           name: WorkBuddy-Switch-${{ matrix.platform }}
@@ -49,6 +65,8 @@ jobs:
             dist/*.zip
             dist/*-setup.exe
             dist/*-portable.exe
+            dist/*.AppImage
+            dist/*.deb
           if-no-files-found: error
           retention-days: 14
   release:
@@ -66,7 +84,7 @@ jobs:
           merge-multiple: true
       - name: Create checksums
         working-directory: release-assets
-        run: sha256sum *.dmg *.zip *.exe > SHA256SUMS.txt
+        run: sha256sum *.dmg *.zip *.exe *.AppImage *.deb > SHA256SUMS.txt
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}

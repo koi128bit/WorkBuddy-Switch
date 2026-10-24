@@ -1,7 +1,7 @@
 {
   "name": "workbuddy-switch",
-  "version": "1.1.0",
-  "description": "WorkBuddy、Trae CN 与 Qoder CN 账号管理：安全切换、一键领积分、对话续接与用量分析",
+  "version": "1.2.0",
+  "description": "WorkBuddy、Trae 与 Qoder 多账号管理：国内及国际版、macOS / Windows / Linux、安全切换与一键领积分",
   "author": "koi128bit",
   "license": "MIT",
   "private": true,
@@ -20,7 +20,8 @@
     "test:smoke": "node scripts/smoke.mjs",
     "dist:mac": "npm run build && electron-builder --mac dmg zip --arm64 --x64 --publish never",
     "dist:win": "npm run build && electron-builder --win nsis portable --x64 --publish never",
-    "dist:dir": "npm run build && electron-builder --dir --publish never"
+    "dist:dir": "npm run build && electron-builder --dir --publish never",
+    "dist:linux": "npm run build && electron-builder --linux AppImage deb --publish never"
   },
   "repository": {
     "type": "git",
@@ -112,6 +113,16 @@
       "provider": "github",
       "owner": "koi128bit",
       "repo": "WorkBuddy-Switch"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "assets/icon.png",
+      "category": "Development",
+      "executableName": "workbuddy-switch",
+      "maintainer": "koi128bit <koi128bit@users.noreply.github.com>"
     }
   }
 }
