@@ -6,11 +6,11 @@ WorkBuddy Switch 1.2.0：产品、地区与系统分别适配，保留原猫咪�
 - Linux 新增 XDG 路径、原生进程识别、正常退出、系统托盘、开机启动和密钥环加密；不使用 basic_text 降级。
 - WorkBuddy 国内版一键领积分、签到、旅行、自动任务、对话、用量与加密备份保留；国际版不调用国内活动接口。
 
-| 系统                      | 文件后缀                                              |
-| ------------------------- | ----------------------------------------------------- |
-| Apple Silicon / Intel Mac | mac-arm64.dmg / mac-x64.dmg（另有 ZIP）               |
-| Windows 10/11 x64         | windows-x64-setup.exe / windows-x64-portable.exe      |
-| Linux x64 / ARM64         | linux-x64.AppImage / linux-arm64.AppImage（另有 DEB） |
+| 系统                      | 文件后缀                                                 |
+| ------------------------- | -------------------------------------------------------- |
+| Apple Silicon / Intel Mac | mac-arm64.dmg / mac-x64.dmg（另有 ZIP）                  |
+| Windows 10/11 x64         | windows-x64-setup.exe / windows-x64-portable.exe         |
+| Linux x64 / ARM64         | linux-x86_64.AppImage / linux-arm64.AppImage（另有 DEB） |
 
 文件名前缀为 WorkBuddy-Switch-1.2.0-，发布页附 SHA256SUMS.txt。macOS 13+，采用 ad-hoc 签名、尚未 Apple 公证；Windows 尚未 Authenticode 签名。
 
