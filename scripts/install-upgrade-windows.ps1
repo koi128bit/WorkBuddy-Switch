@@ -7,7 +7,9 @@ $registry = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$guid"
 if (Test-Path $registry) { throw 'Unexpected existing application on the runner.' }
 $oldName = 'WorkBuddy-Switch-1.4.0-windows-x64-setup.exe'
 $base = 'https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.4.0'
-$manifest = (Invoke-WebRequest "$base/SHA256SUMS.txt").Content
+$manifestFile = Join-Path $env:RUNNER_TEMP 'workbuddy-old-SHA256SUMS.txt'
+Invoke-WebRequest "$base/SHA256SUMS.txt" -OutFile $manifestFile
+$manifest = Get-Content $manifestFile -Raw -Encoding UTF8
 $line = ($manifest -split "`n") | Where-Object { $_.Trim().EndsWith($oldName) } | Select-Object -First 1
 if (!$line) { throw 'Missing old-installer checksum.' }
 $expected = ($line.Trim() -split '\s+')[0]
