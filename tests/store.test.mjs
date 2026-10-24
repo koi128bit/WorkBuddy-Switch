@@ -792,3 +792,68 @@ test("a final task-history write failure preserves confirmed results and recover
     1,
   );
 });
+
+function paidDialogueServer(store,base,{advance=true}={}){
+ const original=store.request,calls=[];let sequence=0;
+ for(const id of ['a','b'])base.tasks(id).push({task_code:'chat_5',title:'三次真实对话',accept_status:'not_accepted',progress:{current:0,target:3}},{task_code:'Model_chat_GLM5.2',title:'GLM 模型体验',accept_status:'not_accepted',progress:{current:0,target:1}});
+ store.request=async(url,options)=>{
+  if(url.endsWith('/v2/chat/completions')){
+   const body=JSON.parse(options.body),id=options.headers['X-User-Id'];calls.push({url,id,body});sequence++;
+   return new Response(`data: ${JSON.stringify({id:`real-dialogue-${sequence}`,model:body.model,choices:[{delta:{content:'真实回答'}}]})}\n\ndata: ${JSON.stringify({id:`real-dialogue-${sequence}`,choices:[{delta:{},finish_reason:'stop'}]})}\n\ndata: [DONE]\n\n`,{headers:{'content-type':'text/event-stream'}});
+  }
+  if(url.endsWith('/v2/report')){
+   const events=JSON.parse(options.body),id=options.headers['X-User-Id'];calls.push({url,id,events});assert.match(events[0].requestId,/^real-dialogue-/);
+   if(advance)for(const task of base.tasks(id)){
+    if(task.task_code==='chat_5'||(task.task_code==='Model_chat_GLM5.2'&&events[0].requestModelId==='glm-5.2')){task.progress.current++;task.accept_status=task.progress.current>=task.progress.target?'completed':'in_progress';}
+   }
+   return {ok:true,status:200,json:async()=>({code:0,data:{}})};
+  }
+  return original(url,options);
+ };
+ return {calls};
+}
+test('paid task preview is read-only and confirmation binds the exact accounts, models, prompt and request limit',async(t)=>{
+ const f=await fixture(t);for(const id of ['a','b'])await f.store.capture(parseAuth(auth(id)));
+ const base=growthServer(f.store),paid=paidDialogueServer(f.store,base);
+ assert.equal(typeof f.store.prepareTasks,'function');
+ const plan=await f.store.prepareTasks(['a'],{includeAI:true,maxCalls:2,prompt:'fixture-private-prompt'});
+ assert.equal(paid.calls.length,0);assert.equal(base.calls.length,0);assert.deepEqual(plan.accountIds,['a']);assert.equal(plan.maxCalls,2);assert.equal(plan.outputLimit,64);assert.equal(plan.accounts[0].tasks.reduce((n,row)=>n+row.calls,0),2);
+ assert.ok(plan.accounts[0].tasks.some(row=>row.model==='glm-5.2'));
+ const result=await f.store.runTasks(['a'],plan.id);
+ assert.equal(result.summary.dialogues,2);assert.equal(result.dialogueAttempts,2);assert.equal(paid.calls.filter(call=>call.body).length,2);assert.ok(paid.calls.every(call=>call.id==='a'));
+ assert.ok(!JSON.stringify(await f.store.snapshot()).includes('fixture-private-prompt'));
+ assert.ok(base.tasks('a').some(task=>task.task_code==='Model_chat_GLM5.2'&&task.accept_status==='claimed'));
+ await assert.rejects(async()=>f.store.runTasks(['a'],plan.id),/范围|确认|过期/);
+});
+test('paid task plans expire and cannot be reused for another selection or bypassed by basic execution',async(t)=>{
+ const f=await fixture(t);for(const id of ['a','b'])await f.store.capture(parseAuth(auth(id)));
+ const base=growthServer(f.store),paid=paidDialogueServer(f.store,base);
+ assert.equal(typeof f.store.prepareTasks,'function');
+ const plan=await f.store.prepareTasks(['a'],{includeAI:true,maxCalls:4,prompt:'你好'});
+ await assert.rejects(async()=>f.store.runTasks(['b'],plan.id),/账号|范围/);
+ f.store.tasks.pendingPlan.expiresAt=Date.now()-1;
+ await assert.rejects(async()=>f.store.runTasks(['a'],plan.id),/过期|确认/);
+ assert.equal(base.calls.length,0);await f.store.runTasks(['a']);assert.equal(paid.calls.length,0);
+});
+test('completed real dialogue with no official progress stops further paid attempts for that account',async(t)=>{
+ const f=await fixture(t);await f.store.capture(parseAuth(auth('a')));
+ const base=growthServer(f.store),paid=paidDialogueServer(f.store,base,{advance:false});
+ assert.equal(typeof f.store.prepareTasks,'function');
+ const plan=await f.store.prepareTasks(['a'],{includeAI:true,maxCalls:10,prompt:'你好'}),run=await f.store.runTasks(['a'],plan.id);
+ assert.equal(run.summary.dialogues,1);assert.equal(run.dialogueAttempts,1);assert.equal(paid.calls.filter(call=>call.body).length,1);assert.ok(run.results.some(entry=>/未确认.*进度|进度.*未.*确认/.test(entry.detail)));
+});
+test('stopping an in-flight real dialogue retains its result and prevents subsequent paid requests',async(t)=>{
+ const f=await fixture(t);await f.store.capture(parseAuth(auth('a')));
+ const base=growthServer(f.store),paid=paidDialogueServer(f.store,base),request=f.store.request;
+ assert.equal(typeof f.store.prepareTasks,'function');
+ const plan=await f.store.prepareTasks(['a'],{includeAI:true,maxCalls:10,prompt:'你好'});
+ f.store.request=async(url,options)=>{const response=await request(url,options);if(url.endsWith('/v2/chat/completions'))f.store.cancelTasks(f.store.tasks.snapshot().id);return response;};
+ const run=await f.store.runTasks(['a'],plan.id);assert.equal(run.status,'cancelled');assert.equal(run.summary.dialogues,1);assert.equal(paid.calls.filter(call=>call.body).length,1);
+});
+test('uncertain paid stream results stop the account and never emit a completion event or retry the request',async(t)=>{
+ const f=await fixture(t);await f.store.capture(parseAuth(auth('a')));
+ const base=growthServer(f.store),paid=paidDialogueServer(f.store,base),request=f.store.request;
+ assert.equal(typeof f.store.prepareTasks,'function');const plan=await f.store.prepareTasks(['a'],{includeAI:true,maxCalls:10,prompt:'你好'});let attempts=0;
+ f.store.request=async(url,options)=>{if(url.endsWith('/v2/chat/completions')){attempts++;return new Response('data: {"id":"partial","choices":[{"delta":{"content":"未完成"}}]}\n\n',{headers:{'content-type':'text/event-stream'}});}return request(url,options);};
+ const run=await f.store.runTasks(['a'],plan.id);assert.equal(attempts,1);assert.equal(run.summary.dialogues,0);assert.equal(run.dialogueAttempts,1);assert.equal(paid.calls.length,0);assert.ok(run.results.some(entry=>entry.status==='error'&&/对话/.test(entry.title)));
+});
