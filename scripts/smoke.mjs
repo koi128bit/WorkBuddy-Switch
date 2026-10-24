@@ -56,7 +56,12 @@ let desktop;
 try {
   desktop = await electron.launch({
     executablePath: electronPath,
-    args: ["."],
+    args: [
+      ...(process.platform === "linux"
+        ? ["--password-store=gnome-libsecret"]
+        : []),
+      ".",
+    ],
     env: {
       ...process.env,
       WB_SWITCH_TEST_DIR: directory,
@@ -93,6 +98,14 @@ try {
     nodeIntegration: false,
     contextIsolation: true,
   });
+  if (process.platform === "linux")
+    assert.equal(
+      await desktop.evaluate(({ safeStorage }) =>
+        safeStorage.getSelectedStorageBackend(),
+      ),
+      "gnome_libsecret",
+      "native Linux smoke uses a real unlocked system keyring",
+    );
   const initial = await page.evaluate(() => window.workbuddy.snapshot());
   assert.equal(initial.current.id, "isolated-fixture");
   assert.equal(initial.accounts.length, 0);
