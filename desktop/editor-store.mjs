@@ -20,6 +20,7 @@ export class EditorStore {
     vault,
     settings,
     controllers,
+    identities = null,
     context = {},
     onChange = () => {},
   }) {
@@ -28,6 +29,7 @@ export class EditorStore {
       vault,
       settings,
       controllers,
+      identities,
       context,
       onChange,
     });
@@ -48,7 +50,7 @@ export class EditorStore {
     try {
       const data = JSON.parse(raw);
       if (
-        data.version !== 1 ||
+        ![1, 2].includes(data.version) ||
         !Array.isArray(data.records) ||
         data.records.length > 1000
       )
@@ -60,14 +62,26 @@ export class EditorStore {
           !record.profile ||
           typeof record.profile.id !== "string" ||
           typeof record.profile.nickname !== "string" ||
-          typeof record.encrypted !== "string" ||
-          !/^[a-f0-9]{64}$/.test(record.fingerprint) ||
+          !(
+            (typeof record.encrypted === "string" &&
+              /^[a-f0-9]{64}$/.test(record.fingerprint)) ||
+            (record.encrypted === null &&
+              record.fingerprint === null &&
+              typeof record.credentialEncrypted === "string" &&
+              typeof record.profile.uid === "string")
+          ) ||
           ids.has(record.profile.id)
         )
           throw new Error("invalid");
         ids.add(record.profile.id);
       }
-      this.records = data.records;
+      this.records = data.records.map((record) => ({
+        ...record,
+        profile: {
+          ...this.publicProfile(record),
+          nativeAvailable: !!record.encrypted,
+        },
+      }));
     } catch {
       this.loadError =
         "国内版客户端快照库损坏，请保留 editor-vault.json 后恢复备份；WorkBuddy 账号库不受影响。";
@@ -94,7 +108,7 @@ export class EditorStore {
     if (this.loadError) throw new Error(this.loadError);
     await atomicWrite(
       this.file,
-      JSON.stringify({ version: 1, records }, null, 2),
+      JSON.stringify({ version: 2, records }, null, 2),
     );
     this.records = records;
     this.onChange();
@@ -120,14 +134,36 @@ export class EditorStore {
         `请先在 ${editorDefinition(provider).name} 登录，再保存当前账号。`,
       );
     const fingerprint = authFingerprint(document);
+    let identity = null,
+      identityError = null;
+    if (this.identities) {
+      try {
+        identity = await this.identities.identify(
+          provider,
+          document,
+          this.dataPath(provider),
+        );
+      } catch (error) {
+        identityError = /[\u4e00-\u9fff]/.test(error.message)
+          ? error.message.slice(0, 200)
+          : "当前版本的账号身份无法识别，已保留兼容快照。";
+      }
+    }
     const prior = this.records.find(
       (record) =>
-        record.provider === provider && record.fingerprint === fingerprint,
+        record.provider === provider &&
+        ((identity && record.profile.uid === identity.uid) ||
+          record.fingerprint === fingerprint),
     );
     const record = {
       provider,
       fingerprint,
       encrypted: this.protect(document),
+      ...(prior?.credentialEncrypted
+        ? { credentialEncrypted: prior.credentialEncrypted }
+        : identity
+          ? { credentialEncrypted: this.protect(identity) }
+          : {}),
       profile: {
         id: prior?.profile.id || randomUUID(),
         nickname: prior?.profile.nickname || nickname.trim(),
@@ -136,6 +172,17 @@ export class EditorStore {
         capturedAt: prior?.profile.capturedAt || Date.now(),
         lastUsedAt: Date.now(),
         automatic: prior?.profile.automatic ?? automatic,
+        uid: identity?.uid || prior?.profile.uid || null,
+        originalNickname:
+          identity?.nickname || prior?.profile.originalNickname || "",
+        expiresAt:
+          prior?.profile.source === "web"
+            ? prior.profile.expiresAt
+            : identity?.expiresAt || null,
+        source: prior?.profile.source || "native",
+        nativeAvailable: true,
+        canRefresh: prior?.profile.canRefresh || !!identity?.refreshToken,
+        identityError,
       },
     };
     if (this.records.length >= 1000 && !prior)
@@ -145,6 +192,97 @@ export class EditorStore {
       record,
     ]);
     return record.profile;
+  }
+  publicProfile(record) {
+    const p = record.profile;
+    return {
+      id: p.id,
+      nickname: p.nickname,
+      note: p.note || "",
+      favorite: !!p.favorite,
+      capturedAt: p.capturedAt,
+      lastUsedAt: p.lastUsedAt,
+      automatic: !!p.automatic,
+      uid: p.uid || null,
+      originalNickname: p.originalNickname || "",
+      expiresAt: p.expiresAt || null,
+      source: p.source || "native",
+      nativeAvailable: !!record.encrypted,
+      canRefresh: !!p.canRefresh,
+      identityError: p.identityError || null,
+    };
+  }
+  credential(provider, id) {
+    const record = this.record(provider, id);
+    if (!record.credentialEncrypted)
+      throw new Error("此账号尚未识别授权资料，请重新读取当前账号或网页登录。");
+    let result;
+    try {
+      result = JSON.parse(
+        this.vault.decrypt(Buffer.from(record.credentialEncrypted, "base64")),
+      );
+    } catch {
+      throw new Error("账号授权无法解密，请解锁系统凭据存储后重试。");
+    }
+    if (
+      result.uid !== record.profile.uid ||
+      typeof result.token !== "string" ||
+      !result.token
+    )
+      throw new Error("账号授权身份不一致，已停止操作。");
+    return result;
+  }
+  async saveCredential(provider, identity) {
+    editorDefinition(provider);
+    if (
+      !identity ||
+      typeof identity.uid !== "string" ||
+      !identity.uid ||
+      identity.uid.length > 200 ||
+      /[\x00-\x1f]/.test(identity.uid) ||
+      typeof identity.token !== "string" ||
+      !identity.token ||
+      identity.token.length > 100000
+    )
+      throw new Error("账号身份或授权资料无效。");
+    const prior = this.records.find(
+      (record) =>
+        record.provider === provider && record.profile.uid === identity.uid,
+    );
+    if (this.records.length >= 1000 && !prior)
+      throw new Error("账号数量已达上限。");
+    const nickname =
+      typeof identity.nickname === "string"
+        ? identity.nickname.slice(0, 80)
+        : editorDefinition(provider).name;
+    const profile = {
+      id: prior?.profile.id || randomUUID(),
+      uid: identity.uid,
+      nickname: prior?.profile.nickname || nickname,
+      originalNickname: nickname,
+      note: prior?.profile.note || "",
+      favorite: prior?.profile.favorite || false,
+      capturedAt: prior?.profile.capturedAt || Date.now(),
+      lastUsedAt: prior?.profile.lastUsedAt || Date.now(),
+      automatic: prior?.profile.automatic || false,
+      source: "web",
+      nativeAvailable: !!prior?.encrypted,
+      canRefresh: !!identity.refreshToken,
+      expiresAt: identity.expiresAt || null,
+      identityError: null,
+    };
+    const record = {
+      provider,
+      profile,
+      encrypted: prior?.encrypted || null,
+      fingerprint: prior?.fingerprint || null,
+      credentialEncrypted: this.protect(identity),
+    };
+    await this.save([
+      ...this.records.filter((item) => item.profile.id !== profile.id),
+      record,
+    ]);
+    return profile;
   }
   record(provider, id) {
     editorDefinition(provider);
@@ -205,6 +343,10 @@ export class EditorStore {
     if (!this.vault.available())
       throw new Error("系统加密服务不可用，已停止切换。");
     const record = this.record(provider, id);
+    if (!record.encrypted)
+      throw new Error(
+        "请先在客户端正常登录此账号并读取一次，关联完整的客户端登录资料后即可切换。",
+      );
     const target = this.unprotect(record.encrypted, provider);
     if (
       !hasEditorLogin(target) ||
@@ -436,7 +578,7 @@ export class EditorStore {
               name: definition.name,
               accounts: this.records
                 .filter((record) => record.provider === provider)
-                .map((record) => record.profile),
+                .map((record) => this.publicProfile(record)),
               currentId: current,
               hasLogin,
               error,

@@ -298,11 +298,11 @@ test("truncated Qoder ciphertext and cross-region data paths fail closed", async
   await assert.rejects(f.store.capture("qoder-cn", "Q"), /不完整|格式/);
   await assert.rejects(
     readEditorAuth("trae-cn", path.join(f.directory, "Trae")),
-    /国内版/,
+    /不可混用地区/,
   );
   await assert.rejects(
     readEditorAuth("qoder-cn", path.join(f.directory, "com.qoder.app.stable")),
-    /国内版/,
+    /不可混用地区/,
   );
 });
 test("opaque snapshots and public summaries never contain credential bytes", async (t) => {
