@@ -26,7 +26,9 @@ function fixture({
   };
   const dialog = {
     async showMessageBox(options) {
-      calls.push(options.message + (options.detail ? ` ${options.detail}` : ""));
+      calls.push(
+        options.message + (options.detail ? ` ${options.detail}` : ""),
+      );
       return { response };
     },
   };
@@ -168,17 +170,47 @@ test("all installer identities are stable and macOS packages replace a fixed app
   assert.equal(pkg.build.pkg.isRelocatable, false);
   assert.equal(pkg.build.pkg.overwriteAction, "upgrade");
   assert.deepEqual(pkg.build.pkg.mustClose, ["com.koi128bit.workbuddy-switch"]);
-  assert.ok(pkg.scripts["dist:mac"].includes("pkg"));
 });
 
-test('Mac packaging keeps build bundles hidden and publishes only the final installers',async(t)=>{
- let packager;try{packager=await import('../scripts/package-mac.mjs');}catch{}
- assert.equal(typeof packager?.macBuildArguments,'function');
- for(const arch of ['arm64','x64']){const args=packager.macBuildArguments(arch);assert.ok(args.includes('pkg'));assert.ok(args.includes(`--config.directories.output=.build/macos-${arch}`));}
- const pkg=JSON.parse(await fs.readFile(new URL('../package.json',import.meta.url),'utf8'));assert.ok(pkg.scripts['dist:mac'].includes('package-mac.mjs'));
- const os=await import('node:os'),path=await import('node:path');const folder=await fs.mkdtemp(path.join(os.tmpdir(),'wb-install-build-'));t.after(()=>fs.rm(folder,{recursive:true}));
- const input=path.join(folder,'hidden'),output=path.join(folder,'dist');await fs.mkdir(input);
- for(const ext of ['pkg','dmg','zip'])await fs.writeFile(path.join(input,`WorkBuddy-Switch-1.5.0-mac-arm64.${ext}`),'fixture');
- await fs.writeFile(path.join(input,'com.koi128bit.workbuddy-switch.pkg'),'component');await fs.mkdir(path.join(input,'WorkBuddy Switch.app'));
- await packager.collectMacArtifacts(input,output,'1.5.0','arm64');assert.deepEqual((await fs.readdir(output)).sort(),['dmg','pkg','zip'].map(ext=>`WorkBuddy-Switch-1.5.0-mac-arm64.${ext}`));
+test("Mac packaging keeps build bundles hidden and publishes only the final installers", async (t) => {
+  let packager;
+  try {
+    packager = await import("../scripts/package-mac.mjs");
+  } catch {}
+  assert.equal(typeof packager?.macBuildArguments, "function");
+  for (const arch of ["arm64", "x64"]) {
+    const args = packager.macBuildArguments(arch);
+    assert.ok(args.includes("pkg"));
+    assert.ok(
+      args.includes(`--config.directories.output=.build/macos-${arch}`),
+    );
+  }
+  const pkg = JSON.parse(
+    await fs.readFile(new URL("../package.json", import.meta.url), "utf8"),
+  );
+  assert.ok(pkg.scripts["dist:mac"].includes("package-mac.mjs"));
+  const os = await import("node:os"),
+    path = await import("node:path");
+  const folder = await fs.mkdtemp(path.join(os.tmpdir(), "wb-install-build-"));
+  t.after(() => fs.rm(folder, { recursive: true }));
+  const input = path.join(folder, "hidden"),
+    output = path.join(folder, "dist");
+  await fs.mkdir(input);
+  for (const ext of ["pkg", "dmg", "zip"])
+    await fs.writeFile(
+      path.join(input, `WorkBuddy-Switch-1.5.0-mac-arm64.${ext}`),
+      "fixture",
+    );
+  await fs.writeFile(
+    path.join(input, "com.koi128bit.workbuddy-switch.pkg"),
+    "component",
+  );
+  await fs.mkdir(path.join(input, "WorkBuddy Switch.app"));
+  await packager.collectMacArtifacts(input, output, "1.5.0", "arm64");
+  assert.deepEqual(
+    (await fs.readdir(output)).sort(),
+    ["dmg", "pkg", "zip"].map(
+      (ext) => `WorkBuddy-Switch-1.5.0-mac-arm64.${ext}`,
+    ),
+  );
 });
