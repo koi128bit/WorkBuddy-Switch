@@ -159,7 +159,8 @@ export class EditorStore {
       provider,
       fingerprint,
       encrypted: this.protect(document),
-      ...(prior?.credentialEncrypted && (prior.profile.source === "web" || !identity)
+      ...(prior?.credentialEncrypted &&
+      (prior.profile.source === "web" || !identity)
         ? { credentialEncrypted: prior.credentialEncrypted }
         : identity
           ? { credentialEncrypted: this.protect(identity) }

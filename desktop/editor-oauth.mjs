@@ -340,6 +340,7 @@ export class EditorOAuth {
       );
       this.require(flow.id, flow.provider);
       const result = traeToken(data, info);
+      result.deviceId = flow.context.deviceId;
       if (!result.refreshToken)
         throw new Error("授权缺少刷新凭据，请重新授权。");
       flow.result = result;
@@ -445,7 +446,14 @@ export class EditorOAuth {
         user,
       );
     }
-    const context = await this.context(provider, { privateKey: true });
+    if (typeof account.deviceId !== "string" || !account.deviceId)
+      throw new Error("授权缺少设备关联，请在本机重新授权。");
+    const context = await this.context(provider, {
+      privateKey: true,
+      deviceId: account.deviceId,
+    });
+    if (context.deviceId !== account.deviceId)
+      throw new Error("设备身份与原授权不一致，请在本机重新授权。");
     if (!context.privateKey)
       throw new Error("设备签名不可用，请在本机重新授权。");
     const requestPath = "/trae/api/v3/oauth/ExchangeToken",
@@ -479,6 +487,6 @@ export class EditorOAuth {
         },
       }),
     });
-    return traeToken(data, null, account);
+    return { ...traeToken(data, null, account), deviceId: account.deviceId };
   }
 }

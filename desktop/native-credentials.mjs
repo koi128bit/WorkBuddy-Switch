@@ -168,10 +168,20 @@ export class NativeCredentials {
     const definition = editorDefinition(provider);
     if (definition.product === "trae") {
       const raw = document.entries["iCubeAuthInfo://icube.cloudide"];
-      if (raw && typeof raw === "object") return parseTraeIdentity(raw);
-      if (typeof raw !== "string") throw new Error("未找到客户端登录账号。");
-      const peppers = await this.peppers(provider);
-      return parseTraeIdentity(decryptTrae(raw, peppers.aes));
+      if (!raw || (typeof raw !== "string" && typeof raw !== "object"))
+        throw new Error("未找到客户端登录账号。");
+      const identity =
+        typeof raw === "object"
+          ? parseTraeIdentity(raw)
+          : parseTraeIdentity(
+              decryptTrae(raw, (await this.peppers(provider)).aes),
+            );
+      try {
+        identity.deviceId = (await this.context(provider)).deviceId;
+      } catch {
+        /* Identity can still be captured when the device needs authorization. */
+      }
+      return identity;
     }
     const optionsKey = await this.qoderKey(
       provider,
@@ -192,7 +202,10 @@ export class NativeCredentials {
     }
     return parseQoderIdentity(payload);
   }
-  async context(provider, { privateKey = false } = {}) {
+  async context(
+    provider,
+    { privateKey = false, deviceId: requestedDeviceId = null } = {},
+  ) {
     const definition = editorDefinition(provider),
       directory = this.directory(provider);
     if (definition.product === "qoder") {
@@ -233,10 +246,24 @@ export class NativeCredentials {
         "Trae 初始化资料无法读取，请在设置中核对应用及数据目录，再正常启动客户端。",
       );
     }
-    const deviceEntry = Object.entries(root).find(([key]) =>
+    const entries = Object.entries(root).filter(([key]) =>
       key.startsWith("iCubeAuthInfo://icube-dc:"),
     );
-    if (!deviceEntry) throw new Error("请先正常启动 Trae 完成设备初始化。");
+    if (!requestedDeviceId && entries.length > 1)
+      throw new Error(
+        "检测到多个设备身份，无法确认当前授权设备，请在客户端重新登录后重试。",
+      );
+    const deviceEntry = requestedDeviceId
+      ? entries.find(
+          ([key]) => key === `iCubeAuthInfo://icube-dc:${requestedDeviceId}`,
+        )
+      : entries[0];
+    if (!deviceEntry)
+      throw new Error(
+        requestedDeviceId
+          ? "原授权设备不存在，请在本机重新授权。"
+          : "请先正常启动 Trae 完成设备初始化。",
+      );
     const payload =
       typeof deviceEntry[1] === "object"
         ? deviceEntry[1]

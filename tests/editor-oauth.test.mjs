@@ -98,6 +98,7 @@ test("Trae refresh signs the existing device proof using the current official DE
     nickname: "林",
     token: "old",
     refreshToken: "old-refresh",
+    deviceId: context.deviceId,
   });
   assert.equal(result.uid, "42");
   const proof = body.DeviceProof;
@@ -106,7 +107,7 @@ test("Trae refresh signs the existing device proof using the current official DE
     verify(
       "sha256",
       Buffer.from(message),
-        { key: pair.publicKey, dsaEncoding: "der" },
+      { key: pair.publicKey, dsaEncoding: "der" },
       Buffer.from(proof.Signature, "base64"),
     ),
     true,
@@ -260,7 +261,7 @@ test("Trae browser context, callback state, UID and allowlisted token host are c
   assert.equal((await fetch(callback)).status, 200);
   const account = await service.poll("trae-cn", ticket.id);
   assert.equal(account.uid, "42");
-  assert.equal(account.deviceId,context.deviceId);
+  assert.equal(account.deviceId, context.deviceId);
   const body = JSON.parse(request.options.body);
   assert.equal(body.DeviceInfo.DeviceID, context.deviceId);
   assert.equal(body.IDEVersion, context.appVersion);
@@ -289,7 +290,28 @@ test("Trae callback account mismatch fails without exposing raw server fields", 
   await fetch(callback);
   await assert.rejects(service.poll("trae-global", ticket.id), /身份/);
 });
-test('Trae refresh refuses a changed device before sending refresh credentials',async()=>{
-  let calls=0;const service=new EditorOAuth({context:async()=>({...context,deviceId:'different-device',privateKey:'fixture'}),request:async()=>{calls++;throw new Error('must not send');}});
-  await assert.rejects(service.refresh('trae-cn',{uid:'42',nickname:'A',token:'old',refreshToken:'old-refresh',deviceId:'original-device'}),/设备.*授权|设备.*一致/);assert.equal(calls,0);
+test("Trae refresh refuses a changed device before sending refresh credentials", async () => {
+  let calls = 0;
+  const service = new EditorOAuth({
+    context: async () => ({
+      ...context,
+      deviceId: "different-device",
+      privateKey: "fixture",
+    }),
+    request: async () => {
+      calls++;
+      throw new Error("must not send");
+    },
+  });
+  await assert.rejects(
+    service.refresh("trae-cn", {
+      uid: "42",
+      nickname: "A",
+      token: "old",
+      refreshToken: "old-refresh",
+      deviceId: "original-device",
+    }),
+    /设备身份.*不一致/,
+  );
+  assert.equal(calls, 0);
 });
