@@ -8,6 +8,8 @@ const call =
   };
 contextBridge.exposeInMainWorld("workbuddy", {
   snapshot: call("snapshot"),
+  workbuddyScope: call("workbuddy-scope"),
+  refreshEditor: call("editor-refresh"),
   captureEditor: call("editor-capture"),
   switchEditor: call("editor-switch"),
   editEditor: call("editor-edit"),

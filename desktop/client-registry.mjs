@@ -3,7 +3,7 @@ const capabilities = {
   switch: true,
   browserLogin: true,
   refresh: true,
-  quota: true,
+  quota: false,
 };
 const definition = (id, product, region, name, values) => {
   const { capabilities: extra, ...fields } = values;
@@ -41,7 +41,7 @@ export const clients = Object.freeze({
     ],
     origin: "https://www.codebuddy.cn",
     oauthPlatform: "workbuddy",
-    capabilities: { rewards: true },
+    capabilities: { rewards: true, quota: true },
   }),
   "workbuddy-global": definition(
     "workbuddy-global",
@@ -63,6 +63,7 @@ export const clients = Object.freeze({
       ],
       origin: "https://www.workbuddy.ai",
       oauthPlatform: "workbuddy-ai",
+      capabilities: { quota: true },
     },
   ),
   "trae-cn": definition("trae-cn", "trae", "cn", "Trae CN", {

@@ -7,8 +7,14 @@ import assert from "node:assert/strict";
 
 const directory = await fs.mkdtemp(path.join(os.tmpdir(), "wb-desktop-smoke-"));
 const authFile = path.join(directory, "fixture-auth.info");
-const globalAuthFile=path.join(directory,"fixture-global-auth.info");
-await fs.writeFile(globalAuthFile,JSON.stringify({account:{uid:"isolated-global",nickname:"国际版测试"},auth:{accessToken:"fake-global-credential",domain:"www.workbuddy.ai"}}));
+const globalAuthFile = path.join(directory, "fixture-global-auth.info");
+await fs.writeFile(
+  globalAuthFile,
+  JSON.stringify({
+    account: { uid: "isolated-global", nickname: "国际版测试" },
+    auth: { accessToken: "fake-global-credential", domain: "www.workbuddy.ai" },
+  }),
+);
 await fs.writeFile(
   authFile,
   JSON.stringify({
@@ -20,8 +26,8 @@ await fs.writeFile(
   path.join(directory, "settings.json"),
   JSON.stringify({
     authPath: authFile,
-    workbuddyGlobalAuthPath:globalAuthFile,
-    workbuddyGlobalDataPath:path.join(directory,"fixture-global-data"),
+    workbuddyGlobalAuthPath: globalAuthFile,
+    workbuddyGlobalDataPath: path.join(directory, "fixture-global-data"),
     dataPath: path.join(directory, "fixture-data"),
     refreshSeconds: 0,
     theme: "light",
@@ -29,7 +35,11 @@ await fs.writeFile(
 );
 const editorStorage = path.join(
   directory,
-  ...(process.platform === "win32" ? [] : process.platform === "linux" ? [".config"] : ["Library", "Application Support"]),
+  ...(process.platform === "win32"
+    ? []
+    : process.platform === "linux"
+      ? [".config"]
+      : ["Library", "Application Support"]),
   "Trae CN",
   "User",
   "globalStorage",
@@ -85,14 +95,32 @@ try {
   const initial = await page.evaluate(() => window.workbuddy.snapshot());
   assert.equal(initial.current.id, "isolated-fixture");
   assert.equal(initial.accounts.length, 0);
-  assert.equal(Object.keys(initial.editors).length,4);
-  assert.equal(Object.keys(initial.providers).length,6);
-  await page.evaluate(()=>window.workbuddy.workbuddyScope("workbuddy-global","capture",[]));
-  const globalState=await page.evaluate(()=>window.workbuddy.workbuddyScope("workbuddy-global","snapshot",[]));
-  assert.equal(globalState.accounts[0].id,"isolated-global");
-  assert.equal((await page.evaluate(()=>window.workbuddy.snapshot())).accounts.length,0);
-  assert.equal(JSON.stringify(globalState).includes("fake-global-credential"),false);
-  assert.equal((await fs.readFile(path.join(directory,"workbuddy-global/vault.json"),"utf8")).includes("fake-global-credential"),false);
+  assert.equal(Object.keys(initial.editors).length, 4);
+  assert.equal(Object.keys(initial.providers).length, 6);
+  await page.evaluate(() =>
+    window.workbuddy.workbuddyScope("workbuddy-global", "capture", []),
+  );
+  const globalState = await page.evaluate(() =>
+    window.workbuddy.workbuddyScope("workbuddy-global", "snapshot", []),
+  );
+  assert.equal(globalState.accounts[0].id, "isolated-global");
+  assert.equal(
+    (await page.evaluate(() => window.workbuddy.snapshot())).accounts.length,
+    0,
+  );
+  assert.equal(
+    JSON.stringify(globalState).includes("fake-global-credential"),
+    false,
+  );
+  assert.equal(
+    (
+      await fs.readFile(
+        path.join(directory, "workbuddy-global/vault.json"),
+        "utf8",
+      )
+    ).includes("fake-global-credential"),
+    false,
+  );
   assert.ok(!JSON.stringify(initial).includes("fake-test-credential"));
   assert.equal(initial.editors["trae-cn"].accounts.length, 0);
   assert.equal(initial.editors["qoder-cn"].accounts.length, 0);

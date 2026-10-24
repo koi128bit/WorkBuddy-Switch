@@ -27,12 +27,31 @@ let mainWindow,
   trayMenu,
   store,
   editorStore,
+  editorOAuth,
   tray,
   quitting = false,
   refreshTimer,
   automationTimer,
   tickBusy = false;
 const noticeKeys = new Map();
+const workbuddyStores = new Map();
+let clientDefinitions = {};
+function scopedWorkBuddy(provider = "workbuddy") {
+  if (!workbuddyStores.has(provider))
+    throw new Error("WorkBuddy 客户端地区无效。");
+  const target = workbuddyStores.get(provider);
+  if (provider === "workbuddy-global")
+    target.settings = {
+      ...store.settings,
+      authPath: store.settings.workbuddyGlobalAuthPath,
+      dataPath: store.settings.workbuddyGlobalDataPath,
+      executablePath: store.settings.workbuddyGlobalExecutablePath,
+      autoCheckin: false,
+      autoClaimTravel: false,
+      autoDepartTravel: false,
+    };
+  return target;
+}
 const root = path.join(__dirname, "..");
 const devURL =
   !app.isPackaged && process.env.WB_SWITCH_DEV_URL === "http://127.0.0.1:5173"
@@ -70,6 +89,7 @@ else {
     });
 }
 app.on("before-quit", () => {
+  editorOAuth?.close();
   quitting = true;
   clearInterval(refreshTimer);
   clearInterval(automationTimer);
@@ -296,6 +316,10 @@ async function start() {
     { Login },
     { EditorStore },
     { EditorController, editorDefinition },
+    { clients, editorDefinitions },
+    { createSystemVault },
+    { NativeCredentials },
+    { EditorOAuth },
   ] = await Promise.all([
     import("./store.mjs"),
     import("./controller.mjs"),
@@ -304,6 +328,10 @@ async function start() {
     import("./login.mjs"),
     import("./editor-store.mjs"),
     import("./editor-controller.mjs"),
+    import("./client-registry.mjs"),
+    import("./platform.mjs"),
+    import("./native-credentials.mjs"),
+    import("./editor-oauth.mjs"),
   ]);
   await protocol.handle("workbuddy-switch", async (request) => {
     try {
@@ -325,38 +353,75 @@ async function start() {
   session.defaultSession.setPermissionRequestHandler(
     (_wc, _permission, callback) => callback(false),
   );
-  const vault = {
-    available: () => safeStorage.isEncryptionAvailable(),
-    encrypt: (raw) => safeStorage.encryptString(raw),
-    decrypt: (data) => safeStorage.decryptString(data),
-  };
-  const controller = new WorkBuddyController(() => store?.settings || {});
+  const vault = createSystemVault(safeStorage);
+  const editorContext = testMode
+    ? { home: testMode, env: { APPDATA: testMode, LOCALAPPDATA: testMode } }
+    : {};
+  const controller = new WorkBuddyController(
+    () => store?.settings || {},
+    editorContext,
+  );
   store = new Store({
     directory: app.getPath("userData"),
     vault,
     controller,
+    pathsContext: editorContext,
     request: (url, options) => net.fetch(url, options),
     onChange: changed,
   });
   await store.init();
-  const editorContext = testMode
-    ? { home: testMode, env: { APPDATA: testMode, LOCALAPPDATA: testMode } }
-    : {};
+  clientDefinitions = clients;
+  workbuddyStores.set("workbuddy", store);
+  const globalController = new WorkBuddyController(
+    () => scopedWorkBuddy("workbuddy-global").settings,
+    { ...editorContext, provider: "workbuddy-global" },
+  );
+  const globalStore = new Store({
+    provider: "workbuddy-global",
+    directory: path.join(app.getPath("userData"), "workbuddy-global"),
+    vault,
+    controller: globalController,
+    pathsContext: editorContext,
+    request: (url, options) => net.fetch(url, options),
+    onChange: changed,
+  });
+  await globalStore.init();
+  workbuddyStores.set("workbuddy-global", globalStore);
   const editorControllers = Object.fromEntries(
-    ["trae-cn", "qoder-cn"].map((provider) => [
+    Object.keys(editorDefinitions).map((provider) => [
       provider,
       new EditorController(provider, () => store.settings, editorContext),
     ]),
   );
+  const nativeCredentials = new NativeCredentials({
+    controllers: editorControllers,
+    settings: () => store.settings,
+    ...editorContext,
+  });
+  editorOAuth = new EditorOAuth({
+    request: (url, options) => net.fetch(url, options),
+    context: (provider, options) =>
+      nativeCredentials.context(provider, options),
+  });
   editorStore = new EditorStore({
     directory: app.getPath("userData"),
     vault,
     settings: () => store.settings,
     controllers: editorControllers,
+    identities: nativeCredentials,
     context: editorContext,
     onChange: changed,
   });
   await editorStore.init();
+  handle("editor-refresh", (provider, id) =>
+    store.exclusive(async () => {
+      const credential = editorStore.credential(provider, string(id, 200));
+      const renewed = await editorOAuth.refresh(provider, credential);
+      if (renewed.uid !== credential.uid)
+        throw new Error("刷新授权的账号身份不一致。");
+      await editorStore.saveCredential(provider, renewed);
+    }),
+  );
   handle("editor-capture", (provider, nickname) =>
     store.exclusive(() => editorStore.capture(provider, string(nickname, 80))),
   );
@@ -400,7 +465,7 @@ async function start() {
     if (!["data", "executable"].includes(kind))
       throw new Error("路径选择无效。");
     const result = await dialog.showOpenDialog(mainWindow, {
-      title: `选择 ${definition.name} ${kind === "data" ? "国内版数据根目录" : "应用"}`,
+      title: `选择 ${definition.name} ${kind === "data" ? "数据根目录" : "应用"}`,
       properties: [kind === "data" ? "openDirectory" : "openFile"],
       ...(kind === "executable" && process.platform === "win32"
         ? { filters: [{ name: definition.name, extensions: ["exe"] }] }
@@ -408,39 +473,181 @@ async function start() {
     });
     return result.canceled ? null : result.filePaths[0];
   });
-  const login = new Login((url, options) => net.fetch(url, options));
-  let pollingLogin = false;
-  handle("login-start", () => login.start());
-  handle("login-open", (id) =>
-    shell.openExternal(login.require(string(id, 200)).url),
+  const logins = Object.fromEntries(
+    ["workbuddy", "workbuddy-global"].map((provider) => [
+      provider,
+      new Login((url, options) => net.fetch(url, options), provider),
+    ]),
   );
-  handle("login-cancel", (id) => login.cancel(string(id, 200)));
-  handle("login-poll", async (id) => {
+  const loginFor = (provider) => {
+    if (!Object.hasOwn(clients, provider)) throw new Error("授权客户端无效。");
+    return logins[provider] || editorOAuth;
+  };
+  const pollingLogins = new Set();
+  handle("login-start", (provider = "workbuddy") => {
+    const login = loginFor(provider);
+    return login.start(provider);
+  });
+  handle("login-open", (id, provider = "workbuddy") =>
+    shell.openExternal(
+      loginFor(provider).require(string(id, 200), provider).url,
+    ),
+  );
+  handle("login-cancel", (id, provider = "workbuddy") => {
+    const login = loginFor(provider);
+    return logins[provider]
+      ? login.cancel(string(id, 200))
+      : login.cancel(provider, string(id, 200));
+  });
+  handle("login-poll", async (id, provider = "workbuddy") => {
     string(id, 200);
-    if (pollingLogin) return { done: false };
-    pollingLogin = true;
+    const login = loginFor(provider),
+      key = `${provider}:${id}`;
+    if (pollingLogins.has(key)) return { done: false };
+    pollingLogins.add(key);
     try {
-      const document = await login.poll(id);
+      const document = await (logins[provider]
+        ? login.poll(id)
+        : login.poll(provider, id));
       if (!document) return { done: false };
       await store.exclusive(async () => {
-        login.require(id);
-        await store.capture(document);
+        login.require(id, provider);
+        if (logins[provider]) await scopedWorkBuddy(provider).capture(document);
+        else await editorStore.saveCredential(provider, document);
       });
-      login.cancel(id);
+      if (logins[provider]) login.cancel(id);
+      else login.cancel(provider, id);
       store.log("网页登录账号已加密保存。");
       return { done: true };
     } finally {
-      pollingLogin = false;
+      pollingLogins.delete(key);
     }
   });
   nativeTheme.themeSource = store.settings.theme;
   handle("snapshot", async () => ({
-    ...(await store.snapshot()),
+    ...(await scopedWorkBuddy(
+      store.settings.activeProvider === "workbuddy-global"
+        ? "workbuddy-global"
+        : "workbuddy",
+    ).snapshot()),
+    settings: store.settings,
+    providers: Object.fromEntries(
+      Object.entries(clients).map(([id, d]) => [
+        id,
+        {
+          name: d.name,
+          product: d.product,
+          region: d.region,
+          program: d.program,
+          platforms: d.platforms,
+          capabilities: d.capabilities,
+        },
+      ]),
+    ),
+    busy: store.busy || globalStore.busy,
     editors: await editorStore.snapshots(),
     version: app.getVersion(),
     platform: process.platform,
     dataDirectory: app.getPath("userData"),
   }));
+  handle("workbuddy-scope", async (provider, method, args) => {
+    if (
+      provider !== "workbuddy-global" ||
+      !Array.isArray(args) ||
+      args.length > 3
+    )
+      throw new Error("客户端操作范围无效。");
+    const target = scopedWorkBuddy(provider);
+    const operations = {
+      snapshot: () => target.snapshot(),
+      capture: () => target.captureCurrent(),
+      switchAccount: () => target.switchAccount(string(args[0], 200)),
+      editAccount: () => target.editAccount(string(args[0], 200), args[1]),
+      removeAccount: () => target.removeAccount(string(args[0], 200)),
+      refreshQuotas: () =>
+        target.refreshQuotas(args[0] ? string(args[0], 200) : null),
+      sessions: () => target.sessions(),
+      usage: () => target.usage(query(args[0])),
+      launchClient: () => target.exclusive(() => globalController.launch()),
+      diagnostics: () => target.diagnostics(),
+      backups: () => target.backups(),
+      backupSessions: () => target.backupSessions(),
+      resume: () => target.resumeSession(string(args[0], 200), async () => {}),
+      exportAccounts: async () => {
+        const result = await dialog.showSaveDialog(mainWindow, {
+          title: "导出国际版加密账号备份",
+          defaultPath: "WorkBuddy-global.wbsbackup",
+          filters: [{ name: "加密账号备份", extensions: ["wbsbackup"] }],
+        });
+        if (result.canceled || !result.filePath) return false;
+        await atomicWrite(
+          result.filePath,
+          await target.exportAccounts(string(args[0], 512)),
+        );
+        return true;
+      },
+      importAccounts: async () => {
+        const result = await dialog.showOpenDialog(mainWindow, {
+          title: "导入国际版加密备份",
+          properties: ["openFile"],
+          filters: [{ name: "加密账号备份", extensions: ["wbsbackup"] }],
+        });
+        return result.canceled
+          ? null
+          : target.importAccounts(
+              await readBounded(result.filePaths[0]),
+              string(args[0], 512),
+            );
+      },
+      exportUsage: async () => {
+        const usage = await target.usage(query(args[0]));
+        const result = await dialog.showSaveDialog(mainWindow, {
+          defaultPath: "WorkBuddy-global-usage.csv",
+        });
+        if (result.canceled || !result.filePath) return false;
+        await atomicWrite(result.filePath, usageCSV(usage));
+        return true;
+      },
+      openFolder: async () => {
+        const folders = {
+          application: target.directory,
+          backups: target.backupDirectory,
+          projects: target.paths.projects,
+        };
+        if (!Object.hasOwn(folders, args[0])) throw new Error("文件夹无效。");
+        if (args[0] === "backups")
+          await fs.mkdir(folders.backups, { recursive: true });
+        if (await shell.openPath(folders[args[0]]))
+          throw new Error("系统无法打开该文件夹。");
+      },
+      traySwitch: async () => {
+        const id = string(args[0], 200);
+        if (!target.records.some((r) => r.profile.id === id))
+          throw new Error("未找到该账号。");
+        trayWindow?.hide();
+        const answer = await dialog.showMessageBox({
+          type: "question",
+          title: "切换 WorkBuddy 国际版",
+          message: "请先结束客户端中运行的任务，切换将正常退出客户端。",
+          buttons: ["取消", "切换账号"],
+          defaultId: 0,
+          cancelId: 0,
+        });
+        if (answer.response !== 1) return false;
+        await target.switchAccount(id);
+        return true;
+      },
+    };
+    if (!Object.hasOwn(operations, method))
+      throw new Error("此客户端不支持该操作。");
+    if (
+      ["snapshot", "sessions", "usage", "backups", "diagnostics"].includes(
+        method,
+      )
+    )
+      return operations[method]();
+    return store.exclusive(operations[method]);
+  });
   handle("capture", () => store.captureCurrent());
   handle("switch", (id) => store.switchAccount(string(id, 200)));
   handle("edit", (id, patch) => store.editAccount(string(id, 200), patch));
@@ -723,8 +930,10 @@ function showTray() {
           1,
           Math.min(
             8,
-            store.settings.activeProvider === "workbuddy"
-              ? store.records.length
+            ["workbuddy", "workbuddy-global"].includes(
+              store.settings.activeProvider,
+            )
+              ? scopedWorkBuddy(store.settings.activeProvider).records.length
               : editorStore.records.filter(
                   (record) => record.provider === store.settings.activeProvider,
                 ).length,
@@ -752,15 +961,13 @@ function showTray() {
 function updateTray() {
   if (!tray) return;
   const provider = store.settings.activeProvider || "workbuddy";
-  const clientName =
-    provider === "workbuddy"
-      ? "WorkBuddy"
-      : provider === "trae-cn"
-        ? "Trae CN"
-        : "Qoder CN";
+  const clientName = clientDefinitions[provider]?.name || "WorkBuddy";
+  const workbuddy = ["workbuddy", "workbuddy-global"].includes(provider)
+    ? scopedWorkBuddy(provider)
+    : null;
   const accounts = (
-    provider === "workbuddy"
-      ? [...store.records]
+    workbuddy
+      ? [...workbuddy.records]
       : editorStore?.records.filter((record) => record.provider === provider) ||
         []
   )
@@ -771,7 +978,7 @@ function updateTray() {
     { type: "separator" },
     ...accounts.map((r, i) => ({
       label: store.settings.privacyMode ? `账号 ${i + 1}` : r.profile.nickname,
-      enabled: !store.busy,
+      enabled: !store.busy && (workbuddy || !!r.encrypted),
       click: async () => {
         const result = await dialog.showMessageBox({
           type: "question",
@@ -783,8 +990,10 @@ function updateTray() {
         });
         if (result.response === 1) {
           try {
-            if (provider === "workbuddy")
-              await store.switchAccount(r.profile.id);
+            if (workbuddy)
+              await (provider === "workbuddy"
+                ? workbuddy.switchAccount(r.profile.id)
+                : store.exclusive(() => workbuddy.switchAccount(r.profile.id)));
             else
               await store.exclusive(() =>
                 editorStore.switchAccount(provider, r.profile.id),
@@ -803,8 +1012,8 @@ function updateTray() {
       click: async () => {
         try {
           await store.exclusive(() =>
-            provider === "workbuddy"
-              ? store.controller.launch()
+            workbuddy
+              ? workbuddy.controller.launch()
               : editorStore.controllers[provider].launch(),
           );
         } catch (e) {
@@ -816,15 +1025,14 @@ function updateTray() {
   ]);
   if (process.platform !== "darwin") tray.setContextMenu(trayMenu);
   if (process.platform === "darwin") {
-    void store
-      .active()
+    void (workbuddy ? workbuddy.active() : Promise.resolve(null))
       .then((active) => {
         if (quitting || !tray || tray.isDestroyed()) return;
-        const profile = store.records.find(
+        const profile = workbuddy?.records.find(
           (record) => record.profile.id === active?.id,
         )?.profile;
         tray.setTitle(
-          provider === "workbuddy" &&
+          workbuddy &&
             store.settings.menuBarBalance &&
             profile?.quota &&
             !profile.quotaError
