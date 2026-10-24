@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import path from "node:path";
 import { editorDataPath } from "../desktop/editor-controller.mjs";
 import { resolvePaths } from "../desktop/settings.mjs";
 
@@ -11,11 +12,11 @@ test("Linux editor data follows XDG rather than macOS directories", () => {
   };
   assert.equal(
     editorDataPath("trae-cn", {}, context),
-    "/isolated/config/Trae CN",
+    path.join("/isolated/config", "Trae CN"),
   );
   assert.equal(
     editorDataPath("qoder-cn", {}, context),
-    "/isolated/config/com.qodercn.app.stable",
+    path.join("/isolated/config", "com.qodercn.app.stable"),
   );
 });
 test("Linux WorkBuddy login follows XDG data and supports a separate international scope", () => {
@@ -26,11 +27,17 @@ test("Linux WorkBuddy login follows XDG data and supports a separate internation
   };
   assert.equal(
     resolvePaths({}, context).auth,
-    "/isolated/data/CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info",
+    path.join(
+      "/isolated/data",
+      "CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info",
+    ),
   );
   assert.equal(
     resolvePaths({}, { ...context, provider: "workbuddy-global" }).auth,
-    "/isolated/data/CodeBuddyExtension/Data/Public/auth/workbuddy-desktop-ai.info",
+    path.join(
+      "/isolated/data",
+      "CodeBuddyExtension/Data/Public/auth/workbuddy-desktop-ai.info",
+    ),
   );
 });
 test("scope registry separates product, region and host capabilities", async () => {

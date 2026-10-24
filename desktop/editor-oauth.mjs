@@ -254,6 +254,10 @@ export class EditorOAuth {
         "Content-Security-Policy":
           "default-src 'none'; style-src 'unsafe-inline'",
         "X-Content-Type-Options": "nosniff",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Private-Network": "true",
       });
       res.end(
         `<html lang="zh-CN"><meta charset="utf-8"><title>WorkBuddy Switch</title><body style="font:16px system-ui;padding:48px">${message}</body></html>`,
@@ -262,12 +266,34 @@ export class EditorOAuth {
     let url, info, code;
     try {
       if (
-        req.method !== "GET" ||
+        !["GET", "OPTIONS"].includes(req.method) ||
         req.headers.host !== new URL(flow.callbackOrigin).host ||
         req.url.length > 32768
       )
         throw new Error();
       url = new URL(req.url, flow.callbackOrigin);
+      const markers = [
+        "authCodeInfo",
+        "userInfo",
+        "token",
+        "refreshToken",
+        "error",
+      ];
+      if (
+        !markers.some((key) => url.searchParams.has(key)) &&
+        flow.expiresAt > Date.now()
+      ) {
+        res.writeHead(200, {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+          "Access-Control-Allow-Private-Network": "true",
+        });
+        res.end("ok");
+        return;
+      }
       if (
         url.pathname !== "/authorize" ||
         url.searchParams.get("loginTraceID") !== flow.state ||
@@ -404,13 +430,19 @@ export class EditorOAuth {
         },
       );
       const credential = qoderToken(data, account);
+      const user = await this.json(
+        `${definition.accountOrigin}/api/v1/userinfo`,
+        { headers: { Authorization: `Bearer ${credential.token}` } },
+      );
+      if (text(user?.id) !== account.uid)
+        throw new Error("刷新授权的账号身份不一致，已停止保存。");
       return identity(
         account.uid,
-        account.nickname,
+        user.name || account.nickname,
         credential.token,
         credential.refreshToken,
         credential.expiresAt,
-        account.user,
+        user,
       );
     }
     const context = await this.context(provider, { privateKey: true });
