@@ -227,16 +227,17 @@ test("native peer shutdown excludes its own process, refuses active tasks and on
     const self = {
         processIdentifier: 10,
         terminated: false,
-        terminate() {
+        get terminate() {
           throw new Error("must not terminate self");
         },
       },
       peer = {
         processIdentifier: 20,
         terminated: false,
-        terminate() {
+        get terminate() {
           attempts++;
           if (!refuse) this.terminated = true;
+          return true;
         },
       };
     const context = {
