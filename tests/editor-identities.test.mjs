@@ -148,3 +148,7 @@ test("opaque compatibility capture remains usable when a vendor changes the code
   assert.equal(profile.uid, null);
   assert.match(profile.identityError, /无法识别/);
 });
+test('switching an already-current UID preserves the freshly rotated native login',async t=>{
+  const f=await fixture(t);await f.set('42','native-before-rotation');const profile=await f.store.capture('trae-cn','林');await f.set('42','native-after-rotation');
+  await f.store.switchAccount('trae-cn',profile.id);const file=path.join(f.store.dataPath('trae-cn'),'User/globalStorage/storage.json');assert.equal(JSON.parse(await fs.readFile(file))[authKey].token,'native-after-rotation');assert.equal(f.writes(),0);assert.equal(f.store.credential('trae-cn',profile.id).token,'native-after-rotation');
+});
