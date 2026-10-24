@@ -19,7 +19,10 @@ import { defaults, validateSettings } from "../desktop/settings.mjs";
 
 const authKey = "iCubeAuthInfo://icube.cloudide";
 const serverKey = "iCubeServerData://icube.cloudide";
-async function fixture(t, platform = "darwin") {
+async function fixture(
+  t,
+  platform = process.platform === "win32" ? "win32" : "darwin",
+) {
   const directory = await fs.mkdtemp(
     path.join(os.tmpdir(), "wb-editors-test-"),
   );
