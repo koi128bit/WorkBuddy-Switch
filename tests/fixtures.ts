@@ -30,6 +30,13 @@ export function fixtureState(): Snapshot {
     traeExecutablePath: "",
     qoderDataPath: "",
     qoderExecutablePath: "",
+    traeGlobalDataPath: "",
+    traeGlobalExecutablePath: "",
+    qoderGlobalDataPath: "",
+    qoderGlobalExecutablePath: "",
+    workbuddyGlobalAuthPath: "",
+    workbuddyGlobalDataPath: "",
+    workbuddyGlobalExecutablePath: "",
   };
   const accounts = [
     {
@@ -130,35 +137,50 @@ export function fixtureState(): Snapshot {
   return {
     demo: true,
     editors: Object.fromEntries(
-      (["trae-cn", "qoder-cn"] as const).map((provider) => {
-        const name = provider === "trae-cn" ? "Trae CN" : "Qoder CN";
-        return [
-          provider,
-          {
+      (["trae-cn", "trae-global", "qoder-cn", "qoder-global"] as const).map(
+        (provider) => {
+          const name =
+            provider === "trae-cn"
+              ? "Trae CN"
+              : provider === "trae-global"
+                ? "Trae 国际版"
+                : provider === "qoder-cn"
+                  ? "Qoder CN"
+                  : "Qoder 国际版";
+          return [
             provider,
-            name,
-            accounts: ["日常开发", "项目测试"].map((label, index) => ({
-              id: `${provider}-${index}`,
-              nickname: `${name} ${label}`,
-              note: "演示快照",
-              favorite: index === 0,
-              capturedAt: now - index * 86400000,
-              lastUsedAt: now - index * 3600000,
-              automatic: false,
-            })),
-            currentId: `${provider}-0`,
-            hasLogin: true,
-            error: null,
-            client: {
-              installed: true,
-              running: false,
-              executable: `/Applications/${name}.app`,
+            {
+              provider,
+              name,
+              accounts: ["日常开发", "项目测试"].map((label, index) => ({
+                id: `${provider}-${index}`,
+                nickname: `${name} ${label}`,
+                note: "演示快照",
+                favorite: index === 0,
+                capturedAt: now - index * 86400000,
+                lastUsedAt: now - index * 3600000,
+                automatic: false,
+                uid: `demo-${index}`,
+                originalNickname: label,
+                nativeAvailable: true,
+                canRefresh: true,
+                source: "native",
+                expiresAt: now + 7 * 86400000,
+              })),
+              currentId: `${provider}-0`,
+              hasLogin: true,
+              error: null,
+              client: {
+                installed: true,
+                running: false,
+                executable: `/Applications/${name}.app`,
+              },
+              dataPath: `/Users/example/Library/Application Support/${provider === "trae-cn" ? "Trae CN" : "com.qodercn.app.stable"}`,
+              recoveryPending: false,
             },
-            dataPath: `/Users/example/Library/Application Support/${provider === "trae-cn" ? "Trae CN" : "com.qodercn.app.stable"}`,
-            recoveryPending: false,
-          },
-        ];
-      }),
+          ];
+        },
+      ),
     ) as Snapshot["editors"],
     accounts,
     current: {

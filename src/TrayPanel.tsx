@@ -11,13 +11,14 @@ import {
 import appIcon from "../assets/icon.png";
 import { Button, number, Status } from "./components";
 import type { Snapshot, Provider } from "./types";
-import { providerNames } from "./EditorAccounts";
+import { providerNames, apiFor, isWorkBuddy } from "./providers";
 
 export function TrayPanel() {
   const [state, setState] = useState<Snapshot | null>(null),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
-  const api = window.workbuddy;
+  const provider = state?.settings.activeProvider || "workbuddy";
+  const api = apiFor(provider);
   useEffect(() => {
     if (!api) return;
     let active = true;
@@ -64,19 +65,18 @@ export function TrayPanel() {
       setBusy(false);
     }
   }
-  const provider = state?.settings.activeProvider || "workbuddy";
-  const editor = provider !== "workbuddy" ? state?.editors?.[provider] : null;
-  const currentId =
-    provider === "workbuddy" ? state?.current?.id : editor?.currentId;
-  const accounts =
-    provider === "workbuddy"
-      ? state?.accounts || []
-      : (editor?.accounts || []).map((account) => ({
-          ...account,
-          quota: null,
-          quotaError: null,
-        }));
-  const client = provider === "workbuddy" ? state?.client : editor?.client;
+  const editor = !isWorkBuddy(provider) ? state?.editors?.[provider] : null;
+  const currentId = isWorkBuddy(provider)
+    ? state?.current?.id
+    : editor?.currentId;
+  const accounts = isWorkBuddy(provider)
+    ? state?.accounts || []
+    : (editor?.accounts || []).map((account) => ({
+        ...account,
+        quota: null,
+        quotaError: null,
+      }));
+  const client = isWorkBuddy(provider) ? state?.client : editor?.client;
   return (
     <main className="tray-panel" aria-label="菜单栏快捷面板">
       <header className="tray-heading">
@@ -106,9 +106,9 @@ export function TrayPanel() {
           disabled={busy || state?.busy}
           onClick={() =>
             void run(async () => {
-              if (provider === "workbuddy") {
+              if (isWorkBuddy(provider)) {
                 await api.refreshQuotas();
-                await api.refreshRewards();
+                if (provider === "workbuddy") await api.refreshRewards();
               }
             })
           }
@@ -131,10 +131,16 @@ export function TrayPanel() {
             <button
               className={`tray-account ${account.id === currentId ? "current" : ""}`}
               key={account.id}
-              disabled={busy || state?.busy || editor?.recoveryPending}
+              disabled={
+                busy ||
+                state?.busy ||
+                editor?.recoveryPending ||
+                ("nativeAvailable" in account &&
+                  account.nativeAvailable === false)
+              }
               onClick={() =>
                 void run(() =>
-                  provider === "workbuddy"
+                  isWorkBuddy(provider)
                     ? api.traySwitch(account.id)
                     : api.traySwitchEditor(provider, account.id),
                 )
@@ -152,7 +158,7 @@ export function TrayPanel() {
                   ? `账号 ${index + 1}`
                   : account.nickname}
               </span>
-              {provider === "workbuddy" ? (
+              {isWorkBuddy(provider) ? (
                 <strong>
                   {account.quotaError ? "—" : number(account.quota?.remaining)}
                   <small>积分</small>

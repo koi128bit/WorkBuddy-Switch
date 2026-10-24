@@ -1,6 +1,12 @@
 export type Theme = "system" | "light" | "dark";
-export type Provider = "workbuddy" | "trae-cn" | "qoder-cn";
-export type EditorProvider = Exclude<Provider, "workbuddy">;
+export type WorkBuddyProvider = "workbuddy" | "workbuddy-global";
+export type Provider =
+  | WorkBuddyProvider
+  | "trae-cn"
+  | "trae-global"
+  | "qoder-cn"
+  | "qoder-global";
+export type EditorProvider = Exclude<Provider, WorkBuddyProvider>;
 export interface Settings {
   theme: Theme;
   privacyMode: boolean;
@@ -29,6 +35,13 @@ export interface Settings {
   traeExecutablePath: string;
   qoderDataPath: string;
   qoderExecutablePath: string;
+  workbuddyGlobalAuthPath: string;
+  workbuddyGlobalDataPath: string;
+  workbuddyGlobalExecutablePath: string;
+  traeGlobalDataPath: string;
+  traeGlobalExecutablePath: string;
+  qoderGlobalDataPath: string;
+  qoderGlobalExecutablePath: string;
 }
 export interface EditorAccount {
   id: string;
@@ -38,6 +51,13 @@ export interface EditorAccount {
   capturedAt: number;
   lastUsedAt: number;
   automatic: boolean;
+  uid?: string | null;
+  originalNickname?: string;
+  expiresAt?: number | null;
+  source?: "web" | "native";
+  nativeAvailable?: boolean;
+  canRefresh?: boolean;
+  identityError?: string | null;
 }
 export interface EditorSnapshot {
   provider: EditorProvider;
@@ -160,6 +180,17 @@ export interface UsageQuery {
   until: number | null;
 }
 export interface Snapshot {
+  providers?: Record<
+    Provider,
+    {
+      name: string;
+      product: string;
+      region: string;
+      program: string;
+      platforms: string[];
+      capabilities: Record<string, boolean>;
+    }
+  >;
   editors?: Record<EditorProvider, EditorSnapshot>;
   demo?: boolean;
   accounts: Account[];
@@ -191,6 +222,12 @@ export interface BackupFile {
   createdAt: number;
 }
 export interface Bridge {
+  workbuddyScope(
+    provider: WorkBuddyProvider,
+    method: string,
+    args: unknown[],
+  ): Promise<unknown>;
+  refreshEditor(provider: EditorProvider, id: string): Promise<void>;
   captureEditor(
     provider: EditorProvider,
     nickname: string,
@@ -259,10 +296,10 @@ export interface Bridge {
   ): Promise<void>;
   launchClient(): Promise<void>;
   onChange(callback: () => void): () => void;
-  startLogin(): Promise<{ id: string; expiresAt: number }>;
-  pollLogin(id: string): Promise<{ done: boolean }>;
-  openLogin(id: string): Promise<void>;
-  cancelLogin(id: string): Promise<void>;
+  startLogin(provider?: Provider): Promise<{ id: string; expiresAt: number }>;
+  pollLogin(id: string, provider?: Provider): Promise<{ done: boolean }>;
+  openLogin(id: string, provider?: Provider): Promise<void>;
+  cancelLogin(id: string, provider?: Provider): Promise<void>;
 }
 declare global {
   interface Window {

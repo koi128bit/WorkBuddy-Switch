@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   FolderOpen,
   History,
@@ -10,8 +10,11 @@ import {
   ShieldCheck,
   Trash2,
   Users,
+  Globe,
 } from "lucide-react";
 import { Button, Empty, Modal, Status } from "./components";
+import { apiFor, providerNames, providers } from "./providers";
+import { LoginModal } from "./LoginModal";
 import type {
   EditorAccount,
   EditorProvider,
@@ -24,11 +27,6 @@ type Run = (
   action: () => Promise<unknown>,
   success?: string,
 ) => Promise<void>;
-export const providerNames = {
-  workbuddy: "WorkBuddy",
-  "trae-cn": "Trae CN",
-  "qoder-cn": "Qoder CN",
-} as const;
 
 export function EditorPaths({
   provider,
@@ -43,7 +41,7 @@ export function EditorPaths({
   disabled: boolean;
   run: Run;
 }) {
-  const prefix = provider === "trae-cn" ? "trae" : "qoder";
+  const prefix = providers[provider].key;
   const dataKey = `${prefix}DataPath` as const,
     executableKey = `${prefix}ExecutablePath` as const;
   const [dataPath, setDataPath] = useState(settings[dataKey]);
@@ -53,8 +51,8 @@ export function EditorPaths({
     <details className="editor-paths">
       <summary>{name} 路径配置</summary>
       <p className="quiet-note">
-        自动查找国内版安装位置。数据根目录名称须为{" "}
-        {provider === "trae-cn" ? "Trae CN" : "com.qodercn.app.stable"}。
+        自动查找对应地区的安装位置。数据根目录名称为 {providers[provider].data}
+        。
       </p>
       {(
         [
@@ -63,14 +61,14 @@ export function EditorPaths({
             label: "应用",
             value: executablePath,
             set: setExecutablePath,
-            placeholder: state?.client.executable || "自动查找国内版应用",
+            placeholder: state?.client.executable || "自动查找客户端应用",
           },
           {
             kind: "data",
-            label: "国内版数据根目录",
+            label: "数据根目录",
             value: dataPath,
             set: setDataPath,
-            placeholder: state?.dataPath || "自动查找国内版数据",
+            placeholder: state?.dataPath || "自动查找客户端数据",
           },
         ] as const
       ).map((item) => (
@@ -155,12 +153,21 @@ export function EditorAccounts({
   } | null>(null);
   const [nickname, setNickname] = useState("");
   const [note, setNote] = useState("");
+  const [login, setLogin] = useState<{ id: string; expiresAt: number } | null>(
+    null,
+  );
   const name = providerNames[provider],
-    api = window.workbuddy;
+    api = apiFor(provider);
+  useEffect(
+    () => () => {
+      if (login) void api.cancelLogin(login.id).catch(() => {});
+    },
+    [login, api],
+  );
   const accounts = (state?.accounts || [])
     .filter(
       (account) =>
-        `${account.nickname} ${account.note}`
+        `${account.nickname} ${account.note} ${account.uid || ""}`
           .toLowerCase()
           .includes(search.toLowerCase()) &&
         (!favorites || account.favorite),
@@ -216,7 +223,7 @@ export function EditorAccounts({
               ? "当前文件与已保存快照匹配"
               : state?.hasLogin
                 ? "检测到本机登录文件，可保存为账号快照"
-                : "先在国内版客户端登录，再保存账号"}
+                : "网页登录添加账号，或读取客户端当前身份"}
           </p>
         </div>
         <div className="toolbar-right">
@@ -237,6 +244,17 @@ export function EditorAccounts({
             刷新
           </Button>
           <Button
+            icon={Globe}
+            disabled={disabled || !!login}
+            onClick={() =>
+              void run("发起网页登录", async () =>
+                setLogin(await api.startLogin()),
+              )
+            }
+          >
+            网页登录
+          </Button>
+          <Button
             primary
             icon={Plus}
             disabled={disabled || !state?.hasLogin}
@@ -249,8 +267,7 @@ export function EditorAccounts({
       <div className="notice info">
         <ShieldCheck size={17} />
         <span>
-          账号快照只在本机使用。请按客户端显示的账号命名；恢复后由客户端确认登录是否有效。积分、签到和对话功能属于
-          WorkBuddy。
+          支持识别真实账号与刷新授权。首次切换前，请在客户端登录并保存当前账号，关联完整登录资料。客户端登录快照仅在本机使用。
         </span>
       </div>
       {state?.error && (
@@ -332,10 +349,21 @@ export function EditorAccounts({
                 </h3>
                 <small className="muted">
                   {account.note ||
-                    (account.automatic
-                      ? "切换前自动保存，可用于恢复"
-                      : "本机加密保存")}
+                    (account.uid
+                      ? `${settings.privacyMode ? "已识别账号" : `UID ${account.uid}`} · ${account.nativeAvailable === false ? "待关联客户端登录" : "可切换"}`
+                      : account.automatic
+                        ? "切换前自动保存，可用于恢复"
+                        : "本机加密保存")}
                 </small>
+                {account.expiresAt && (
+                  <small className="muted">
+                    授权到期{" "}
+                    {new Date(account.expiresAt).toLocaleString("zh-CN")}
+                  </small>
+                )}
+                {account.identityError && (
+                  <small className="muted">{account.identityError}</small>
+                )}
               </div>
             </div>
             <span className="muted">
@@ -346,12 +374,28 @@ export function EditorAccounts({
                 disabled={
                   disabled ||
                   account.id === state?.currentId ||
-                  state?.recoveryPending
+                  state?.recoveryPending ||
+                  account.nativeAvailable === false
                 }
                 onClick={() => setDialog({ kind: "switch", account })}
               >
                 切换
               </Button>
+              {account.canRefresh && (
+                <Button
+                  icon={RefreshCw}
+                  disabled={disabled}
+                  onClick={() =>
+                    void run(
+                      "刷新授权",
+                      () => api.refreshEditor(provider, account.id),
+                      "授权已刷新，客户端登录资料保留",
+                    )
+                  }
+                >
+                  续期
+                </Button>
+              )}
               <button
                 className="icon-button"
                 aria-label={`${account.favorite ? "取消收藏" : "收藏"}${account.nickname}`}
@@ -395,6 +439,20 @@ export function EditorAccounts({
           />
         )}
       </section>
+      {login && (
+        <LoginModal
+          ticket={login}
+          provider={provider}
+          close={() => {
+            void api.cancelLogin(login.id);
+            setLogin(null);
+          }}
+          complete={() => {
+            setLogin(null);
+            void run("更新账号", () => api.snapshot());
+          }}
+        />
+      )}
       <EditorPaths
         key={provider}
         provider={provider}
@@ -450,8 +508,8 @@ export function EditorAccounts({
           {dialog.kind === "capture" || dialog.kind === "edit" ? (
             <>
               <p className="quiet-note">
-                请确认 {name}{" "}
-                中显示的是要保存的账号。登录快照无法读取官方身份，名称由你填写。
+                请确认 {name} 中显示的是要保存的账号。优先识别真实
+                UID；格式暂不支持时仍可按名称保留兼容快照。
               </p>
               <label className="form-field">
                 账号名称

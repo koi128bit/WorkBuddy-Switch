@@ -1,17 +1,37 @@
 import { test, expect } from "@playwright/test";
 import { fixtureState, fixtureSessions, fixtureUsage } from "./fixtures";
 
-test('all six clients can be selected and editor OAuth controls are visible',async({page})=>{
-  await page.goto('/');
-  for(const provider of ['workbuddy','workbuddy-global','trae-cn','trae-global','qoder-cn','qoder-global']) {
-    await page.getByLabel('切换客户端',{exact:true}).selectOption(provider);
-    await expect(page.getByRole('heading',{name:'账号',exact:true})).toBeVisible();
-    if(provider.startsWith('trae')||provider.startsWith('qoder')) {
-      await expect(page.getByRole('button',{name:'网页登录',exact:true})).toBeVisible();
-      await expect(page.getByRole('button',{name:'保存当前账号',exact:true})).toBeVisible();
-      await expect(page.getByRole('button',{name:'积分',exact:true})).toHaveCount(0);
+test("all six clients can be selected and editor OAuth controls are visible", async ({
+  page,
+}) => {
+  await page.goto("/");
+  for (const provider of [
+    "workbuddy",
+    "workbuddy-global",
+    "trae-cn",
+    "trae-global",
+    "qoder-cn",
+    "qoder-global",
+  ]) {
+    await page.getByLabel("切换客户端", { exact: true }).selectOption(provider);
+    await expect(
+      page.getByRole("heading", { name: "账号", exact: true }),
+    ).toBeVisible();
+    if (provider.startsWith("trae") || provider.startsWith("qoder")) {
+      await expect(
+        page.getByRole("button", { name: "网页登录", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "保存当前账号", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "积分", exact: true }),
+      ).toHaveCount(0);
     }
-    if(provider==='workbuddy-global')await expect(page.getByRole('button',{name:'一键领积分',exact:true})).toHaveCount(0);
+    if (provider === "workbuddy-global")
+      await expect(
+        page.getByRole("button", { name: "一键领积分", exact: true }),
+      ).toHaveCount(0);
   }
 });
 
@@ -24,6 +44,16 @@ test.beforeEach(async ({ page }) => {
       const changed = () => listeners.forEach((callback) => callback());
       const bridge = {
         snapshot: async () => structuredClone(snapshot),
+        workbuddyScope: async (
+          _provider: string,
+          method: string,
+          _args: unknown[],
+        ) => {
+          if (method === "sessions") return sessions;
+          if (method === "usage") return usage;
+          return null;
+        },
+        refreshEditor: async () => {},
         captureEditor: async (
           provider: "trae-cn" | "qoder-cn",
           nickname: string,
@@ -473,7 +503,7 @@ test("browser authorization completes without switching the current client ident
     .click();
   await page.getByRole("button", { name: "添加账号", exact: true }).click();
   await expect(page.getByRole("dialog")).toContainText(
-    "不会切换 WorkBuddy 当前登录身份",
+    "当前客户端继续使用原来的身份",
   );
   await page
     .getByRole("button", { name: "打开官方登录页", exact: true })

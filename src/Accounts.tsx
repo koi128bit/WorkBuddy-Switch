@@ -12,6 +12,7 @@ import { Button, Empty, mask, number } from "./components";
 import { AccountTasks, CheckinStatus, type Claim, type Run } from "./Rewards";
 import type { Account, Snapshot } from "./types";
 import { accountHealth, suggestedAccount } from "./account-health";
+import { apiFor } from "./providers";
 
 const expiry = (value?: number | null) =>
   value ? new Date(value).toLocaleDateString("sv-SE") : "未提供";
@@ -39,6 +40,8 @@ export function Accounts({
   setSelected: (ids: string[]) => void;
   claim: Claim;
 }) {
+  const api = apiFor(state.settings.activeProvider);
+  const rewards = state.settings.activeProvider === "workbuddy";
   const [search, setSearch] = useState(""),
     [sort, setSort] = useState("recent"),
     [filter, setFilter] = useState("all"),
@@ -165,7 +168,7 @@ export function Accounts({
             <span>账号</span>
             <span>可用积分</span>
             <span>到期时间</span>
-            <span>今日签到</span>
+            <span>{rewards ? "今日签到" : "服务地区"}</span>
             <span>操作</span>
           </div>
           {accounts.map((item, index) => {
@@ -236,7 +239,11 @@ export function Accounts({
                 <span className={urgent ? "pending" : "muted"}>
                   {expiry(item.quota?.expiresAt)}
                 </span>
-                <CheckinStatus account={item} />
+                {rewards ? (
+                  <CheckinStatus account={item} />
+                ) : (
+                  <span className="muted">国际版</span>
+                )}
                 <div className="table-actions">
                   <Button
                     disabled={disabled || active}
@@ -269,7 +276,7 @@ export function Accounts({
                         <button
                           onClick={() => {
                             void run("更新收藏", () =>
-                              window.workbuddy.editAccount(item.id, {
+                              api.editAccount(item.id, {
                                 favorite: !item.favorite,
                               }),
                             );
@@ -281,22 +288,24 @@ export function Accounts({
                         <button
                           onClick={() => {
                             void run("刷新账号", async () => {
-                              await window.workbuddy.refreshQuotas(item.id);
-                              await window.workbuddy.refreshRewards([item.id]);
+                              await api.refreshQuotas(item.id);
+                              if (rewards) await api.refreshRewards([item.id]);
                             });
                             setOpenMenu("");
                           }}
                         >
                           刷新这个账号
                         </button>
-                        <button
-                          onClick={() => {
-                            claim([item.id]);
-                            setOpenMenu("");
-                          }}
-                        >
-                          领取此账号积分
-                        </button>
+                        {rewards && (
+                          <button
+                            onClick={() => {
+                              claim([item.id]);
+                              setOpenMenu("");
+                            }}
+                          >
+                            领取此账号积分
+                          </button>
+                        )}
                         <button
                           className="red"
                           onClick={() => {
@@ -330,7 +339,7 @@ export function Accounts({
           <span>
             {valid.length
               ? `可用积分合计 ${number(valid.reduce((sum, item) => sum + item.quota!.remaining, 0))} · ${valid.length}/${state.accounts.length} 个账号查询成功`
-              : "点击刷新查询官方积分与签到状态"}
+              : "点击刷新查询官方积分状态"}
           </span>
         </div>
         {account && (
@@ -352,14 +361,16 @@ export function Accounts({
                 <small>积分</small>
               </strong>
             </div>
-            <AccountTasks
-              key={account.id}
-              account={account}
-              disabled={disabled}
-              run={run}
-              claim={claim}
-              compact
-            />
+            {rewards && (
+              <AccountTasks
+                key={account.id}
+                account={account}
+                disabled={disabled}
+                run={run}
+                claim={claim}
+                compact
+              />
+            )}
             {account.quotaError && (
               <p className="inspector-error">{account.quotaError}</p>
             )}

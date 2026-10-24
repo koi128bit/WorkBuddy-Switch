@@ -72,7 +72,9 @@ import {
 import appIcon from "../assets/icon.png";
 import { Accounts } from "./Accounts";
 import { RewardsPage } from "./Rewards";
-import { EditorAccounts, EditorPaths, providerNames } from "./EditorAccounts";
+import { EditorAccounts, EditorPaths } from "./EditorAccounts";
+import { apiFor, providerNames, isWorkBuddy } from "./providers";
+import { LoginModal } from "./LoginModal";
 
 type Page = "overview" | "accounts" | "sessions" | "usage" | "settings";
 const nav = [
@@ -138,9 +140,9 @@ export function App() {
   );
   const requestId = useRef(0),
     usageId = useRef(0),
-    sessionId = useRef(0),
-    api = window.workbuddy;
+    sessionId = useRef(0);
   const provider = state?.settings.activeProvider || "workbuddy";
+  const api = apiFor(provider);
   const query = useMemo<UsageQuery>(() => {
     let since: number | null = null,
       until: number | null = null;
@@ -167,7 +169,7 @@ export function App() {
     }
   }, [api]);
   const loadData = useCallback(async () => {
-    if (!api || provider !== "workbuddy") return;
+    if (!api || !isWorkBuddy(provider)) return;
     const currentSessionRequest = ++sessionId.current;
     try {
       const result = await api.sessions();
@@ -191,8 +193,13 @@ export function App() {
     }
   }, [api, query, provider]);
   useEffect(() => {
-    if (provider !== "workbuddy")
+    if (!isWorkBuddy(provider))
       setPage((current) => (current === "settings" ? current : "accounts"));
+    else if (provider === "workbuddy-global")
+      setPage((current) => (current === "overview" ? "accounts" : current));
+    setSelectedAccounts(null);
+    setSessions([]);
+    setUsage(emptyUsage);
   }, [provider]);
   useEffect(() => {
     void reload();
@@ -327,7 +334,7 @@ export function App() {
       </div>
     );
   const privacy = state.settings.privacyMode;
-  const editor = provider !== "workbuddy" ? state.editors?.[provider] : null;
+  const editor = !isWorkBuddy(provider) ? state.editors?.[provider] : null;
   const currentClient = editor?.client || state.client;
   const clientName = providerNames[provider];
   const disabled = !!task || state.busy;
@@ -372,7 +379,7 @@ export function App() {
           <span>客户端</span>
           <select
             aria-label="切换客户端"
-            disabled={disabled}
+            disabled={disabled || !!login}
             value={provider}
             onChange={(event) => {
               setPage("accounts");
@@ -383,16 +390,19 @@ export function App() {
               });
             }}
           >
-            <option value="workbuddy">WorkBuddy</option>
-            <option value="trae-cn">Trae CN</option>
-            <option value="qoder-cn">Qoder CN</option>
+            {Object.entries(providerNames).map(([id, name]) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
           </select>
         </label>
         <nav aria-label="主导航">
           {nav
             .filter(
               (item) =>
-                provider === "workbuddy" ||
+                (isWorkBuddy(provider) &&
+                  (item.id !== "overview" || provider === "workbuddy")) ||
                 item.id === "accounts" ||
                 item.id === "settings",
             )
@@ -421,7 +431,7 @@ export function App() {
           <div className="sidebar-current">
             <small>当前账号</small>
             <strong>
-              {provider === "workbuddy"
+              {isWorkBuddy(provider)
                 ? state.current
                   ? name(state.current.id)
                   : "尚未登录"
@@ -430,7 +440,7 @@ export function App() {
                   )?.nickname || "未匹配保存快照"}
             </strong>
             <span>
-              {provider !== "workbuddy"
+              {!isWorkBuddy(provider)
                 ? clientName
                 : state.current
                   ? mask(state.current.id, privacy)
@@ -472,7 +482,7 @@ export function App() {
               </span>
             </div>
             <div className="page-actions">
-              {provider === "workbuddy" &&
+              {isWorkBuddy(provider) &&
               (page === "accounts" || page === "overview") ? (
                 <>
                   <Button
@@ -482,7 +492,8 @@ export function App() {
                     onClick={() =>
                       void run("刷新账号状态", async () => {
                         await api.refreshQuotas();
-                        await api.refreshRewards();
+                        if (provider === "workbuddy")
+                          await api.refreshRewards();
                       })
                     }
                   >
@@ -501,25 +512,27 @@ export function App() {
                       添加账号
                     </Button>
                   )}
-                  <Button
-                    icon={Gift}
-                    primary
-                    disabled={
-                      disabled ||
-                      !(page === "accounts"
-                        ? selected.length
-                        : state.accounts.length)
-                    }
-                    onClick={() =>
-                      claim(
-                        page === "accounts"
-                          ? selected
-                          : state.accounts.map((account) => account.id),
-                      )
-                    }
-                  >
-                    一键领积分
-                  </Button>
+                  {provider === "workbuddy" && (
+                    <Button
+                      icon={Gift}
+                      primary
+                      disabled={
+                        disabled ||
+                        !(page === "accounts"
+                          ? selected.length
+                          : state.accounts.length)
+                      }
+                      onClick={() =>
+                        claim(
+                          page === "accounts"
+                            ? selected
+                            : state.accounts.map((account) => account.id),
+                        )
+                      }
+                    >
+                      一键领积分
+                    </Button>
+                  )}
                 </>
               ) : page === "usage" ? (
                 <Button
@@ -551,7 +564,7 @@ export function App() {
               </button>
             </div>
           )}
-          {provider === "workbuddy" && state.authError && !error && (
+          {isWorkBuddy(provider) && state.authError && !error && (
             <div className="notice warn">
               <Info size={17} />
               <span>{state.authError}</span>
@@ -565,7 +578,7 @@ export function App() {
               claim={claim}
             />
           )}
-          {provider !== "workbuddy" && page === "accounts" && (
+          {!isWorkBuddy(provider) && page === "accounts" && (
             <EditorAccounts
               key={provider}
               provider={provider}
@@ -575,7 +588,7 @@ export function App() {
               run={run}
             />
           )}
-          {provider === "workbuddy" && page === "accounts" && (
+          {isWorkBuddy(provider) && page === "accounts" && (
             <Accounts
               state={state}
               disabled={disabled}
@@ -597,7 +610,7 @@ export function App() {
               }
             />
           )}
-          {provider === "workbuddy" && page === "sessions" && (
+          {isWorkBuddy(provider) && page === "sessions" && (
             <Sessions
               sessions={sessions}
               error={sessionError}
@@ -608,7 +621,7 @@ export function App() {
               resume={resume}
             />
           )}
-          {provider === "workbuddy" && page === "usage" && (
+          {isWorkBuddy(provider) && page === "usage" && (
             <UsagePage
               usage={usage}
               error={usageError}
@@ -625,6 +638,7 @@ export function App() {
           )}
           {page === "settings" && (
             <SettingsPage
+              key={provider}
               state={state}
               disabled={disabled}
               save={saveSettings}
@@ -652,7 +666,7 @@ export function App() {
           {task ||
             (state.busy
               ? "任务执行中…"
-              : provider !== "workbuddy"
+              : !isWorkBuddy(provider)
                 ? "登录状态由客户端确认"
                 : state.refreshing
                   ? "正在刷新积分…"
@@ -664,7 +678,7 @@ export function App() {
           className="statusbar-save"
           disabled={disabled}
           onClick={() =>
-            provider === "workbuddy"
+            isWorkBuddy(provider)
               ? void run(
                   "保存当前账号",
                   () => api.capture(),
@@ -673,7 +687,7 @@ export function App() {
               : setPage("accounts")
           }
         >
-          {provider === "workbuddy" ? "保存当前账号" : "管理账号"}
+          {isWorkBuddy(provider) ? "保存当前账号" : "管理账号"}
         </button>
         <button
           className="icon-button"
@@ -730,6 +744,7 @@ export function App() {
       {login && (
         <LoginModal
           ticket={login}
+          provider={provider}
           close={() => {
             void api.cancelLogin(login.id);
             setLogin(null);
@@ -1229,87 +1244,6 @@ function UsagePage({
   );
 }
 
-function LoginModal({
-  ticket,
-  close,
-  complete,
-}: {
-  ticket: { id: string; expiresAt: number };
-  close: () => void;
-  complete: () => void;
-}) {
-  const [message, setMessage] = useState("请在官方网页完成登录或扫码授权。"),
-    [failure, setFailure] = useState("");
-  const completeRef = useRef(complete);
-  completeRef.current = complete;
-  useEffect(() => {
-    let stopped = false,
-      running = false;
-    const timer = setInterval(async () => {
-      if (stopped || running) return;
-      if (Date.now() >= ticket.expiresAt) {
-        setFailure("授权请求已过期，请关闭弹窗后重新开始。");
-        clearInterval(timer);
-        return;
-      }
-      running = true;
-      try {
-        const result = await window.workbuddy.pollLogin(ticket.id);
-        if (!stopped && result.done) {
-          clearInterval(timer);
-          completeRef.current();
-        }
-      } catch (e) {
-        if (!stopped) {
-          setFailure((e as Error).message);
-          clearInterval(timer);
-        }
-      } finally {
-        running = false;
-      }
-    }, 2500);
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-    };
-  }, [ticket]);
-  return (
-    <Modal
-      title="网页登录添加账号"
-      subtitle="在 WorkBuddy 官方页面授权，登录信息直接加密保存在本机。"
-      onClose={close}
-      footer={
-        <>
-          <Button onClick={close}>取消登录</Button>
-          <Button
-            primary
-            icon={ExternalLink}
-            disabled={!!failure}
-            onClick={() => {
-              void window.workbuddy
-                .openLogin(ticket.id)
-                .then(() =>
-                  setMessage("官方授权页面已打开，完成后会自动保存账号。"),
-                )
-                .catch((e: Error) => setFailure(e.message));
-            }}
-          >
-            打开官方登录页
-          </Button>
-        </>
-      }
-    >
-      <div className="confirm-icon">
-        <Globe size={26} />
-      </div>
-      <p className="confirmation-copy">{failure || message}</p>
-      <div className="inline-note">
-        <ShieldCheck size={15} />
-        授权有效期 5 分钟。添加账号不会切换 WorkBuddy 当前登录身份。
-      </div>
-    </Modal>
-  );
-}
 function AccountEditor({
   account,
   disabled,
@@ -1458,11 +1392,19 @@ function SettingsPage({
   ) => Promise<void>;
   transfer: (m: "import" | "export") => void;
 }) {
+  const globalWorkBuddy = state.settings.activeProvider === "workbuddy-global";
+  const api = apiFor(globalWorkBuddy ? "workbuddy-global" : "workbuddy");
   const [tab, setTab] = useState("general"),
     [paths, setPaths] = useState({
-      authPath: state.settings.authPath,
-      dataPath: state.settings.dataPath,
-      executablePath: state.settings.executablePath,
+      authPath: globalWorkBuddy
+        ? state.settings.workbuddyGlobalAuthPath
+        : state.settings.authPath,
+      dataPath: globalWorkBuddy
+        ? state.settings.workbuddyGlobalDataPath
+        : state.settings.dataPath,
+      executablePath: globalWorkBuddy
+        ? state.settings.workbuddyGlobalExecutablePath
+        : state.settings.executablePath,
     });
   const [diagnostic, setDiagnostic] = useState<Diagnostics | null>(null),
     [backups, setBackups] = useState<BackupFile[]>([]),
@@ -1470,14 +1412,14 @@ function SettingsPage({
     [backupError, setBackupError] = useState("");
   useEffect(() => {
     if (tab === "data")
-      void window.workbuddy
+      void api
         .backups()
         .then((files) => {
           setBackups(files);
           setBackupError("");
         })
         .catch((e: Error) => setBackupError(e.message));
-  }, [tab]);
+  }, [tab, api]);
   const settings = state.settings,
     change = <K extends keyof Settings>(key: K, value: Settings[K]) =>
       void save({ ...settings, [key]: value });
@@ -1519,7 +1461,7 @@ function SettingsPage({
               <>
                 <Toggle
                   label="登录系统时启动"
-                  description="在 macOS 或 Windows 登录后打开工作台。"
+                  description="在 macOS、Windows 或 Linux 登录后打开工作台。"
                   checked={settings.launchAtLogin}
                   onChange={(v) => change("launchAtLogin", v)}
                   disabled={disabled}
@@ -1540,7 +1482,7 @@ function SettingsPage({
                 />
                 <Toggle
                   label="启动时保存当前账号"
-                  description="自动更新当前 WorkBuddy 登录快照，默认关闭。"
+                  description="自动更新 WorkBuddy 国内版当前登录快照，默认关闭。"
                   checked={settings.autoCapture}
                   onChange={(v) => change("autoCapture", v)}
                   disabled={disabled}
@@ -1646,7 +1588,7 @@ function SettingsPage({
           <>
             {section(
               "签到",
-              "应用运行时执行，签到时间按北京时间计算。",
+              "仅 WorkBuddy 国内版。应用运行时执行，签到时间按北京时间计算。",
               <>
                 <Toggle
                   label="自动签到领积分"
@@ -1783,8 +1725,8 @@ function SettingsPage({
                   <div>
                     <strong>凭据始终由系统加密</strong>
                     <p>
-                      macOS 使用钥匙串保护，Windows 使用系统
-                      DPAPI。界面不会读取或展示访问 Token。
+                      macOS 使用钥匙串，Windows 使用 DPAPI，Linux
+                      使用系统密钥环。界面不会读取或展示访问凭据。
                     </p>
                   </div>
                 </div>
@@ -1795,7 +1737,7 @@ function SettingsPage({
         {tab === "connection" && (
           <>
             {section(
-              "客户端连接",
+              globalWorkBuddy ? "WorkBuddy 国际版连接" : "WorkBuddy 连接",
               "自动发现安装位置，也支持自定义路径。",
               <>
                 <div className="connection-status">
@@ -1844,8 +1786,7 @@ function SettingsPage({
                         icon={FolderOpen}
                         onClick={() =>
                           void run("选择路径", async () => {
-                            const result =
-                              await window.workbuddy.choosePath(kind);
+                            const result = await api.choosePath(kind);
                             if (result)
                               setPaths((p) => ({ ...p, [key]: result }));
                           })
@@ -1873,14 +1814,28 @@ function SettingsPage({
                   <Button
                     primary
                     disabled={disabled}
-                    onClick={() => void save({ ...settings, ...paths })}
+                    onClick={() =>
+                      void save(
+                        globalWorkBuddy
+                          ? {
+                              ...settings,
+                              workbuddyGlobalAuthPath: paths.authPath,
+                              workbuddyGlobalDataPath: paths.dataPath,
+                              workbuddyGlobalExecutablePath:
+                                paths.executablePath,
+                            }
+                          : { ...settings, ...paths },
+                      )
+                    }
                   >
                     保存路径配置
                   </Button>
                 </div>
               </>,
             )}
-            {(["trae-cn", "qoder-cn"] as const).map((provider) => (
+            {(
+              ["trae-cn", "trae-global", "qoder-cn", "qoder-global"] as const
+            ).map((provider) => (
               <EditorPaths
                 key={provider}
                 provider={provider}
@@ -1904,7 +1859,7 @@ function SettingsPage({
                     disabled={disabled}
                     onClick={() =>
                       void run("运行诊断", async () =>
-                        setDiagnostic(await window.workbuddy.diagnostics()),
+                        setDiagnostic(await api.diagnostics()),
                       )
                     }
                   >
@@ -1933,13 +1888,14 @@ function SettingsPage({
           <>
             {section(
               "WorkBuddy 账号备份",
-              "WorkBuddy 网页授权可跨设备备份；Trae CN 与 Qoder CN 快照仅限本机。",
+              "WorkBuddy 网页授权可跨设备备份；Trae 与 Qoder 的客户端登录快照仅限本机。",
               <>
                 <div className="setting-row">
                   <div>
                     <div className="setting-label">导出账号备份</div>
                     <div className="setting-description">
-                      使用你设置的密码加密，支持 macOS 与 Windows 互相导入。
+                      使用你设置的密码加密，支持 macOS、Windows 与 Linux
+                      互相导入同地区账号。
                     </div>
                   </div>
                   <Button
@@ -1980,8 +1936,7 @@ function SettingsPage({
                         void run(
                           "迁入旧版账号",
                           async () => {
-                            const result =
-                              await window.workbuddy.importLegacy();
+                            const result = await api.importLegacy();
                             if (result.skipped)
                               throw new Error(
                                 `已迁入 ${result.imported} 个账号，${result.skipped} 个快照暂无法读取。请解锁钥匙串后重试。`,
@@ -2037,8 +1992,8 @@ function SettingsPage({
                       void run(
                         "备份对话",
                         async () => {
-                          await window.workbuddy.backupSessions();
-                          setBackups(await window.workbuddy.backups());
+                          await api.backupSessions();
+                          setBackups(await api.backups());
                         },
                         "对话数据库已备份",
                       )
@@ -2071,9 +2026,7 @@ function SettingsPage({
                     icon={FolderOpen}
                     disabled={disabled}
                     onClick={() =>
-                      void run("打开备份目录", () =>
-                        window.workbuddy.openFolder("backups"),
-                      )
+                      void run("打开备份目录", () => api.openFolder("backups"))
                     }
                   >
                     打开备份目录
@@ -2092,7 +2045,7 @@ function SettingsPage({
                   disabled={disabled}
                   onClick={() =>
                     void run("打开数据目录", () =>
-                      window.workbuddy.openFolder("application"),
+                      api.openFolder("application"),
                     )
                   }
                 >
@@ -2116,10 +2069,14 @@ function SettingsPage({
                     <h3>WorkBuddy Switch</h3>
                     <p>
                       版本 {state.version} ·{" "}
-                      {state.platform === "darwin" ? "macOS" : "Windows"}
+                      {state.platform === "darwin"
+                        ? "macOS"
+                        : state.platform === "linux"
+                          ? "Linux"
+                          : "Windows"}
                     </p>
                   </div>
-                  <span className="badge">三个客户端</span>
+                  <span className="badge">三种产品 · 六个客户端</span>
                 </div>
                 <div className="setting-row">
                   <div>
@@ -2133,7 +2090,7 @@ function SettingsPage({
                     disabled={disabled}
                     onClick={() =>
                       void run("检查更新", async () => {
-                        const result = await window.workbuddy.checkUpdate();
+                        const result = await api.checkUpdate();
                         setUpdate(
                           result.available
                             ? `发现新版本 ${result.version}，请前往下载页面安装。`
@@ -2154,19 +2111,19 @@ function SettingsPage({
                 <div className="about-links">
                   <Button
                     icon={ExternalLink}
-                    onClick={() => void window.workbuddy.openLink("github")}
+                    onClick={() => void api.openLink("github")}
                   >
                     GitHub 仓库
                   </Button>
                   <Button
                     icon={BookOpen}
-                    onClick={() => void window.workbuddy.openLink("wiki")}
+                    onClick={() => void api.openLink("wiki")}
                   >
                     使用 Wiki
                   </Button>
                   <Button
                     icon={Download}
-                    onClick={() => void window.workbuddy.openLink("releases")}
+                    onClick={() => void api.openLink("releases")}
                   >
                     下载页面
                   </Button>
@@ -2182,13 +2139,10 @@ function SettingsPage({
                   <strong>你的账号属于你</strong>
                   <p>
                     没有遥测、广告或第三方凭据上传。WorkBuddy
-                    凭据用于官方授权与积分接口；Trae CN 和 Qoder CN
-                    快照仅在本机恢复。账号库采用系统加密，对话和用量在本机处理。
+                    凭据用于官方授权与积分接口；Trae 和 Qoder
+                    授权同样仅发送至对应地区官方接口，客户端登录快照在本机恢复。账号库采用系统加密，对话和用量在本机处理。
                   </p>
-                  <TextLink
-                    arrow
-                    onClick={() => void window.workbuddy.openLink("privacy")}
-                  >
+                  <TextLink arrow onClick={() => void api.openLink("privacy")}>
                     查看安全与隐私说明
                   </TextLink>
                 </div>

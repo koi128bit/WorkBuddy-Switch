@@ -112,6 +112,7 @@ export function apiOrigin(document) {
       "www.workbuddy.cn",
       "codebuddy.cn",
       "www.codebuddy.cn",
+      "copilot.tencent.com",
     ].includes(domain)
   )
     throw new Error("账号服务地区或域名无法识别，已停止发送凭据。");
