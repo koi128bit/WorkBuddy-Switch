@@ -144,7 +144,17 @@ test("malformed task lists and foreign realm accounts fail without sending their
 });
 
 test("growth task list skips malformed identifiers without aborting valid tasks", () => {
-  const tasks = api.parseGrowthTasks({tasks:[null, {task_code:123}, {task_code:"ready",accept_status:"completed"}, {task_code:"ready",accept_status:"claimed"}]});
-  assert.deepEqual(tasks.map(task=>task.code),["ready"]);
-  assert.equal(tasks[0].claimable,true);
+  const tasks = api.parseGrowthTasks({
+    tasks: [
+      null,
+      { task_code: 123 },
+      { task_code: "ready", accept_status: "completed" },
+      { task_code: "ready", accept_status: "claimed" },
+    ],
+  });
+  assert.deepEqual(
+    tasks.map((task) => task.code),
+    ["ready"],
+  );
+  assert.equal(tasks[0].claimable, true);
 });

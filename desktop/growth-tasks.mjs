@@ -28,6 +28,7 @@ export function parseGrowthTasks(data) {
     if (
       !raw ||
       typeof raw !== "object" ||
+      typeof raw.task_code !== "string" ||
       !codePattern.test(raw.task_code) ||
       raw.task_code.includes("..") ||
       seen.has(raw.task_code)

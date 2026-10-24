@@ -8,6 +8,105 @@ import {
   claimGrowthTask,
 } from "./growth-tasks.mjs";
 
+const runStates = [
+  "running",
+  "completed",
+  "cancelled",
+  "interrupted",
+  "failed",
+];
+const actionStates = [
+  "claimed",
+  "accepted",
+  "departed",
+  "pending",
+  "skipped",
+  "error",
+];
+const counters = [
+  "claimed",
+  "accepted",
+  "departed",
+  "pending",
+  "skipped",
+  "failed",
+  "unknownAmounts",
+];
+function text(value, limit) {
+  if (typeof value !== "string" || value.length > limit)
+    throw new Error("invalid task text");
+  return value;
+}
+function amount(value, integer = false) {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < 0 ||
+    value > Number.MAX_SAFE_INTEGER ||
+    (integer && !Number.isSafeInteger(value))
+  )
+    throw new Error("invalid task amount");
+  return value;
+}
+const optionalAmount = (value) =>
+  value === null || value === undefined ? null : amount(value);
+// Task history is a public document. Only known fields may reach the renderer.
+function restoreRun(run) {
+  if (
+    !runStates.includes(run?.status) ||
+    !Array.isArray(run.accountIds) ||
+    run.accountIds.length > 1000 ||
+    !Array.isArray(run.results) ||
+    run.results.length > 1000 ||
+    typeof run.cancelRequested !== "boolean"
+  )
+    throw new Error("invalid task run");
+  const accountIds = run.accountIds.map((value) => text(value, 200));
+  const totalAccounts = amount(run.totalAccounts, true),
+    completedAccounts = amount(run.completedAccounts, true);
+  if (totalAccounts !== accountIds.length || completedAccounts > totalAccounts)
+    throw new Error("invalid task account count");
+  const summary = Object.fromEntries(
+    counters.map((key) => [key, amount(run.summary?.[key], true)]),
+  );
+  summary.credit = amount(run.summary?.credit);
+  summary.energy = amount(run.summary?.energy);
+  return {
+    id: text(run.id, 200),
+    status: run.status,
+    startedAt: amount(run.startedAt, true),
+    finishedAt: optionalAmount(run.finishedAt),
+    accountIds,
+    totalAccounts,
+    completedAccounts,
+    currentAccountId:
+      run.currentAccountId === null ? null : text(run.currentAccountId, 200),
+    currentStep: text(run.currentStep, 500),
+    cancelRequested: run.cancelRequested,
+    summary,
+    results: run.results.map((entry) => {
+      if (
+        !actionStates.includes(entry?.status) ||
+        !accountIds.includes(entry.accountId)
+      )
+        throw new Error("invalid task action");
+      return {
+        id: text(entry.id, 200),
+        accountId: entry.accountId,
+        code: text(entry.code, 100),
+        title: text(entry.title, 120),
+        status: entry.status,
+        credit: optionalAmount(entry.credit),
+        energy: optionalAmount(entry.energy),
+        current: optionalAmount(entry.current),
+        target: optionalAmount(entry.target),
+        detail: text(entry.detail, 500),
+        at: amount(entry.at, true),
+      };
+    }),
+  };
+}
+
 export class TaskRunner {
   current = null;
   warning = null;
@@ -18,7 +117,7 @@ export class TaskRunner {
     return path.join(this.store.directory, "task-run.json");
   }
   snapshot() {
-    return this.current;
+    return structuredClone(this.current);
   }
   async init() {
     let raw;
@@ -29,30 +128,9 @@ export class TaskRunner {
       throw error;
     }
     try {
-      const data = JSON.parse(raw),
-        run = data.run;
-      if (
-        data.version !== 1 ||
-        typeof run?.id !== "string" ||
-        !Array.isArray(run.results) ||
-        run.results.length > 1000 ||
-        !run.summary ||
-        ![
-          "running",
-          "completed",
-          "cancelled",
-          "interrupted",
-          "failed",
-        ].includes(run.status)
-      )
-        throw new Error("invalid");
-      this.current = run;
-      if (run.status === "running") {
-        run.status = "interrupted";
-        run.finishedAt = Date.now();
-        run.currentStep = "上次执行已中断，重新运行时会先查询官方状态。";
-        await this.flush();
-      }
+      const data = JSON.parse(raw);
+      if (data.version !== 1) throw new Error("invalid task history version");
+      this.current = restoreRun(data.run);
     } catch {
       await fs.rename(
         this.file,
@@ -63,6 +141,14 @@ export class TaskRunner {
       );
       this.current = null;
       this.warning = "上次任务记录无法读取，原记录已备份保留。";
+      return;
+    }
+    this.warning = null;
+    if (this.current.status === "running") {
+      this.current.status = "interrupted";
+      this.current.finishedAt = Date.now();
+      this.current.currentStep = "上次执行已中断，重新运行时会先查询官方状态。";
+      await this.flush();
     }
   }
   async flush() {
@@ -139,6 +225,7 @@ export class TaskRunner {
     );
     if (pending.length) {
       await this.step(accountId, `接取 ${pending.length} 项成长任务`);
+      if (this.stopped()) return;
       try {
         await store.authorized(accountId, (document) =>
           acceptGrowthTasks(
@@ -202,6 +289,7 @@ export class TaskRunner {
         continue;
       }
       await this.step(accountId, `领取：${task.title}`);
+      if (this.stopped()) return;
       try {
         const result = await store.authorized(accountId, (document) =>
           claimGrowthTask(document, task.code, store.request),
@@ -256,8 +344,8 @@ export class TaskRunner {
           unknownAmounts: 0,
         },
       };
-      await this.flush();
       try {
+        await this.flush();
         for (const accountId of selected) {
           if (this.stopped()) break;
           await this.step(accountId, "查询签到与旅行奖励");
@@ -351,7 +439,12 @@ export class TaskRunner {
         this.current.status = "failed";
         this.current.finishedAt = Date.now();
         this.current.currentStep = "任务执行中断，请先刷新官方状态后重试。";
-        this.store.onChange();
+        try {
+          await this.flush();
+        } catch {
+          this.warning = "任务记录保存失败，请刷新官方状态后再执行。";
+          this.store.onChange();
+        }
         throw error;
       }
     });

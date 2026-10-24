@@ -647,47 +647,66 @@ test("task acceptance failure remains visible while independent rewards can stil
 });
 
 test("task history restores interrupted runs through a public whitelist and cannot mutate the live batch", async (t) => {
-  const f=await fixture(t);
+  const f = await fixture(t);
   await f.store.capture(parseAuth(auth("a")));
   growthServer(f.store);
   await f.store.runTasks(["a"]);
-  const file=path.join(f.directory,"task-run.json"),data=JSON.parse(await fs.readFile(file,"utf8"));
-  data.run.status="running";data.run.auth={accessToken:"history-secret"};data.run.results[0].token="history-secret";
-  await fs.writeFile(file,JSON.stringify(data));
+  const file = path.join(f.directory, "task-run.json"),
+    data = JSON.parse(await fs.readFile(file, "utf8"));
+  data.run.status = "running";
+  data.run.auth = { accessToken: "history-secret" };
+  data.run.results[0].token = "history-secret";
+  await fs.writeFile(file, JSON.stringify(data));
   await f.store.tasks.init();
-  const snapshot=f.store.tasks.snapshot();
-  assert.equal(snapshot.status,"interrupted");
+  const snapshot = f.store.tasks.snapshot();
+  assert.equal(snapshot.status, "interrupted");
   assert.ok(!JSON.stringify(snapshot).includes("history-secret"));
-  snapshot.summary.claimed=99999;
-  assert.notEqual(f.store.tasks.snapshot().summary.claimed,99999);
-  assert.equal(JSON.parse(await fs.readFile(file,"utf8")).run.status,"interrupted");
+  snapshot.summary.claimed = 99999;
+  assert.notEqual(f.store.tasks.snapshot().summary.claimed, 99999);
+  assert.equal(
+    JSON.parse(await fs.readFile(file, "utf8")).run.status,
+    "interrupted",
+  );
 });
 test("damaged task history is preserved for recovery instead of becoming an invalid UI snapshot", async (t) => {
-  const f=await fixture(t);
+  const f = await fixture(t);
   await f.store.capture(parseAuth(auth("a")));
   growthServer(f.store);
   await f.store.runTasks(["a"]);
-  const file=path.join(f.directory,"task-run.json"),data=JSON.parse(await fs.readFile(file,"utf8"));
-  data.run.summary.credit="invalid";
-  await fs.writeFile(file,JSON.stringify(data));
+  const file = path.join(f.directory, "task-run.json"),
+    data = JSON.parse(await fs.readFile(file, "utf8"));
+  data.run.summary.credit = "invalid";
+  await fs.writeFile(file, JSON.stringify(data));
   await f.store.tasks.init();
-  assert.equal(f.store.tasks.snapshot(),null);
-  assert.match(f.store.tasks.warning,/备份/);
-  const backup=(await fs.readdir(f.directory)).find(name=>name.startsWith("task-run-damaged-"));
+  assert.equal(f.store.tasks.snapshot(), null);
+  assert.match(f.store.tasks.warning, /备份/);
+  const backup = (await fs.readdir(f.directory)).find((name) =>
+    name.startsWith("task-run-damaged-"),
+  );
   assert.ok(backup);
-  assert.equal(JSON.parse(await fs.readFile(path.join(f.directory,backup),"utf8")).run.summary.credit,"invalid");
+  assert.equal(
+    JSON.parse(await fs.readFile(path.join(f.directory, backup), "utf8")).run
+      .summary.credit,
+    "invalid",
+  );
 });
-for(const step of ["接取 1 项成长任务","领取：已完成任务"])test(`stopping during the progress update prevents the next growth mutation: ${step}`,async(t)=>{
-  const f=await fixture(t);
-  await f.store.capture(parseAuth(auth("a")));
-  const server=growthServer(f.store);
-  let cancelled=false;
-  f.store.onChange=()=>{
-    const run=f.store.tasks.snapshot();
-    if(!cancelled&&run?.currentStep===step){cancelled=true;f.store.cancelTasks(run.id);}
-  };
-  const run=await f.store.runTasks(["a"]);
-  assert.equal(run.status,"cancelled");
-  const route=step.startsWith("接取")?"/growth/tasks/accept":"/growth/tasks/ready/claim";
-  assert.ok(!server.calls.some(call=>call.url.endsWith(route)));
-});
+for (const step of ["接取 1 项成长任务", "领取：已完成任务"])
+  test(`stopping during the progress update prevents the next growth mutation: ${step}`, async (t) => {
+    const f = await fixture(t);
+    await f.store.capture(parseAuth(auth("a")));
+    const server = growthServer(f.store);
+    let cancelled = false;
+    f.store.onChange = () => {
+      const run = f.store.tasks.snapshot();
+      if (!cancelled && run?.currentStep === step) {
+        cancelled = true;
+        f.store.cancelTasks(run.id);
+      }
+    };
+    const run = await f.store.runTasks(["a"]);
+    assert.equal(run.status, "cancelled");
+    const route = step.startsWith("接取")
+      ? "/growth/tasks/accept"
+      : "/growth/tasks/ready/claim";
+    assert.ok(!server.calls.some((call) => call.url.endsWith(route)));
+  });
