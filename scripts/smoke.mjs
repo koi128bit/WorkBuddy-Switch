@@ -219,7 +219,11 @@ try {
   const popupState = await popup.evaluate(() => window.workbuddy.snapshot());
   assert.equal(popupState.accounts.length, 1);
   assert.ok(!JSON.stringify(popupState).includes("fake-test-credential"));
-  await popup.evaluate(() => window.workbuddy.openPage("settings"));
+  await popup.evaluate(() => {
+    // Navigation hides this renderer. Observe the main window's result instead
+    // of awaiting an IPC promise in a background-throttled Windows popup.
+    void window.workbuddy.openPage("settings");
+  });
   await page.getByRole("heading", { name: "设置", exact: true }).waitFor();
   console.log(
     "PASS: native desktop launch, isolated main/popup/editor IPC, system encryption, separate credential vaults, capture, settings and tray navigation",
