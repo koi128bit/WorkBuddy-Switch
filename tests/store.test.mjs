@@ -710,3 +710,85 @@ for (const step of ["接取 1 项成长任务", "领取：已完成任务"])
       : "/growth/tasks/ready/claim";
     assert.ok(!server.calls.some((call) => call.url.endsWith(route)));
   });
+
+test("growth and departure failures remain visible and do not prevent another selected account from finishing", async (t) => {
+  const f = await fixture(t);
+  for (const id of ["a", "b"]) await f.store.capture(parseAuth(auth(id)));
+  const server = growthServer(f.store),
+    original = f.store.request;
+  for (const id of ["a", "b"]) {
+    server.stateFor(id).travel = "idle";
+    await f.store.editAccount(id, { travelLocationId: "2" });
+  }
+  f.store.request = async (url, options) =>
+    options.headers["X-User-Id"] === "a" &&
+    (url.includes("/tasks/ready/claim") || url.endsWith("/depart"))
+      ? { ok: false, status: 503 }
+      : original(url, options);
+  const result = await f.store.runTasks(["a", "b"]);
+  assert.equal(result.status, "completed");
+  assert.equal(result.completedAccounts, 2);
+  assert.equal(result.summary.failed, 2);
+  assert.equal(result.summary.departed, 1);
+  assert.ok(
+    result.results.some(
+      (entry) =>
+        entry.accountId === "b" &&
+        entry.code === "ready" &&
+        entry.status === "claimed",
+    ),
+  );
+  assert.ok(
+    result.results.some(
+      (entry) =>
+        entry.accountId === "a" &&
+        entry.code === "depart" &&
+        entry.status === "error",
+    ),
+  );
+});
+test("unavailable growth API records the failure while preserving independent checkin and travel rewards", async (t) => {
+  const f = await fixture(t);
+  await f.store.capture(parseAuth(auth("a")));
+  growthServer(f.store);
+  const original = f.store.request;
+  f.store.request = async (url, options) =>
+    url.endsWith("/v2/activity/growth/tasks")
+      ? { ok: false, status: 404 }
+      : original(url, options);
+  const result = await f.store.runTasks(["a"]);
+  assert.equal(result.summary.claimed, 2);
+  assert.equal(result.summary.failed, 1);
+  assert.ok(
+    result.results.some(
+      (entry) => entry.code === "growth" && entry.status === "error",
+    ),
+  );
+});
+test("a final task-history write failure preserves confirmed results and recovers a failed batch without repeating rewards", async (t) => {
+  const f = await fixture(t);
+  await f.store.capture(parseAuth(auth("a")));
+  const server = growthServer(f.store),
+    flush = f.store.tasks.flush.bind(f.store.tasks);
+  let fail = true;
+  f.store.tasks.flush = async () => {
+    if (fail && f.store.tasks.current.status === "completed") {
+      fail = false;
+      throw new Error("fixture final write failure");
+    }
+    await flush();
+  };
+  await assert.rejects(() => f.store.runTasks(["a"]), /fixture final write/);
+  assert.equal(f.store.busy, false);
+  const saved = JSON.parse(
+    await fs.readFile(path.join(f.directory, "task-run.json"), "utf8"),
+  ).run;
+  assert.equal(saved.status, "failed");
+  assert.equal(saved.summary.claimed, 3);
+  assert.equal((await f.store.runTasks(["a"])).summary.claimed, 0);
+  assert.equal(
+    server.calls.filter((call) => call.url.includes("/tasks/ready/claim"))
+      .length,
+    1,
+  );
+});

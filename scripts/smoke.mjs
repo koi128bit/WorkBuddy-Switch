@@ -8,6 +8,46 @@ import assert from "node:assert/strict";
 const directory = await fs.mkdtemp(path.join(os.tmpdir(), "wb-desktop-smoke-"));
 const authFile = path.join(directory, "fixture-auth.info");
 const globalAuthFile = path.join(directory, "fixture-global-auth.info");
+const taskFixture = {
+  id: "isolated-task",
+  status: "running",
+  startedAt: Date.now(),
+  finishedAt: null,
+  accountIds: ["isolated-fixture"],
+  totalAccounts: 1,
+  completedAccounts: 0,
+  currentAccountId: "isolated-fixture",
+  currentStep: "读取成长任务",
+  cancelRequested: false,
+  summary: {
+    claimed: 0,
+    accepted: 0,
+    departed: 0,
+    pending: 1,
+    skipped: 0,
+    failed: 0,
+    credit: 0,
+    energy: 0,
+    unknownAmounts: 0,
+  },
+  results: [
+    {
+      id: "isolated-result",
+      accountId: "isolated-fixture",
+      code: "client-task",
+      title: "隔离任务记录",
+      status: "pending",
+      credit: null,
+      energy: null,
+      detail: "测试记录，未发送活动请求。",
+      at: Date.now(),
+    },
+  ],
+};
+await fs.writeFile(
+  path.join(directory, "task-run.json"),
+  JSON.stringify({ version: 1, run: taskFixture }),
+);
 await fs.writeFile(
   globalAuthFile,
   JSON.stringify({
@@ -109,6 +149,26 @@ try {
   const initial = await page.evaluate(() => window.workbuddy.snapshot());
   assert.equal(initial.current.id, "isolated-fixture");
   assert.equal(initial.accounts.length, 0);
+  assert.equal(initial.taskRun.status, "interrupted");
+  await page
+    .getByRole("region", { name: "任务执行进度" })
+    .getByText("执行中断", { exact: false })
+    .waitFor();
+  assert.equal(
+    await page.evaluate(() => window.workbuddy.cancelTasks("isolated-task")),
+    false,
+  );
+  assert.match(
+    await page.evaluate(async () => {
+      try {
+        await window.workbuddy.runTasks([]);
+        return "unexpected";
+      } catch (error) {
+        return error.message;
+      }
+    }),
+    /选择/,
+  );
   assert.equal(Object.keys(initial.editors).length, 4);
   assert.equal(Object.keys(initial.providers).length, 6);
   await page.evaluate(() =>
@@ -226,7 +286,7 @@ try {
   });
   await page.getByRole("heading", { name: "设置", exact: true }).waitFor();
   console.log(
-    "PASS: native desktop launch, isolated main/popup/editor IPC, system encryption, separate credential vaults, capture, settings and tray navigation",
+    "PASS: native desktop launch, isolated main/popup/editor/task IPC, interrupted-task recovery, system encryption, separate credential vaults, capture, settings and tray navigation",
   );
 } finally {
   await desktop?.close();

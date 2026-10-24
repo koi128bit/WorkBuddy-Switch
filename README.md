@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/icon.png" width="96" height="96" alt="WorkBuddy Switch 原猫咪图标" />
   <h1>WorkBuddy Switch</h1>
-  <p>管理 WorkBuddy、Trae 与 Qoder 的国内和国际版，支持 macOS、Windows 与 Linux。<br />一键领积分 · 猫猫旅行 · 安全切换 · 对话续接</p>
+  <p>管理 WorkBuddy、Trae 与 Qoder 的国内和国际版，支持 macOS、Windows 与 Linux。<br />一键做任务 · 一键领积分 · 猫猫旅行 · 安全切换 · 对话续接</p>
   <p>
     <a href="https://github.com/koi128bit/WorkBuddy-Switch/releases/latest">下载应用</a> ·
     <a href="https://github.com/koi128bit/WorkBuddy-Switch/wiki">使用指南</a> ·
@@ -17,18 +17,18 @@
 
 <p align="center"><img src=".github/assets/dark.png" width="1120" alt="原生灰阶深色界面：账号列表、积分、签到、旅行与状态栏" /></p>
 
-WorkBuddy Switch 1.2 在同一个简洁灰阶界面中管理 WorkBuddy、Trae 和 Qoder，提供六个独立客户端入口。客户端各自保留独立账号列表，支持浅色、深色、跟随系统和紧凑布局；原来的猫咪图标继续保留。主窗口和菜单栏都可以选择客户端，底部状态栏随所选客户端更新。
+WorkBuddy Switch 1.3 在同一个简洁灰阶界面中管理 WorkBuddy、Trae 和 Qoder，提供六个独立客户端入口。客户端各自保留独立账号列表，支持浅色、深色、跟随系统和紧凑布局；原来的猫咪图标继续保留。主窗口和菜单栏都可以选择客户端，底部状态栏随所选客户端更新。
 
 > 截图均为演示账号和模拟数据。真实积分、任务资格与奖励以官方接口为准，本地用量来自设备上的记录。
 
 ## 支持的客户端
 
-| 客户端            | 账号功能                                                   | 其他功能                                               |
-| ----------------- | ---------------------------------------------------------- | ------------------------------------------------------ |
-| WorkBuddy 国内版  | 保存当前登录、官方网页登录、刷新授权、切换、跨设备加密备份 | 官方积分、一键签到与旅行领奖、自动任务、本地对话与用量 |
-| WorkBuddy 国际版  | 独立账号库与官方授权、切换、积分查询、跨设备加密备份       | 独立本地对话与用量；活动不调用国内版接口               |
-| Trae CN / 国际版  | 真实 UID 识别、官方网页登录、授权续期、完整登录快照切换    | 备注、收藏、搜索、托盘切换、切换失败恢复               |
-| Qoder CN / 国际版 | 真实 UID 识别、官方网页登录、授权续期、完整登录快照切换    | 备注、收藏、搜索、托盘切换、切换失败恢复               |
+| 客户端            | 账号功能                                                   | 其他功能                                                       |
+| ----------------- | ---------------------------------------------------------- | -------------------------------------------------------------- |
+| WorkBuddy 国内版  | 保存当前登录、官方网页登录、刷新授权、切换、跨设备加密备份 | 官方积分、一键做任务、签到与旅行领奖、自动任务、本地对话与用量 |
+| WorkBuddy 国际版  | 独立账号库与官方授权、切换、积分查询、跨设备加密备份       | 独立本地对话与用量；活动不调用国内版接口                       |
+| Trae CN / 国际版  | 真实 UID 识别、官方网页登录、授权续期、完整登录快照切换    | 备注、收藏、搜索、托盘切换、切换失败恢复                       |
+| Qoder CN / 国际版 | 真实 UID 识别、官方网页登录、授权续期、完整登录快照切换    | 备注、收藏、搜索、托盘切换、切换失败恢复                       |
 
 产品、地区和本机操作系统分别适配，账号库、授权域名、应用标识及数据目录隔离。当前支持桌面客户端；Qoder IDE 插件、独立 CLI、Trae SOLO 使用不同的程序和登录目录，不共用桌面快照。
 
@@ -41,7 +41,7 @@ Trae / Qoder 网页授权与客户端登录资料分别加密保存，用同地�
 | 页面     | 功能                                                                                 |
 | -------- | ------------------------------------------------------------------------------------ |
 | **账号** | 官方网页登录添加、保存当前登录、搜索、收藏、备注、排序、多选领取、安全切换和加密备份 |
-| **积分** | 每日签到、猫猫旅行、出发与领奖、按账号配置自动任务、查看领取结果和失败原因           |
+| **积分** | 一键做任务、每日签到、猫猫旅行、成长任务进度、按账号配置自动任务和执行结果           |
 | **对话** | 搜索本地记录、按账号筛选、恢复回收站对话、迁移到当前账号继续                         |
 | **用量** | Token 分项、模型与对话排行、日期范围、日志 Credits 与 CSV 导出                       |
 | **设置** | 常规、自动任务、外观与隐私、连接与路径、数据与备份、关于与更新                       |
@@ -62,6 +62,19 @@ WorkBuddy 账号页提供「需关注」筛选，集中显示查询失败、凭�
 切换前正常退出目标客户端、保存切换前的登录快照，再恢复目标登录。只处理明确的登录字段或登录文件，保留设置、插件、工作区、对话、机器标识与其他客户端的状态。失败时尝试恢复原登录；中断后的加密恢复记录可通过 **恢复切换前登录** 处理。检测到后续新登录时，会停止恢复以保护新登录；此时可选择「保留当前登录并归档」，保存当前快照并归档旧恢复记录，再继续切换。
 
 产品和地区分别校验。客户端升级导致格式变化时请重新保存快照。本机只读核验过 Trae CN 3.4.4 的公开格式，未使用真实账号执行切换，也未安装 Qoder CN；测试使用隔离文件、模拟接口和原生主机。
+
+## 一键做任务
+
+<p align="center"><img src=".github/assets/tasks.png" width="1120" alt="一键任务执行结果：已领取奖励、待完成任务与逐项进度，演示数据" /></p>
+
+在 **WorkBuddy 国内版 → 账号** 勾选账号，点击 **一键做任务**；积分页也可对当前选中的账号执行。
+
+- 先查询官方状态，执行每日签到与已到达的旅行领奖，接取可接取的成长任务，再领取官方确认达标的任务奖励。
+- 旅行空闲且账号已保存官方地点时安排出发；未选择地点、旅行进行中或今日次数已用完会说明原因。
+- 面板实时显示当前步骤、账号进度、实际奖励和逐项结果，可折叠或点击 **停止后续任务**。已发送的请求结束后停止，已完成结果保留。
+- 最近一批执行记录保存在本机，重启后可查看；异常退出的批次标记为中断，再次执行前重新查询官方状态。
+
+接取任务不等于完成任务。需要发送对话、使用模型、专家或客户端实际操作的项目会保留进度并显示「待完成」；当前版本不自动发送这些对话。积分和能量只统计官方明确返回的数值，未返回金额单独标注。此功能目前限国内版，不改变设置里的定时自动任务范围。
 
 ## 一键领积分与猫猫旅行
 
@@ -88,13 +101,13 @@ WorkBuddy 账号页提供「需关注」筛选，集中显示查询失败、凭�
 
 从 [GitHub Releases](https://github.com/koi128bit/WorkBuddy-Switch/releases/latest) 下载，校验清单为同页的 `SHA256SUMS.txt`。
 
-| 系统              | 1.2.0 安装包                                                                                                                                                                                                                                                                            |
+| 系统              | 1.3.0 安装包                                                                                                                                                                                                                                                                            |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Apple Silicon Mac | [mac-arm64.dmg](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-mac-arm64.dmg)                                                                                                                                                            |
-| Intel Mac         | [mac-x64.dmg](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-mac-x64.dmg)                                                                                                                                                                |
-| Windows 10/11 x64 | [安装版 setup.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-windows-x64-setup.exe) · [便携版 portable.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-windows-x64-portable.exe) |
-| Linux x64         | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-linux-x86_64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-linux-amd64.deb)                                  |
-| Linux ARM64       | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-linux-arm64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-linux-arm64.deb)                                   |
+| Apple Silicon Mac | [mac-arm64.dmg](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.3.0/WorkBuddy-Switch-1.3.0-mac-arm64.dmg)                                                                                                                                                            |
+| Intel Mac         | [mac-x64.dmg](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.3.0/WorkBuddy-Switch-1.3.0-mac-x64.dmg)                                                                                                                                                                |
+| Windows 10/11 x64 | [安装版 setup.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.3.0/WorkBuddy-Switch-1.3.0-windows-x64-setup.exe) · [便携版 portable.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.3.0/WorkBuddy-Switch-1.3.0-windows-x64-portable.exe) |
+| Linux x64         | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.3.0/WorkBuddy-Switch-1.3.0-linux-x86_64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.3.0/WorkBuddy-Switch-1.3.0-linux-amd64.deb)                                  |
+| Linux ARM64       | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.3.0/WorkBuddy-Switch-1.3.0-linux-arm64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.3.0/WorkBuddy-Switch-1.3.0-linux-arm64.deb)                                   |
 
 Linux 需要桌面图形环境及已解锁的系统密钥环；AppImage 需要执行权限和对应系统的 FUSE 支持。WorkBuddy 国内版 Linux 由 UOS / 麒麟商店提供，其他客户端也以厂商当前发布的系统与架构版本为前提。自动发现失败时可手动选择应用及数据根目录。
 

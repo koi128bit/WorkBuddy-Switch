@@ -26,6 +26,26 @@ test("one-click tasks respect account selection and expose confirmed and pending
   await expect(
     page.getByRole("region", { name: "任务执行进度" }),
   ).toContainText("待完成");
+  await page.screenshot({ path: "outputs/screenshots/v1.3-tasks-light.png" });
+  await page.setViewportSize({ width: 940, height: 720 });
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((theme) => {
+      document.documentElement.dataset.theme = theme;
+    }, theme);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: `outputs/screenshots/v1.3-tasks-compact-${theme}.png`,
+      animations: "disabled",
+    });
+  }
+  await page.getByRole("button", { name: /一键任务 · 执行结束/ }).click();
+  await expect(page.getByText("客户端体验任务", { exact: true })).toHaveCount(
+    0,
+  );
 });
 test("a running one-click task can be stopped without losing its completed result", async ({
   page,
@@ -140,6 +160,11 @@ test.beforeEach(async ({ page }) => {
               },
             ],
           };
+          const account = snapshot.accounts.find(
+            (account) => account.id === ids[0],
+          );
+          if (account?.rewards?.checkin)
+            account.rewards.checkin.checkedIn = true;
           snapshot.taskRun = result;
           snapshot.busy = true;
           changed();
