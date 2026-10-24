@@ -55,6 +55,8 @@ import type {
   Usage,
   UsageQuery,
   Provider,
+  TaskPlan,
+  TaskOptions,
 } from "./types";
 import {
   Button,
@@ -77,6 +79,7 @@ import { EditorAccounts, EditorPaths } from "./EditorAccounts";
 import { apiFor, providerNames, isWorkBuddy } from "./providers";
 import { LoginModal } from "./LoginModal";
 import { TaskRunPanel } from "./TaskRunPanel";
+import { TaskPlanDialog, defaultTaskOptions } from "./TaskPlanDialog";
 
 type Page = "overview" | "accounts" | "sessions" | "usage" | "settings";
 const nav = [
@@ -128,6 +131,7 @@ export function App() {
   const [task, setTask] = useState(""),
     [toast, setToast] = useState(""),
     [confirmation, setConfirmation] = useState<Confirmation | null>(null);
+  const [taskPlan, setTaskPlan] = useState<TaskPlan | null>(null);
   const [login, setLogin] = useState<{ id: string; expiresAt: number } | null>(
     null,
   );
@@ -279,8 +283,19 @@ export function App() {
   }
   function runTasks(ids: string[]) {
     if (!ids.length) return;
+    prepareTaskPlan(ids, defaultTaskOptions);
+  }
+  function prepareTaskPlan(ids: string[], options: TaskOptions) {
+    void run("读取任务执行范围", async () => {
+      setTaskPlan(await api.prepareTasks(ids, options));
+    });
+  }
+  function executeTaskPlan() {
+    if (!taskPlan) return;
+    const plan = taskPlan;
+    setTaskPlan(null);
     void run("执行 WorkBuddy 任务", async () => {
-      const result = await api.runTasks(ids);
+      const result = await api.runTasks(plan.accountIds, plan.id);
       setToast(
         `${result.status === "cancelled" ? "任务已停止" : "任务执行结束"}：领取 ${result.summary.claimed} 项，接取 ${result.summary.accepted} 项${result.summary.failed ? `，失败 ${result.summary.failed} 项` : ""}`,
       );
@@ -772,6 +787,16 @@ export function App() {
           </div>
           <p className="confirmation-copy">{confirmation.detail}</p>
         </Modal>
+      )}
+      {taskPlan && (
+        <TaskPlanDialog
+          plan={taskPlan}
+          busy={disabled}
+          error={error}
+          close={() => setTaskPlan(null)}
+          update={(options) => prepareTaskPlan(taskPlan.accountIds, options)}
+          execute={executeTaskPlan}
+        />
       )}
       {login && (
         <LoginModal

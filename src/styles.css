@@ -2336,3 +2336,77 @@ body:has(.tray-panel) {
     gap: 8px;
   }
 }
+
+.task-plan-basic,
+.task-plan-footnote {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.task-plan-options {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0;
+}
+.task-plan-options label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+.task-plan-options input,
+.task-plan-options textarea {
+  width: 100%;
+  padding: 7px 9px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  resize: vertical;
+}
+.task-plan-options p,
+.task-plan-scope p,
+.task-plan-scope details {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.task-plan-warning {
+  color: var(--amber);
+  font-size: 12px;
+  margin: 10px 0;
+}
+.task-plan-scope {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin: 15px 0;
+}
+.task-plan-scope section {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.task-plan-scope section:last-child {
+  border-bottom: 0;
+}
+.task-plan-scope strong {
+  font-size: 12px;
+}
+.task-plan-scope details {
+  margin-top: 8px;
+}
+.task-plan-scope summary {
+  cursor: pointer;
+}
+.task-plan-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  margin-top: 9px;
+}
+.task-plan-row small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 3px;
+}

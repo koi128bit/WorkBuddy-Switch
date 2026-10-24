@@ -148,13 +148,49 @@ export interface TaskAction {
   accountId: string;
   code: string;
   title: string;
-  status: "claimed" | "accepted" | "departed" | "pending" | "skipped" | "error";
+  status:
+    | "claimed"
+    | "accepted"
+    | "departed"
+    | "pending"
+    | "skipped"
+    | "error"
+    | "dialogue";
   credit: number | null;
   energy: number | null;
   current?: number | null;
   target?: number | null;
   detail: string;
   at: number;
+}
+export interface TaskOptions {
+  includeAI: boolean;
+  maxCalls: number;
+  prompt: string;
+}
+export interface TaskPlan {
+  id: string;
+  createdAt: number;
+  expiresAt: number;
+  accountIds: string[];
+  options: TaskOptions;
+  outputLimit: number;
+  maxCalls: number;
+  accounts: {
+    accountId: string;
+    nickname: string;
+    note: string;
+    pendingTitles: string[];
+    tasks: {
+      code: string;
+      title: string;
+      model: string;
+      modelName: string;
+      calls: number;
+      current: number;
+      target: number;
+    }[];
+  }[];
 }
 export interface TaskRun {
   id: string;
@@ -167,6 +203,8 @@ export interface TaskRun {
   currentAccountId: string | null;
   currentStep: string;
   cancelRequested: boolean;
+  dialogueAttempts: number;
+  dialogueLimit: number;
   summary: {
     claimed: number;
     accepted: number;
@@ -177,6 +215,7 @@ export interface TaskRun {
     credit: number;
     energy: number;
     unknownAmounts: number;
+    dialogues: number;
   };
   results: TaskAction[];
 }
@@ -261,7 +300,8 @@ export interface BackupFile {
   createdAt: number;
 }
 export interface Bridge {
-  runTasks(ids?: string[] | null): Promise<TaskRun>;
+  prepareTasks(ids: string[] | null, options: TaskOptions): Promise<TaskPlan>;
+  runTasks(ids?: string[] | null, planId?: string | null): Promise<TaskRun>;
   cancelTasks(id: string): Promise<boolean>;
   workbuddyScope(
     provider: WorkBuddyProvider,

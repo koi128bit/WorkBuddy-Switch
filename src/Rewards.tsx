@@ -330,7 +330,8 @@ export function RewardsPage({
           </div>
         )}
         <p className="quiet-note">
-          一键执行签到、成长任务接取、已达标奖励领取和旅行。需要客户端实际操作的任务会保留进度并显示待完成。
+          执行前可选择是否包含真实 AI
+          对话，并查看账号、任务范围和次数上限。其他需要客户端操作的任务会保留官方进度。
         </p>
         <AccountTasks
           key={account.id}

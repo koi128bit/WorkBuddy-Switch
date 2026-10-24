@@ -14,6 +14,7 @@ const statuses = {
   pending: "待完成",
   skipped: "已跳过",
   error: "失败",
+  dialogue: "已对话",
 };
 export function TaskRunPanel({
   state,
@@ -86,6 +87,7 @@ export function TaskRunPanel({
             领取 {summary.claimed} 项 · 接取 {summary.accepted} 项 · 出发{" "}
             {summary.departed} 项 · 待完成 {summary.pending} 项
             {summary.failed ? ` · 失败 ${summary.failed} 项` : ""}
+            {summary.dialogues ? ` · 真实对话 ${summary.dialogues} 次` : ""}
           </span>
         )}
         <span>

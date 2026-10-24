@@ -654,7 +654,15 @@ async function start() {
   handle("remove", (id) => store.removeAccount(string(id, 200)));
   handle("refresh", (id) => store.refreshQuotas(id ? string(id, 200) : null));
   handle("rewards-refresh", (ids) => store.refreshRewards(ids ?? null));
-  handle("tasks-run", (ids) => store.runTasks(ids ?? null));
+  handle("tasks-prepare", (ids, options) =>
+    store.prepareTasks(ids ?? null, options),
+  );
+  handle("tasks-run", (ids, planId) =>
+    store.runTasks(
+      ids ?? null,
+      planId === null || planId === undefined ? null : string(planId, 200),
+    ),
+  );
   handle("tasks-cancel", (id) => store.cancelTasks(string(id, 200)));
   handle("rewards-claim", (ids, kind) =>
     store.claimRewards(ids ?? null, kind ?? "all"),

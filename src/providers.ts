@@ -49,6 +49,7 @@ const cnMethods = new Set([
   "refreshRewards",
   "claimRewards",
   "runTasks",
+  "prepareTasks",
   "cancelTasks",
   "departTravel",
   "importLegacy",

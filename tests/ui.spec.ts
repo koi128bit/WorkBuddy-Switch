@@ -12,9 +12,11 @@ test("one-click tasks respect account selection and expose confirmed and pending
     .getByRole("checkbox", { name: "选择团队协作", exact: true })
     .uncheck();
   await page.getByRole("button", { name: "一键做任务", exact: true }).click();
-  await expect(page.getByRole("dialog",{name:"执行前确认"})).toBeVisible();
-  await expect(page.getByRole("dialog",{name:"执行前确认"})).toContainText("消耗积分");
-  await page.getByRole("button",{name:/确认并执行/}).click();
+  await expect(page.getByRole("dialog", { name: "执行前确认" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "执行前确认" })).toContainText(
+    "消耗积分",
+  );
+  await page.getByRole("button", { name: /确认并执行/ }).click();
   await expect
     .poll(() =>
       page.evaluate(() => (window as unknown as { taskIds: string[] }).taskIds),
@@ -57,9 +59,11 @@ test("a running one-click task can be stopped without losing its completed resul
     (window as unknown as { holdTasks: boolean }).holdTasks = true;
   });
   await page.getByRole("button", { name: "一键做任务", exact: true }).click();
-  await expect(page.getByRole("dialog",{name:"执行前确认"})).toBeVisible();
-  await expect(page.getByRole("dialog",{name:"执行前确认"})).toContainText("消耗积分");
-  await page.getByRole("button",{name:/确认并执行/}).click();
+  await expect(page.getByRole("dialog", { name: "执行前确认" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "执行前确认" })).toContainText(
+    "消耗积分",
+  );
+  await page.getByRole("button", { name: /确认并执行/ }).click();
   await expect(
     page.getByRole("button", { name: "停止后续任务", exact: true }),
   ).toBeEnabled();
@@ -72,18 +76,44 @@ test("a running one-click task can be stopped without losing its completed resul
   ).toContainText("每日签到");
 });
 
-test("paid task range can be changed or cancelled before any dialogue is sent",async({page})=>{
-  await page.getByRole('button',{name:'一键做任务',exact:true}).click();
-  const dialog=page.getByRole('dialog',{name:'执行前确认'});await expect(dialog).toBeVisible();
-  expect(await page.evaluate(()=>(window as unknown as {taskIds?:string[]}).taskIds)).toBeUndefined();
-  await page.getByLabel('本次对话总上限',{exact:true}).fill('1');
-  await expect(dialog.getByRole('button',{name:/确认并执行/})).toBeDisabled();
-  await dialog.getByRole('button',{name:'更新范围',exact:true}).click();
-  await expect.poll(()=>page.evaluate(()=>(window as unknown as {planOptions:{maxCalls:number}}).planOptions.maxCalls)).toBe(1);
-  await expect(dialog.getByRole('button',{name:/确认并执行/})).toBeEnabled();
-  await page.screenshot({path:'outputs/screenshots/v1.4-task-confirmation.png',animations:'disabled'});
-  await dialog.getByRole('button',{name:'取消',exact:true}).click();
-  expect(await page.evaluate(()=>(window as unknown as {taskIds?:string[]}).taskIds)).toBeUndefined();
+test("paid task range can be changed or cancelled before any dialogue is sent", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "一键做任务", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "执行前确认" });
+  await expect(dialog).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { taskIds?: string[] }).taskIds,
+    ),
+  ).toBeUndefined();
+  await page.getByLabel("本次对话总上限", { exact: true }).fill("1");
+  await expect(
+    dialog.getByRole("button", { name: /确认并执行/ }),
+  ).toBeDisabled();
+  await dialog.getByRole("button", { name: "更新范围", exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { planOptions: { maxCalls: number } })
+            .planOptions.maxCalls,
+      ),
+    )
+    .toBe(1);
+  await expect(
+    dialog.getByRole("button", { name: /确认并执行/ }),
+  ).toBeEnabled();
+  await page.screenshot({
+    path: "outputs/screenshots/v1.4-task-confirmation.png",
+    animations: "disabled",
+  });
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { taskIds?: string[] }).taskIds,
+    ),
+  ).toBeUndefined();
 });
 
 test("all six clients can be selected and editor OAuth controls are visible", async ({
@@ -128,14 +158,53 @@ test.beforeEach(async ({ page }) => {
       const listeners = new Set<() => void>();
       const changed = () => listeners.forEach((callback) => callback());
       let finishTasks: ((run: TaskRun) => void) | undefined;
-      let planCounter=0;
+      let planCounter = 0;
       const bridge = {
         snapshot: async () => structuredClone(snapshot),
-        prepareTasks:async(ids:string[],options:{includeAI:boolean;maxCalls:number;prompt:string})=>{
-          (window as unknown as {planOptions:typeof options}).planOptions=options;
-          let budget=options.includeAI?options.maxCalls:0,total=0;
-          const accounts=ids.map(accountId=>{const calls=Math.min(2,budget);budget-=calls;total+=calls;return {accountId,nickname:snapshot.accounts.find(account=>account.id===accountId)!.nickname,tasks:calls?[{code:'chat_5',title:'真实对话体验',model:'fast-model',modelName:'快速模式',calls,current:0,target:5}]:[],pendingTitles:['专家团任务'],note:calls?'':'仅基础任务'};});
-          return {id:`plan-${++planCounter}`,createdAt:Date.now(),expiresAt:Date.now()+600000,accountIds:ids,options,outputLimit:64,maxCalls:total,accounts};
+        prepareTasks: async (
+          ids: string[],
+          options: { includeAI: boolean; maxCalls: number; prompt: string },
+        ) => {
+          (window as unknown as { planOptions: typeof options }).planOptions =
+            options;
+          let budget = options.includeAI ? options.maxCalls : 0,
+            total = 0;
+          const accounts = ids.map((accountId) => {
+            const calls = Math.min(2, budget);
+            budget -= calls;
+            total += calls;
+            return {
+              accountId,
+              nickname: snapshot.accounts.find(
+                (account) => account.id === accountId,
+              )!.nickname,
+              tasks: calls
+                ? [
+                    {
+                      code: "chat_5",
+                      title: "真实对话体验",
+                      model: "fast-model",
+                      modelName: "快速模式",
+                      calls,
+                      current: 0,
+                      target: 5,
+                    },
+                  ]
+                : [],
+              pendingTitles: ["专家团任务"],
+              note: calls ? "" : "仅基础任务",
+            };
+          });
+          return {
+            id: `plan-${++planCounter}`,
+            createdAt: Date.now(),
+            expiresAt: Date.now() + 600000,
+            accountIds: ids,
+            options,
+            outputLimit: 64,
+            maxCalls: total,
+            accounts,
+          };
         },
         runTasks: async (ids: string[]) => {
           (window as unknown as { taskIds: string[] }).taskIds = ids;
@@ -150,6 +219,8 @@ test.beforeEach(async ({ page }) => {
             completedAccounts: 0,
             currentAccountId: ids[0],
             currentStep: "读取官方任务状态",
+            dialogueAttempts: 1,
+            dialogueLimit: 2,
             cancelRequested: false,
             summary: {
               claimed: 1,
@@ -161,6 +232,7 @@ test.beforeEach(async ({ page }) => {
               credit: 0.25,
               energy: 0,
               unknownAmounts: 0,
+              dialogues: 1,
             },
             results: [
               {
