@@ -50,7 +50,7 @@ const message = (body, document) => {
   return text.replace(/[\x00-\x1f]/g, " ").slice(0, 180);
 };
 
-async function requestReward(document, endpoint, method, body, request) {
+export async function requestReward(document, endpoint, method, body, request) {
   if (!document.token)
     throw new RewardError(
       "此账号使用本机加密凭据，请点击「添加账号」完成官方网页登录授权后领取积分。",
