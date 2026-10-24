@@ -703,14 +703,22 @@ async function start() {
       if (value.launchAtLogin !== previous.launchAtLogin && !testMode) {
         if (!app.isPackaged)
           throw new Error("请在安装后的应用中设置开机启动。");
-        app.setLoginItemSettings({
-          openAtLogin: value.launchAtLogin,
-          ...(process.platform === "win32" &&
-          process.env.PORTABLE_EXECUTABLE_FILE
-            ? { path: process.env.PORTABLE_EXECUTABLE_FILE }
-            : {}),
-        });
+        if (process.platform === "linux") {
+          const { setLinuxAutostart } = await import("./autostart.mjs");
+          await setLinuxAutostart(
+            value.launchAtLogin,
+            process.env.APPIMAGE || process.execPath,
+          );
+        } else
+          app.setLoginItemSettings({
+            openAtLogin: value.launchAtLogin,
+            ...(process.platform === "win32" &&
+            process.env.PORTABLE_EXECUTABLE_FILE
+              ? { path: process.env.PORTABLE_EXECUTABLE_FILE }
+              : {}),
+          });
         if (
+          process.platform !== "linux" &&
           app.getLoginItemSettings(
             process.platform === "win32" && process.env.PORTABLE_EXECUTABLE_FILE
               ? { path: process.env.PORTABLE_EXECUTABLE_FILE }
@@ -722,14 +730,22 @@ async function start() {
       try {
         await store.updateSettings(value);
       } catch (error) {
-        if (!testMode && value.launchAtLogin !== previous.launchAtLogin)
-          app.setLoginItemSettings({
-            openAtLogin: previous.launchAtLogin,
-            ...(process.platform === "win32" &&
-            process.env.PORTABLE_EXECUTABLE_FILE
-              ? { path: process.env.PORTABLE_EXECUTABLE_FILE }
-              : {}),
-          });
+        if (!testMode && value.launchAtLogin !== previous.launchAtLogin) {
+          if (process.platform === "linux") {
+            const { setLinuxAutostart } = await import("./autostart.mjs");
+            await setLinuxAutostart(
+              previous.launchAtLogin,
+              process.env.APPIMAGE || process.execPath,
+            );
+          } else
+            app.setLoginItemSettings({
+              openAtLogin: previous.launchAtLogin,
+              ...(process.platform === "win32" &&
+              process.env.PORTABLE_EXECUTABLE_FILE
+                ? { path: process.env.PORTABLE_EXECUTABLE_FILE }
+                : {}),
+            });
+        }
         throw error;
       }
       nativeTheme.themeSource = value.theme;
