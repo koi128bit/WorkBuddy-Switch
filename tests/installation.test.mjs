@@ -26,7 +26,7 @@ function fixture({
   };
   const dialog = {
     async showMessageBox(options) {
-      calls.push(options.message);
+      calls.push(options.message + (options.detail ? ` ${options.detail}` : ""));
       return { response };
     },
   };

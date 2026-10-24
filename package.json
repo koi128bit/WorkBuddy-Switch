@@ -18,7 +18,7 @@
     "test:desktop": "node scripts/desktop-check.mjs",
     "test:ui": "playwright test",
     "test:smoke": "node scripts/smoke.mjs",
-    "dist:mac": "npm run build && electron-builder --mac pkg dmg zip --arm64 --x64 --publish never",
+    "dist:mac": "npm run build && electron-builder --mac pkg dmg zip --arm64 --publish never && electron-builder --mac pkg dmg zip --x64 --publish never",
     "dist:win": "npm run build && electron-builder --win nsis portable --x64 --publish never",
     "dist:dir": "npm run build && electron-builder --dir --publish never",
     "dist:linux": "npm run build && electron-builder --linux AppImage deb --publish never"
