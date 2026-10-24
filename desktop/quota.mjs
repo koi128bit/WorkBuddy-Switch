@@ -103,6 +103,18 @@ export function apiOrigin(document) {
     document.root.auth.domain ??
     document.root.account.domain ??
     document.root.domain;
+  if (["workbuddy.ai", "www.workbuddy.ai"].includes(domain))
+    return "https://www.workbuddy.ai";
+  if (
+    domain &&
+    ![
+      "workbuddy.cn",
+      "www.workbuddy.cn",
+      "codebuddy.cn",
+      "www.codebuddy.cn",
+    ].includes(domain)
+  )
+    throw new Error("账号服务地区或域名无法识别，已停止发送凭据。");
   return ["workbuddy.cn", "www.workbuddy.cn"].includes(domain)
     ? "https://www.workbuddy.cn"
     : "https://www.codebuddy.cn";

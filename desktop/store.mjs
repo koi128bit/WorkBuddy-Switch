@@ -17,6 +17,7 @@ import {
   rewardDay,
 } from "./rewards.mjs";
 import { randomUUID } from "node:crypto";
+import { clientDefinition } from "./client-registry.mjs";
 
 export class Store {
   records = [];
@@ -33,13 +34,17 @@ export class Store {
     controller,
     request = fetch,
     pathsContext,
+    provider = "workbuddy",
     onChange = () => {},
   }) {
     this.directory = directory;
     this.vault = vault;
     this.controller = controller;
     this.request = request;
-    this.pathsContext = pathsContext;
+    this.definition = clientDefinition(provider);
+    if (this.definition.product !== "workbuddy")
+      throw new Error("请选择 WorkBuddy 客户端。");
+    this.pathsContext = { ...pathsContext, provider };
     this.onChange = onChange;
   }
   get paths() {
@@ -134,7 +139,17 @@ export class Store {
   }
   async active() {
     const raw = await readOptional(this.paths.auth);
-    return raw ? parseAuth(raw) : null;
+    return raw ? this.validateRegion(parseAuth(raw)) : null;
+  }
+  validateRegion(document) {
+    const domain =
+      document.root.auth.domain ||
+      document.root.account.domain ||
+      document.root.domain;
+    const global = ["workbuddy.ai", "www.workbuddy.ai"].includes(domain);
+    if ((this.definition.region === "global") !== global)
+      throw new Error("账号服务地区不匹配，国内版与国际版不能混用。");
+    return document;
   }
   encrypt(raw) {
     if (!this.vault.available())
@@ -152,7 +167,7 @@ export class Store {
     } catch {
       throw new Error("系统无法解密该账号，请解锁钥匙串或重新导入备份。");
     }
-    const document = parseAuth(raw);
+    const document = this.validateRegion(parseAuth(raw));
     if (document.id !== id) throw new Error("账号快照身份不一致，已停止操作。");
     return document;
   }
@@ -179,6 +194,7 @@ export class Store {
     this.onChange();
   }
   async capture(document) {
+    this.validateRegion(document);
     const existing = this.records.find((r) => r.profile.id === document.id);
     const profile = {
       id: document.id,
@@ -392,8 +408,10 @@ export class Store {
     const record = this.records.find((r) => r.profile.id === id);
     if (!record) throw new Error("未找到该账号。");
     const document = record.apiEncrypted
-      ? parseAuth(
-          this.vault.decrypt(Buffer.from(record.apiEncrypted, "base64")),
+      ? this.validateRegion(
+          parseAuth(
+            this.vault.decrypt(Buffer.from(record.apiEncrypted, "base64")),
+          ),
         )
       : this.document(id);
     if (document.id !== id) throw new Error("查询凭据身份不一致，已停止操作。");
@@ -901,7 +919,7 @@ export class Store {
       let next = [...this.records];
       for (const item of records) {
         if (next.some((r) => r.profile.id === item.profile.id)) continue;
-        const auth = parseAuth(item.raw);
+        const auth = this.validateRegion(parseAuth(item.raw));
         const profile = {
           id: auth.id,
           nickname: String(item.profile.nickname || auth.nickname).slice(0, 80),

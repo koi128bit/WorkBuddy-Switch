@@ -1,12 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { parseAuth } from "./auth.mjs";
+import { clientDefinition } from "./client-registry.mjs";
 
-const origin = "https://www.codebuddy.cn";
-export function officialLoginURL(url) {
+export function officialLoginURL(url, provider = "workbuddy") {
+  const global = provider === "workbuddy-global";
   const parsed = new URL(url);
   if (
     parsed.protocol !== "https:" ||
-    !["www.codebuddy.cn", "www.workbuddy.cn"].includes(parsed.hostname) ||
+    !(
+      global
+        ? ["www.workbuddy.ai", "workbuddy.ai"]
+        : ["www.codebuddy.cn", "www.workbuddy.cn"]
+    ).includes(parsed.hostname) ||
     parsed.username ||
     parsed.password ||
     parsed.port
@@ -15,8 +20,11 @@ export function officialLoginURL(url) {
   return parsed.toString();
 }
 export class Login {
-  constructor(request) {
+  constructor(request, provider = "workbuddy") {
     this.request = request;
+    this.definition = clientDefinition(provider);
+    if (this.definition.product !== "workbuddy")
+      throw new Error("请选择 WorkBuddy 客户端。");
   }
   async json(url, options = {}) {
     let response;
@@ -43,8 +51,9 @@ export class Login {
     }
   }
   async start() {
+    const origin = this.definition.origin;
     const response = await this.json(
-      `${origin}/v2/plugin/auth/state?platform=workbuddy`,
+      `${origin}/v2/plugin/auth/state?platform=${this.definition.oauthPlatform}`,
       { method: "POST", body: "{}" },
     );
     const state = response.data?.state;
@@ -55,6 +64,7 @@ export class Login {
         response.data.auth_url ||
         response.data.url ||
         `${origin}/login?state=${encodeURIComponent(state)}`,
+      this.definition.id,
     );
     this.ticket = {
       id: randomUUID(),
@@ -77,6 +87,7 @@ export class Login {
     if (this.ticket?.id === id) this.ticket = null;
   }
   async poll(id) {
+    const origin = this.definition.origin;
     const ticket = this.require(id);
     const response = await this.json(
       `${origin}/v2/plugin/auth/token?state=${encodeURIComponent(ticket.state)}`,
@@ -84,14 +95,18 @@ export class Login {
     const data = response.data;
     const token = data?.accessToken ?? data?.access_token;
     if (typeof token !== "string" || !token) return null;
-    const domain = data.domain || "www.codebuddy.cn";
+    const domain = data.domain || new URL(origin).hostname;
     if (
-      ![
-        "codebuddy.cn",
-        "www.codebuddy.cn",
-        "workbuddy.cn",
-        "www.workbuddy.cn",
-      ].includes(domain)
+      !(
+        this.definition.region === "global"
+          ? ["workbuddy.ai", "www.workbuddy.ai"]
+          : [
+              "codebuddy.cn",
+              "www.codebuddy.cn",
+              "workbuddy.cn",
+              "www.workbuddy.cn",
+            ]
+      ).includes(domain)
     )
       throw new Error("登录凭据的服务域名不匹配，已停止保存。");
     const responseProfile = await this.json(
