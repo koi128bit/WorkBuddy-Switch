@@ -77,7 +77,7 @@ test("Qoder refresh rejects a different user from the official profile endpoint"
     /身份/,
   );
 });
-test("Trae refresh signs the existing device proof with P1363 and rejects a mismatching UID", async () => {
+test("Trae refresh signs the existing device proof using the current official DER format", async () => {
   const pair = generateKeyPairSync("ec", {
     namedCurve: "prime256v1",
     publicKeyEncoding: { type: "spki", format: "pem" },
@@ -106,7 +106,7 @@ test("Trae refresh signs the existing device proof with P1363 and rejects a mism
     verify(
       "sha256",
       Buffer.from(message),
-      { key: pair.publicKey, dsaEncoding: "ieee-p1363" },
+        { key: pair.publicKey, dsaEncoding: "der" },
       Buffer.from(proof.Signature, "base64"),
     ),
     true,

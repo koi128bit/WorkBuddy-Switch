@@ -80,6 +80,7 @@ test("native account capture deduplicates by real UID after access token rotatio
   assert.equal(f.store.records.length, 1);
   assert.equal(second.originalNickname, "林");
   assert.equal(second.nativeAvailable, true);
+  assert.equal(f.store.credential('trae-cn',second.id).token,'token-b');
   assert.equal(JSON.stringify(second).includes("token-b"), false);
 });
 test("web accounts remain encrypted, region isolated, and cannot fake desktop login", async (t) => {
