@@ -43,33 +43,42 @@ test("Qoder launcher distinguishes CN and global executable names", () => {
   );
   assert.equal(parseQoderLauncher(data), null);
 });
-test("Linux discovers custom native executables without invoking Windows tools", {skip: process.platform === 'win32' ? 'POSIX executable permissions are checked on macOS/Linux' : false}, async (t) => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "wb-platform-"));
-  t.after(() => fs.rm(root, { recursive: true, force: true }));
-  const binary = path.join(root, "qoder");
-  await fs.writeFile(binary, "fixture", { mode: 0o700 });
-  const editor = new EditorController(
-    "qoder-global",
-    () => ({ ...defaults, qoderGlobalExecutablePath: binary }),
-    { platform: "linux", home: root, env: {} },
-  );
-  assert.equal(await editor.executable(), await fs.realpath(binary));
-  const wb = new WorkBuddyController(
-    () => ({ ...defaults, executablePath: binary }),
-    { platform: "linux", home: root, env: {}, provider: "workbuddy-global" },
-  );
-  assert.equal(await wb.executable(), await fs.realpath(binary));
-  assert.equal(
-    editor.matching(
-      [
-        { pid: 1, executable: binary, command: binary },
-        { pid: 2, executable: binary + "-ide", command: binary + "-ide" },
-      ],
-      binary,
-    ).length,
-    1,
-  );
-});
+test(
+  "Linux discovers custom native executables without invoking Windows tools",
+  {
+    skip:
+      process.platform === "win32"
+        ? "POSIX executable permissions are checked on macOS/Linux"
+        : false,
+  },
+  async (t) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "wb-platform-"));
+    t.after(() => fs.rm(root, { recursive: true, force: true }));
+    const binary = path.join(root, "qoder");
+    await fs.writeFile(binary, "fixture", { mode: 0o700 });
+    const editor = new EditorController(
+      "qoder-global",
+      () => ({ ...defaults, qoderGlobalExecutablePath: binary }),
+      { platform: "linux", home: root, env: {} },
+    );
+    assert.equal(await editor.executable(), await fs.realpath(binary));
+    const wb = new WorkBuddyController(
+      () => ({ ...defaults, executablePath: binary }),
+      { platform: "linux", home: root, env: {}, provider: "workbuddy-global" },
+    );
+    assert.equal(await wb.executable(), await fs.realpath(binary));
+    assert.equal(
+      editor.matching(
+        [
+          { pid: 1, executable: binary, command: binary },
+          { pid: 2, executable: binary + "-ide", command: binary + "-ide" },
+        ],
+        binary,
+      ).length,
+      1,
+    );
+  },
+);
 test("global Trae snapshots preserve device state and cannot cross regions", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "wb-region-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
