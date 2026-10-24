@@ -1,6 +1,6 @@
 {
   "name": "workbuddy-switch",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "WorkBuddy、Trae 与 Qoder 多账号管理：国内及国际版、macOS / Windows / Linux、安全切换、一键做任务与领积分",
   "author": "koi128bit",
   "license": "MIT",
@@ -107,7 +107,8 @@
       "artifactName": "WorkBuddy-Switch-${version}-windows-${arch}-setup.exe",
       "deleteAppDataOnUninstall": false,
       "guid": "cff115b9-d86e-58de-afc6-4752a9c78ba4",
-      "shortcutName": "WorkBuddy Switch"
+      "shortcutName": "WorkBuddy Switch",
+      "uninstallDisplayName": "WorkBuddy Switch"
     },
     "portable": {
       "artifactName": "WorkBuddy-Switch-${version}-windows-${arch}-portable.exe"

@@ -214,3 +214,57 @@ test("Mac packaging keeps build bundles hidden and publishes only the final inst
     ),
   );
 });
+
+test("native peer shutdown excludes its own process, refuses active tasks and only requests normal termination", async () => {
+  const vm = await import("node:vm"),
+    source = await fs.readFile(
+      new URL("../desktop/quit-peers.jxa", import.meta.url),
+      "utf8",
+    );
+  function run(status, { refuse = false } = {}) {
+    let attempts = 0,
+      clock = 0;
+    const self = {
+        processIdentifier: 10,
+        terminated: false,
+        terminate() {
+          throw new Error("must not terminate self");
+        },
+      },
+      peer = {
+        processIdentifier: 20,
+        terminated: false,
+        terminate() {
+          attempts++;
+          if (!refuse) this.terminated = true;
+        },
+      };
+    const context = {
+      ObjC: { import() {}, unwrap: (value) => value },
+      Date: { now: () => (clock += 5000) },
+      $: {
+        NSRunningApplication: {
+          runningApplicationsWithBundleIdentifier(id) {
+            assert.equal(id, "com.koi128bit.workbuddy-switch");
+            return { count: 2, objectAtIndex: (index) => [self, peer][index] };
+          },
+        },
+        NSString: {
+          stringWithContentsOfFileEncodingError: () =>
+            JSON.stringify({ run: { status } }),
+        },
+        NSUTF8StringEncoding: 4,
+        NSThread: { sleepForTimeInterval() {} },
+      },
+    };
+    vm.createContext(context);
+    vm.runInContext(source, context);
+    return { result: context.run(["10", "/fixture/public-data"]), attempts };
+  }
+  assert.deepEqual(run("running"), { result: "busy", attempts: 0 });
+  assert.deepEqual(run("completed"), { result: "ok", attempts: 1 });
+  assert.deepEqual(run("completed", { refuse: true }), {
+    result: "running",
+    attempts: 1,
+  });
+});

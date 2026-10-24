@@ -17,7 +17,7 @@
 
 <p align="center"><img src=".github/assets/dark.png" width="1120" alt="原生灰阶深色界面：账号列表、积分、签到、旅行与状态栏" /></p>
 
-WorkBuddy Switch 1.4 在同一个简洁灰阶界面中管理 WorkBuddy、Trae 和 Qoder，提供六个独立客户端入口。客户端各自保留独立账号列表，支持浅色、深色、跟随系统和紧凑布局；原来的猫咪图标继续保留。主窗口和菜单栏都可以选择客户端，底部状态栏随所选客户端更新。
+WorkBuddy Switch 1.5 在同一个简洁灰阶界面中管理 WorkBuddy、Trae 和 Qoder，提供六个独立客户端入口。客户端各自保留独立账号列表，支持浅色、深色、跟随系统和紧凑布局；原来的猫咪图标继续保留。主窗口和菜单栏都可以选择客户端，底部状态栏随所选客户端更新。
 
 > 截图均为演示账号和模拟数据。真实积分、任务资格与奖励以官方接口为准，本地用量来自设备上的记录。
 
@@ -106,19 +106,27 @@ WorkBuddy 账号页提供「需关注」筛选，集中显示查询失败、凭�
 
 从 [GitHub Releases](https://github.com/koi128bit/WorkBuddy-Switch/releases/latest) 下载，校验清单为同页的 `SHA256SUMS.txt`。
 
-| 系统              | 1.4.0 安装包                                                                                                                                                                                                                                                                            |
+| 系统              | 1.5.0 安装包                                                                                                                                                                                                                                                                            |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Apple Silicon Mac | [mac-arm64.dmg](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.4.0/WorkBuddy-Switch-1.4.0-mac-arm64.dmg)                                                                                                                                                            |
-| Intel Mac         | [mac-x64.dmg](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.4.0/WorkBuddy-Switch-1.4.0-mac-x64.dmg)                                                                                                                                                                |
-| Windows 10/11 x64 | [安装版 setup.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.4.0/WorkBuddy-Switch-1.4.0-windows-x64-setup.exe) · [便携版 portable.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.4.0/WorkBuddy-Switch-1.4.0-windows-x64-portable.exe) |
-| Linux x64         | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.4.0/WorkBuddy-Switch-1.4.0-linux-x86_64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.4.0/WorkBuddy-Switch-1.4.0-linux-amd64.deb)                                  |
-| Linux ARM64       | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.4.0/WorkBuddy-Switch-1.4.0-linux-arm64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.4.0/WorkBuddy-Switch-1.4.0-linux-arm64.deb)                                   |
+| Apple Silicon Mac | [覆盖安装 PKG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.5.0/WorkBuddy-Switch-1.5.0-mac-arm64.pkg) · [DMG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.5.0/WorkBuddy-Switch-1.5.0-mac-arm64.dmg)                                        |
+| Intel Mac         | [覆盖安装 PKG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.5.0/WorkBuddy-Switch-1.5.0-mac-x64.pkg) · [DMG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.5.0/WorkBuddy-Switch-1.5.0-mac-x64.dmg)                                            |
+| Windows 10/11 x64 | [安装版 setup.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.5.0/WorkBuddy-Switch-1.5.0-windows-x64-setup.exe) · [便携版 portable.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.5.0/WorkBuddy-Switch-1.5.0-windows-x64-portable.exe) |
+| Linux x64         | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.5.0/WorkBuddy-Switch-1.5.0-linux-x86_64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.5.0/WorkBuddy-Switch-1.5.0-linux-amd64.deb)                                  |
+| Linux ARM64       | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.5.0/WorkBuddy-Switch-1.5.0-linux-arm64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.5.0/WorkBuddy-Switch-1.5.0-linux-arm64.deb)                                   |
 
 Linux 需要桌面图形环境及已解锁的系统密钥环；AppImage 需要执行权限和对应系统的 FUSE 支持。WorkBuddy 国内版 Linux 由 UOS / 麒麟商店提供，其他客户端也以厂商当前发布的系统与架构版本为前提。自动发现失败时可手动选择应用及数据根目录。
 
-macOS 打开 DMG，把 `WorkBuddy Switch.app` 拖到「应用程序」。Windows 运行安装程序选择安装位置，或直接运行便携版；便携版的应用数据仍保存在当前系统用户的数据目录。
+macOS 推荐双击 **PKG 覆盖安装包**，固定替换 `/Applications/WorkBuddy Switch.app`，安装前要求退出正在运行的旧版。DMG 中的应用从临时位置启动时也会提供安装并替换；检测到已安装更新版本时打开已安装版，不直接降级。账号、设置和记录继续使用原数据目录。
+
+Windows 推荐 **setup.exe 安装版**，自动使用原安装记录和位置覆盖升级，应用与卸载入口名称固定，不再选择另一个安装目录。便携版为独立可执行文件，需要自行覆盖原文件，不等同于覆盖安装。
 
 macOS 包使用 ad-hoc 签名，尚未做 Apple 公证；Windows 包尚未做 Authenticode 签名。首次打开可能提示未知发布者，处理方式见 [安装指南](https://github.com/koi128bit/WorkBuddy-Switch/wiki/安装与首次启动)。
+
+### 升级后只保留一个已安装应用
+
+新版沿用相同应用标识和数据目录。升级前先完成或停止正在执行的任务；从 1.5 起，应用会等待当前操作结束后再退出。安装不会删除账号库或设置，PKG 使用整包替换，移除应用包内的过时文件。
+
+若此前直接从 DMG、下载目录或构建目录运行，安装后从「应用程序」打开，并推出旧的 DMG。历史下载文件不会被当作已安装版本自动清理。开发构建的 `.app` 位于隐藏的 `.build/` 目录，公开 `dist/` 只收集最终安装包，减少启动台识别重复构建副本。
 
 ### 第一个账号
 

@@ -1,24 +1,15 @@
-WorkBuddy Switch 1.4.0：一键任务新增真实 AI 对话与执行前确认，保留原猫咪图标和简约灰阶界面。
+WorkBuddy Switch 1.5.0：新版覆盖旧版，沿用账号和设置。
 
-- 账号页勾选账号后点击「一键做任务」；先查看账号、任务、模型、对话内容和次数上限，更新范围并确认后执行。可以关闭对话，只做基础任务。
-- 串联每日签到、已到达旅行领奖、成长任务接取和已达标任务领奖；旅行空闲时按账号保存的官方地点安排出发。
-- 实时展示步骤、账号进度、实际积分/能量和逐项结果，可折叠、停止后续任务。已发送的请求结束后停止，已完成结果保留。
-- 最近一批记录保存在本机；异常退出标记为中断，再次运行先查询官方状态。损坏记录保留备份。
-- 真实对话支持普通次数、GLM-5.2 体验及北京时间 23:00–08:00 夜间任务。每批最多 20 条、每账号最多 6 条，每次请求输出上限 64 Token；实际积分由官方计费，不保证奖励覆盖消耗。
-- 失败、结果不明或官方进度不推进时停止该账号的后续对话；不自动重发不确定的付费请求。确认范围 10 分钟有效、不可重放。
-- 专家、模板、小程序及其他客户端操作任务显示待完成；奖励只统计官方明确返回的数值，对话消耗不从奖励推算。
-- 保留 WorkBuddy / Trae / Qoder 国内及国际版六个独立入口、菜单栏、底部状态栏、自动签到旅行、对话、用量及加密备份。
+- **Mac 推荐 PKG**：固定替换 `/Applications/WorkBuddy Switch.app`，安装前要求退出旧版；移除旧应用包内过时文件，保留用户数据。
+- **DMG / 临时副本**：启动时提供安装并替换；检测到已安装更新版本时打开已安装版，避免直接降级。
+- **Windows setup.exe**：固定原安装 GUID、程序名、快捷方式和卸载入口，自动复用旧安装位置。便携版仍需自行覆盖原可执行文件。
+- **退出与构建**：等待当前操作结束再退出；Mac 构建副本放入隐藏目录，公开输出只包含最终安装包。
+- 保留原猫咪图标、简约界面，以及一键做任务、账号切换、菜单栏和状态栏等功能。
 
-| 系统                      | 文件后缀                                                 |
-| ------------------------- | -------------------------------------------------------- |
-| Apple Silicon / Intel Mac | mac-arm64.dmg / mac-x64.dmg（另有 ZIP）                  |
-| Windows 10/11 x64         | windows-x64-setup.exe / windows-x64-portable.exe         |
-| Linux x64 / ARM64         | linux-x86_64.AppImage / linux-arm64.AppImage（另有 DEB） |
+提供 Apple Silicon / Intel 的 PKG、DMG、ZIP，Windows x64 安装版与便携版，以及 Linux x64 / ARM64 AppImage / DEB，共 12 个安装包；发布页附 SHA256SUMS.txt。
 
-文件名前缀为 WorkBuddy-Switch-1.4.0-，发布页附 SHA256SUMS.txt。macOS 13+，采用 ad-hoc 签名、尚未 Apple 公证；Windows 尚未 Authenticode 签名。
+升级前请完成或停止正在执行的任务。已有多个副本时，安装后从「应用程序」打开，并推出旧版 DMG；历史下载文件不会自动删除。
 
-Linux 需要图形桌面与已解锁的 GNOME Keyring 或 KWallet。厂商客户端是否提供对应系统/架构版本，以其官方发布为准。WorkBuddy 国际版不调用国内活动接口。
+macOS 应用使用 ad-hoc 签名，PKG 尚未签署 Developer ID Installer、尚未 Apple 公证；Windows 尚未 Authenticode 签名。安装系统可能需要你允许打开或输入管理员密码。
 
-验证使用隔离账号、模拟官方响应、界面测试与各系统原生 Electron 启动；未操作用户真实账号执行任务或领取奖励。账号资格、接口与客户端格式以官方实际状态为准。
-
-[一键任务与积分指南](https://github.com/koi128bit/WorkBuddy-Switch/wiki/签到与猫猫旅行) · [使用 Wiki](https://github.com/koi128bit/WorkBuddy-Switch/wiki)
+[安装与升级指南](https://github.com/koi128bit/WorkBuddy-Switch/wiki/安装与首次启动)
