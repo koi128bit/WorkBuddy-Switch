@@ -18,6 +18,7 @@ import {
 } from "./rewards.mjs";
 import { randomUUID } from "node:crypto";
 import { clientDefinition } from "./client-registry.mjs";
+import { TaskRunner } from "./task-runner.mjs";
 
 export class Store {
   records = [];
@@ -46,6 +47,7 @@ export class Store {
       throw new Error("请选择 WorkBuddy 客户端。");
     this.pathsContext = { ...pathsContext, provider };
     this.onChange = onChange;
+    this.tasks = new TaskRunner(this);
   }
   get paths() {
     return resolvePaths(this.settings, this.pathsContext);
@@ -118,6 +120,7 @@ export class Store {
         );
       }
     }
+    await this.tasks.init();
   }
   async saveRecords(records = this.records) {
     await atomicWrite(
@@ -125,6 +128,12 @@ export class Store {
       JSON.stringify({ version: 1, records }, null, 2),
     );
     this.records = records;
+  }
+  runTasks(ids = null) {
+    return this.tasks.run(ids);
+  }
+  cancelTasks(id) {
+    return this.tasks.cancel(id);
   }
   async updateSettings(value) {
     const settings = validateSettings(value);
@@ -577,12 +586,18 @@ export class Store {
   }
   async performClaims(
     ids,
-    { checkin = true, travel = true, automatic = false } = {},
+    {
+      checkin = true,
+      travel = true,
+      automatic = false,
+      shouldStop = () => false,
+    } = {},
   ) {
     const results = [];
     for (const id of this.rewardTargets(ids, automatic)) {
+      if (shouldStop()) break;
       let state = await this.fetchRewardState(id);
-      if (checkin) {
+      if (checkin && !shouldStop()) {
         if (state.checkinError || !state.checkin) {
           results.push(
             await this.rewardEntry(
@@ -637,7 +652,7 @@ export class Store {
           }
         }
       }
-      if (travel) {
+      if (travel && !shouldStop()) {
         if (state.travelError || !state.travel) {
           results.push(
             await this.rewardEntry(
@@ -729,7 +744,12 @@ export class Store {
       return result;
     });
   }
-  async performDepart(id, locationId, automatic = false) {
+  async performDepart(
+    id,
+    locationId,
+    automatic = false,
+    shouldStop = () => false,
+  ) {
     const state = await this.fetchRewardState(id);
     if (state.travelError || state.configError)
       throw new Error(state.travelError || state.configError);
@@ -742,6 +762,7 @@ export class Store {
     );
     if (!location)
       throw new Error("该地点暂不可用，请从官方地点列表重新选择。");
+    if (shouldStop()) return false;
     await this.authorized(id, (document) =>
       departTravel(document, location.id, this.request),
     );
@@ -763,6 +784,7 @@ export class Store {
       state.travelError = `已出发，但状态刷新失败：${error.message}`;
     }
     await this.patchProfile(id, { rewards: state });
+    return true;
   }
   depart(id, locationId) {
     return this.exclusive(async () => {
@@ -1043,6 +1065,8 @@ export class Store {
       refreshing: !!this.refreshPromise,
       events: this.events,
       rewardHistory: this.rewardHistory,
+      taskRun: this.tasks.snapshot(),
+      taskRunWarning: this.tasks.warning,
       authError,
     };
   }
