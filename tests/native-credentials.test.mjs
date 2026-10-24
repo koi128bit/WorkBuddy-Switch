@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { encryptChromium,encryptTrae } from "../desktop/credential-codecs.mjs";
+import { encryptChromium, encryptTrae } from "../desktop/credential-codecs.mjs";
 let NativeCredentials;
 try {
   ({ NativeCredentials } = await import("../desktop/native-credentials.mjs"));
@@ -45,15 +45,59 @@ test("Qoder uses region-specific OS key service without exposing the secret", as
   );
   assert.equal(calls.length, 1);
 });
-test('Trae device context decodes the installed AES envelope and keeps private keys out of browser context',async t=>{
-  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'wb-trae-device-'));t.after(()=>fs.rm(directory,{recursive:true,force:true}));
-  const resource=path.join(directory,'resources/app'),data=path.join(directory,'Trae CN'),binary=path.join(directory,'trae-cn');await fs.mkdir(path.join(resource,'out'),{recursive:true});await fs.mkdir(path.join(data,'User/globalStorage'),{recursive:true});
-  const tables={pa:Array(64).fill(1),pb:Array(64).fill(3),a:Array(64).fill(7),b:Array(64).fill(11)};
-  const source='function format(t,e){let out=new Uint8Array(t);if(e===K.AES_PRIVATE)for(let i=0;i<t;i++)out[i]=pa[i]^pb[i];else if(e===K.AES)for(let i=0;i<t;i++)out[i]=a[i]^b[i];return out;}'+Object.entries(tables).map(([key,array])=>`${key}=new Uint8Array([${array.join(',')}]);`).join('');
-  await fs.writeFile(path.join(resource,'out/main.js'),source);await fs.writeFile(path.join(resource,'product.json'),JSON.stringify({appVersion:'3.4.4',tronBuildVersion:'2.3.fixture',quality:'stable'}));
-  const device=encryptTrae({publicKeyPEM:'public-fixture',privateKeyPEM:'private-fixture'},Buffer.alloc(64,7^11));await fs.writeFile(path.join(data,'User/globalStorage/storage.json'),JSON.stringify({'telemetry.machineId':'fixture-machine','iCubeAuthInfo://icube-dc:fixture-device':device}));
-  const service=new NativeCredentials({platform:'linux',home:directory,env:{},settings:()=>({traeDataPath:data}),controllers:{'trae-cn':{executable:async()=>binary}}});
-  const context=await service.context('trae-cn');assert.equal(context.publicKey,'public-fixture');assert.equal(context.privateKey,undefined);assert.equal((await service.context('trae-cn',{privateKey:true})).privateKey,'private-fixture');
+test("Trae device context decodes the installed AES envelope and keeps private keys out of browser context", async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "wb-trae-device-"));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const resource = path.join(directory, "resources/app"),
+    data = path.join(directory, "Trae CN"),
+    binary = path.join(directory, "trae-cn");
+  await fs.mkdir(path.join(resource, "out"), { recursive: true });
+  await fs.mkdir(path.join(data, "User/globalStorage"), { recursive: true });
+  const tables = {
+    pa: Array(64).fill(1),
+    pb: Array(64).fill(3),
+    a: Array(64).fill(7),
+    b: Array(64).fill(11),
+  };
+  const source =
+    "function format(t,e){let out=new Uint8Array(t);if(e===K.AES_PRIVATE)for(let i=0;i<t;i++)out[i]=pa[i]^pb[i];else if(e===K.AES)for(let i=0;i<t;i++)out[i]=a[i]^b[i];return out;}" +
+    Object.entries(tables)
+      .map(([key, array]) => `${key}=new Uint8Array([${array.join(",")}]);`)
+      .join("");
+  await fs.writeFile(path.join(resource, "out/main.js"), source);
+  await fs.writeFile(
+    path.join(resource, "product.json"),
+    JSON.stringify({
+      appVersion: "3.4.4",
+      tronBuildVersion: "2.3.fixture",
+      quality: "stable",
+    }),
+  );
+  const device = encryptTrae(
+    { publicKeyPEM: "public-fixture", privateKeyPEM: "private-fixture" },
+    Buffer.alloc(64, 7 ^ 11),
+  );
+  await fs.writeFile(
+    path.join(data, "User/globalStorage/storage.json"),
+    JSON.stringify({
+      "telemetry.machineId": "fixture-machine",
+      "iCubeAuthInfo://icube-dc:fixture-device": device,
+    }),
+  );
+  const service = new NativeCredentials({
+    platform: "linux",
+    home: directory,
+    env: {},
+    settings: () => ({ traeDataPath: data }),
+    controllers: { "trae-cn": { executable: async () => binary } },
+  });
+  const context = await service.context("trae-cn");
+  assert.equal(context.publicKey, "public-fixture");
+  assert.equal(context.privateKey, undefined);
+  assert.equal(
+    (await service.context("trae-cn", { privateKey: true })).privateKey,
+    "private-fixture",
+  );
 });
 test("Trae plain native identity is recognized without looking up system keys", async () => {
   assert.equal(typeof NativeCredentials, "function");

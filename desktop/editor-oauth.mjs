@@ -205,7 +205,7 @@ export class EditorOAuth {
         x_device_id: context.deviceId,
         x_machine_id: context.machineId,
         x_device_brand: device.DeviceModel,
-        x_device_type: "PC",
+        x_device_type: device.OSInfo,
         x_os_version: device.OSVersion,
         x_env: "",
         x_app_version: context.appVersion,

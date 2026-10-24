@@ -240,7 +240,7 @@ export class NativeCredentials {
     const payload =
       typeof deviceEntry[1] === "object"
         ? deviceEntry[1]
-        : decryptTrae(deviceEntry[1], peppers.private);
+        : decryptTrae(deviceEntry[1], peppers.aes);
     const deviceId = deviceEntry[0].slice("iCubeAuthInfo://icube-dc:".length),
       machineId = root["telemetry.machineId"];
     if (
