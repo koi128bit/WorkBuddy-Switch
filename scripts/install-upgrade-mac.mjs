@@ -80,3 +80,36 @@ await exec("/usr/bin/codesign", ["--verify", "--deep", "--strict", target], {
 console.log(
   "PASS: native PKG replaces 1.4.0 at /Applications, removes obsolete bundle files, preserves user data and leaves one application.",
 );
+
+await exec("/usr/bin/open", ["-n", target]);
+const pattern =
+  "^/Applications/WorkBuddy Switch\\.app/Contents/MacOS/WorkBuddy Switch$";
+let launched = false;
+for (let attempt = 0; attempt < 40; attempt++) {
+  try {
+    await exec("/usr/bin/pgrep", ["-f", pattern]);
+    launched = true;
+    break;
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+}
+if (!launched) throw new Error("Installed application did not launch.");
+await new Promise((resolve) => setTimeout(resolve, 1500));
+const helper = await fs.readFile("desktop/quit-peers.jxa", "utf8");
+const { stdout: closed } = await exec(
+  "/usr/bin/osascript",
+  ["-l", "JavaScript", "-e", helper, "0", data],
+  { timeout: 30000 },
+);
+if (closed.trim() !== "ok")
+  throw new Error("Native upgrade shutdown did not finish: " + closed.trim());
+try {
+  await exec("/usr/bin/pgrep", ["-f", pattern]);
+  throw new Error("Installed application remained running.");
+} catch (error) {
+  if (error.code !== 1) throw error;
+}
+console.log(
+  "PASS: packaged canonical app launches and native JXA requests normal shutdown successfully.",
+);

@@ -16,7 +16,7 @@ function run(args) {
     var raw=$.NSString.stringWithContentsOfFileEncodingError(args[1]+'/task-run.json',$.NSUTF8StringEncoding,null);
     if(JSON.parse(ObjC.unwrap(raw)).run.status==='running')return 'busy';
   }catch(error){}
-  for(var i=0;i<others.length;i++)others[i].terminate();
+  for(var i=0;i<others.length;i++)void others[i].terminate;
   var end=Date.now()+20000;
   while(peers().length&&Date.now()<end)$.NSThread.sleepForTimeInterval(0.2);
   return peers().length?'running':'ok';
