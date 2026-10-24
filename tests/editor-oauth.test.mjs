@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHash, generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync,verify } from "node:crypto";
 let EditorOAuth;
 try {
   ({ EditorOAuth } = await import("../desktop/editor-oauth.mjs"));
@@ -25,6 +25,19 @@ const context = {
 };
 const jwt = (id) =>
   `e30.${Buffer.from(JSON.stringify({ data: { id }, exp: 2000000000 })).toString("base64url")}.fixture`;
+test('Trae online probes and preflights stay alive before a credential callback',async t=>{
+  const service=new EditorOAuth({port:0,context:async()=>context,request:async()=>{throw new Error('probe must not exchange credentials');}});t.after(()=>service.close());const ticket=await service.start('trae-cn');const flow=service.require(ticket.id,'trae-cn');const callback=new URL(new URL(flow.url).searchParams.get('auth_callback_url'));
+  for(const method of ['OPTIONS','GET']) {const response=await fetch(new URL('/',callback),{method,headers:{Origin:'https://www.trae.cn','Access-Control-Request-Private-Network':'true'}});assert.equal(response.status,200);assert.equal(response.headers.get('access-control-allow-origin'),'*');assert.equal(response.headers.get('access-control-allow-private-network'),'true');}
+  assert.equal(await service.poll('trae-cn',ticket.id),null);assert.ok(service.require(ticket.id,'trae-cn'));
+});
+test('Qoder refresh rejects a different user from the official profile endpoint',async()=>{
+  const service=new EditorOAuth({context:async()=>context,request:async url=>response(url.endsWith('/userinfo')?{id:'other',name:'other'}:{token:'new-token',refresh_token:'drt-new'})});
+  await assert.rejects(service.refresh('qoder-cn',{uid:'42',nickname:'A',token:'old',refreshToken:'drt-old'}),/身份/);
+});
+test('Trae refresh signs the existing device proof with P1363 and rejects a mismatching UID',async()=>{
+  const pair=generateKeyPairSync('ec',{namedCurve:'prime256v1',publicKeyEncoding:{type:'spki',format:'pem'},privateKeyEncoding:{type:'pkcs8',format:'pem'}});let body;const service=new EditorOAuth({context:async()=>({...context,...pair}),request:async(_url,options)=>{body=JSON.parse(options.body);return response({Result:{Token:jwt('42'),RefreshToken:'new-refresh'}});}});
+  const result=await service.refresh('trae-cn',{uid:'42',nickname:'林',token:'old',refreshToken:'old-refresh'});assert.equal(result.uid,'42');const proof=body.DeviceProof;const message=`POST\n/trae/api/v3/oauth/ExchangeToken\nono9krqynydwx5\nold-refresh\n${proof.Timestamp}\n${proof.Nonce}`;assert.equal(verify('sha256',Buffer.from(message),{key:pair.publicKey,dsaEncoding:'ieee-p1363'},Buffer.from(proof.Signature,'base64')),true);
+});
 test("Qoder PKCE is held in backend and CN/global API endpoints stay isolated", async () => {
   assert.equal(typeof EditorOAuth, "function", "OAuth not implemented");
   for (const [provider, origin, redirect] of [
