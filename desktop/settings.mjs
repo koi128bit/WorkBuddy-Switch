@@ -1,5 +1,7 @@
 import path from "node:path";
 import os from "node:os";
+import { workBuddyAuthRoot } from "./platform.mjs";
+import { clientDefinition } from "./client-registry.mjs";
 
 export const defaults = Object.freeze({
   theme: "system",
@@ -87,29 +89,13 @@ export function validateSettings(value) {
 
 export function resolvePaths(
   settings,
-  { platform = process.platform, home = os.homedir(), env = process.env } = {},
+  { platform = process.platform, home = os.homedir(), env = process.env, provider = "workbuddy" } = {},
 ) {
-  const authRoot =
-    platform === "win32"
-      ? path.join(
-          env.LOCALAPPDATA || path.join(home, "AppData", "Local"),
-          "CodeBuddyExtension",
-          "Data",
-          "Public",
-          "auth",
-        )
-      : path.join(
-          home,
-          "Library",
-          "Application Support",
-          "CodeBuddyExtension",
-          "Data",
-          "Public",
-          "auth",
-        );
-  const data = settings.dataPath || path.join(home, ".workbuddy");
+  const definition = clientDefinition(provider);
+  const authRoot = workBuddyAuthRoot({ platform, home, env });
+  const data = settings.dataPath || path.join(home, definition.data);
   return {
-    auth: settings.authPath || path.join(authRoot, "workbuddy-desktop.info"),
+    auth: settings.authPath || path.join(authRoot, definition.authFile),
     data,
     database: path.join(data, "workbuddy.db"),
     projects: path.join(data, "projects"),

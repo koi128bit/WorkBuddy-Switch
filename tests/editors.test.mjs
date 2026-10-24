@@ -88,7 +88,7 @@ async function fixture(
       control.running = true;
     },
   };
-  const context = { platform };
+  const context = { platform, home: directory, env: { APPDATA: directory, LOCALAPPDATA: directory } };
   const store = new EditorStore({
     directory,
     vault,

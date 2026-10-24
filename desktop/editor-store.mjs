@@ -3,7 +3,6 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { atomicWrite, readOptional } from "./files.mjs";
 import {
-  editors,
   editorDefinition,
   editorDataPath,
 } from "./editor-controller.mjs";
@@ -406,7 +405,8 @@ export class EditorStore {
   async snapshots() {
     return Object.fromEntries(
       await Promise.all(
-        Object.entries(editors).map(async ([provider, definition]) => {
+        Object.keys(this.controllers).map(async (provider) => {
+          const definition = editorDefinition(provider);
           let current = null,
             error = this.loadError,
             client = { installed: false, running: null, executable: null },

@@ -4,6 +4,9 @@ import os from "node:os";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
+import { editorDefinitions as editors, editorDefinition } from "./client-registry.mjs";
+import { configRoot, assertPlatform } from "./platform.mjs";
+export { editors, editorDefinition };
 
 const exec = promisify(execFile);
 export function parseQoderLauncher(raw) {
@@ -42,31 +45,6 @@ export function parseQoderLauncher(raw) {
     return null;
   return destination;
 }
-export const editors = Object.freeze({
-  "trae-cn": {
-    name: "Trae CN",
-    key: "trae",
-    app: "Trae CN.app",
-    executable: "Trae CN.exe",
-    bundle: "cn.trae.app",
-    data: "Trae CN",
-    windows: ["Trae CN", "Trae"],
-  },
-  "qoder-cn": {
-    name: "Qoder CN",
-    key: "qoder",
-    app: "Qoder CN.app",
-    executable: "Qoder CN.exe",
-    bundle: "com.qodercn.app",
-    data: "com.qodercn.app.stable",
-    windows: ["Qoder CN", "QoderCN"],
-  },
-});
-export function editorDefinition(provider) {
-  if (typeof provider !== "string" || !Object.hasOwn(editors, provider))
-    throw new Error("不支持的客户端。");
-  return editors[provider];
-}
 export function editorDataPath(
   provider,
   settings,
@@ -74,13 +52,7 @@ export function editorDataPath(
 ) {
   const definition = editorDefinition(provider);
   return (
-    settings[`${definition.key}DataPath`] ||
-    path.join(
-      platform === "win32"
-        ? env.APPDATA || path.join(home, "AppData", "Roaming")
-        : path.join(home, "Library", "Application Support"),
-      definition.data,
-    )
+    settings[`${definition.key}DataPath`] || path.join(configRoot({ platform, home, env }), definition.data)
   );
 }
 
@@ -89,6 +61,7 @@ export class EditorController {
     this.definition = editorDefinition(provider);
     this.settings = settings;
     this.platform = context.platform || process.platform;
+    assertPlatform(this.platform);
     this.home = context.home || os.homedir();
     this.env = context.env || process.env;
   }
