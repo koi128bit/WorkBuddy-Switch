@@ -18,6 +18,6 @@ function run(args) {
   }catch(error){}
   for(var i=0;i<others.length;i++)void others[i].terminate;
   var end=Date.now()+20000;
-  while(peers().length&&Date.now()<end)$.NSThread.sleepForTimeInterval(0.2);
+  while(peers().length&&Date.now()<end)$.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.2));
   return peers().length?'running':'ok';
 }

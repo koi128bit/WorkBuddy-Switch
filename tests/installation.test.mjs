@@ -256,8 +256,14 @@ test("native peer shutdown excludes its own process, refuses active tasks and on
         },
         NSUTF8StringEncoding: 4,
         NSThread: { sleepForTimeInterval() {} },
-        NSDate:{dateWithTimeIntervalSinceNow:()=>0},
-        NSRunLoop:{currentRunLoop:{runUntilDate(){if(peer.quitRequested&&!refuse)peer.terminated=true;}}},
+        NSDate: { dateWithTimeIntervalSinceNow: () => 0 },
+        NSRunLoop: {
+          currentRunLoop: {
+            runUntilDate() {
+              if (peer.quitRequested && !refuse) peer.terminated = true;
+            },
+          },
+        },
       },
     };
     vm.createContext(context);
