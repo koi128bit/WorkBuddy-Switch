@@ -239,6 +239,7 @@ test("Trae browser context, callback state, UID and allowlisted token host are c
   assert.equal(url.searchParams.get("x_env"), "");
   assert.equal(url.searchParams.get("plugin_version"), context.pluginVersion);
   assert.equal(url.searchParams.get("x_app_version"), context.appVersion);
+  assert.equal(url.searchParams.get("x_device_type"), "linux");
   const callback = new URL(url.searchParams.get("auth_callback_url"));
   callback.searchParams.set(
     "authCodeInfo",
