@@ -116,6 +116,15 @@ test("paid task range can be changed or cancelled before any dialogue is sent", 
   ).toBeUndefined();
 });
 
+test('basic task mode remains usable after clearing the optional dialogue inputs',async({page})=>{
+ await page.getByRole('button',{name:'一键做任务',exact:true}).click();const dialog=page.getByRole('dialog',{name:'执行前确认'});
+ await page.getByLabel('本次对话总上限',{exact:true}).fill('');await page.getByLabel('对话内容',{exact:true}).fill('');
+ await page.getByRole('switch',{name:'包含真实 AI 对话',exact:true}).click();
+ await expect(dialog.getByRole('button',{name:'更新范围',exact:true})).toBeEnabled();await dialog.getByRole('button',{name:'更新范围',exact:true}).click();
+ await expect(dialog.getByRole('button',{name:'执行基础任务',exact:true})).toBeEnabled();await dialog.getByRole('button',{name:'执行基础任务',exact:true}).click();
+ await expect(page.getByRole('region',{name:'任务执行进度'})).toContainText('执行结束');
+});
+
 test("all six clients can be selected and editor OAuth controls are visible", async ({
   page,
 }) => {

@@ -171,3 +171,9 @@ test("paid requests reject unconfirmed streams, errors, foreign accounts and arb
     /真实/,
   );
 });
+
+test('the SSE terminal marker completes the request without waiting for the connection to close',async()=>{
+ const bytes=new TextEncoder().encode('data: {"id":"real-terminal","choices":[{"delta":{"content":"完成"}}]}\n\ndata: [DONE]\n\n');
+ const result=await api.sendDialogue(document,{model:'fast-model',prompt:'你好'},async()=>new Response(new ReadableStream({start(controller){controller.enqueue(bytes);},pull(controller){controller.error(new Error('connection remains open after terminal marker'));}}),{headers:{'content-type':'text/event-stream'}}));
+ assert.equal(result.requestId,'real-terminal');
+});
