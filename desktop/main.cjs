@@ -26,6 +26,7 @@ let mainWindow,
   trayWindow,
   trayMenu,
   store,
+  editorStore,
   tray,
   quitting = false,
   refreshTimer,
@@ -293,12 +294,16 @@ async function start() {
     { readBounded, atomicWrite },
     { usageCSV },
     { Login },
+    { EditorStore },
+    { EditorController, editorDefinition },
   ] = await Promise.all([
     import("./store.mjs"),
     import("./controller.mjs"),
     import("./files.mjs"),
     import("./usage.mjs"),
     import("./login.mjs"),
+    import("./editor-store.mjs"),
+    import("./editor-controller.mjs"),
   ]);
   await protocol.handle("workbuddy-switch", async (request) => {
     try {
@@ -334,6 +339,75 @@ async function start() {
     onChange: changed,
   });
   await store.init();
+  const editorContext = testMode
+    ? { home: testMode, env: { APPDATA: testMode, LOCALAPPDATA: testMode } }
+    : {};
+  const editorControllers = Object.fromEntries(
+    ["trae-cn", "qoder-cn"].map((provider) => [
+      provider,
+      new EditorController(provider, () => store.settings, editorContext),
+    ]),
+  );
+  editorStore = new EditorStore({
+    directory: app.getPath("userData"),
+    vault,
+    settings: () => store.settings,
+    controllers: editorControllers,
+    context: editorContext,
+    onChange: changed,
+  });
+  await editorStore.init();
+  handle("editor-capture", (provider, nickname) =>
+    store.exclusive(() => editorStore.capture(provider, string(nickname, 80))),
+  );
+  handle("editor-switch", (provider, id) =>
+    store.exclusive(() => editorStore.switchAccount(provider, string(id, 200))),
+  );
+  handle("editor-edit", (provider, id, patch) =>
+    store.exclusive(() => editorStore.edit(provider, string(id, 200), patch)),
+  );
+  handle("editor-remove", (provider, id) =>
+    store.exclusive(() => editorStore.remove(provider, string(id, 200))),
+  );
+  handle("editor-restore", (provider) =>
+    store.exclusive(() => editorStore.restore(provider)),
+  );
+  handle("editor-keep-current", (provider) =>
+    store.exclusive(() => editorStore.keepCurrent(provider)),
+  );
+  handle("editor-launch", (provider) => {
+    editorDefinition(provider);
+    return store.exclusive(() => editorControllers[provider].launch());
+  });
+  handle("editor-tray-switch", async (provider, id) => {
+    const definition = editorDefinition(provider);
+    editorStore.record(provider, string(id, 200));
+    trayWindow?.hide();
+    const result = await dialog.showMessageBox({
+      type: "question",
+      title: `切换 ${definition.name}`,
+      message: `即将正常退出 ${definition.name} 并恢复本机登录快照，请先结束运行中的任务。`,
+      buttons: ["取消", "切换账号"],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    if (result.response !== 1) return false;
+    await store.exclusive(() => editorStore.switchAccount(provider, id));
+    return true;
+  });
+  handle("editor-choose-path", async (provider, kind) => {
+    const definition = editorDefinition(provider);
+    if (!["data", "executable"].includes(kind))
+      throw new Error("路径选择无效。");
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: `选择 ${definition.name} ${kind === "data" ? "国内版数据根目录" : "应用"}`,
+      properties: [kind === "data" ? "openDirectory" : "openFile"],
+      ...(kind === "executable" && process.platform === "win32"
+        ? { filters: [{ name: definition.name, extensions: ["exe"] }] }
+        : {}),
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
   const login = new Login((url, options) => net.fetch(url, options));
   let pollingLogin = false;
   handle("login-start", () => login.start());
@@ -362,6 +436,7 @@ async function start() {
   nativeTheme.themeSource = store.settings.theme;
   handle("snapshot", async () => ({
     ...(await store.snapshot()),
+    editors: await editorStore.snapshots(),
     version: app.getVersion(),
     platform: process.platform,
     dataDirectory: app.getPath("userData"),
@@ -385,7 +460,7 @@ async function start() {
       shell.openExternal(`workbuddy://chat/${encodeURIComponent(sessionId)}`),
     ),
   );
-  handle("launch", () => controller.launch());
+  handle("launch", () => store.exclusive(() => controller.launch()));
   handle("open-page", openPage);
   handle("tray-switch", async (id) => {
     string(id, 200);
@@ -643,7 +718,19 @@ function showTray() {
   const width = 346,
     height = Math.min(
       560,
-      300 + Math.max(1, Math.min(8, store.records.length)) * 46,
+      300 +
+        Math.max(
+          1,
+          Math.min(
+            8,
+            store.settings.activeProvider === "workbuddy"
+              ? store.records.length
+              : editorStore.records.filter(
+                  (record) => record.provider === store.settings.activeProvider,
+                ).length,
+          ),
+        ) *
+          46,
       work.height - 12,
     );
   const x = Math.max(
@@ -664,7 +751,19 @@ function showTray() {
 }
 function updateTray() {
   if (!tray) return;
-  const accounts = [...store.records]
+  const provider = store.settings.activeProvider || "workbuddy";
+  const clientName =
+    provider === "workbuddy"
+      ? "WorkBuddy"
+      : provider === "trae-cn"
+        ? "Trae CN"
+        : "Qoder CN";
+  const accounts = (
+    provider === "workbuddy"
+      ? [...store.records]
+      : editorStore?.records.filter((record) => record.provider === provider) ||
+        []
+  )
     .sort((a, b) => b.profile.lastUsedAt - a.profile.lastUsedAt)
     .slice(0, 8);
   trayMenu = Menu.buildFromTemplate([
@@ -676,15 +775,20 @@ function updateTray() {
       click: async () => {
         const result = await dialog.showMessageBox({
           type: "question",
-          title: "切换 WorkBuddy 账号",
-          message: "切换将关闭 WorkBuddy。请先结束正在运行的任务。",
+          title: `切换 ${clientName} 账号`,
+          message: `切换将关闭 ${clientName}。请先结束正在运行的任务。`,
           buttons: ["取消", "切换账号"],
           defaultId: 0,
           cancelId: 0,
         });
         if (result.response === 1) {
           try {
-            await store.switchAccount(r.profile.id);
+            if (provider === "workbuddy")
+              await store.switchAccount(r.profile.id);
+            else
+              await store.exclusive(() =>
+                editorStore.switchAccount(provider, r.profile.id),
+              );
           } catch (error) {
             dialog.showErrorBox("切换未完成", safeMessage(error));
           }
@@ -694,10 +798,15 @@ function updateTray() {
     })),
     { type: "separator" },
     {
-      label: "打开 WorkBuddy",
+      label: `打开 ${clientName}`,
+      enabled: !store.busy,
       click: async () => {
         try {
-          await store.controller.launch();
+          await store.exclusive(() =>
+            provider === "workbuddy"
+              ? store.controller.launch()
+              : editorStore.controllers[provider].launch(),
+          );
         } catch (e) {
           dialog.showErrorBox("启动未完成", safeMessage(e));
         }
@@ -715,7 +824,10 @@ function updateTray() {
           (record) => record.profile.id === active?.id,
         )?.profile;
         tray.setTitle(
-          store.settings.menuBarBalance && profile?.quota && !profile.quotaError
+          provider === "workbuddy" &&
+            store.settings.menuBarBalance &&
+            profile?.quota &&
+            !profile.quotaError
             ? new Intl.NumberFormat("zh-CN", {
                 maximumFractionDigits: 4,
               }).format(profile.quota.remaining)

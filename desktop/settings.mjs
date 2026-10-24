@@ -24,6 +24,11 @@ export const defaults = Object.freeze({
   checkinHour: 9,
   checkinMinute: 0,
   menuBarBalance: true,
+  activeProvider: "workbuddy",
+  traeDataPath: "",
+  traeExecutablePath: "",
+  qoderDataPath: "",
+  qoderExecutablePath: "",
 });
 
 export function validateSettings(value) {
@@ -37,6 +42,11 @@ export function validateSettings(value) {
       throw new Error("设置值类型无效。");
     if (key === "theme" && !["system", "light", "dark"].includes(raw))
       throw new Error("主题设置无效。");
+    if (
+      key === "activeProvider" &&
+      !["workbuddy", "trae-cn", "qoder-cn"].includes(raw)
+    )
+      throw new Error("客户端选择无效。");
     if (key === "refreshSeconds" && ![0, 30, 60, 300, 600, 1800].includes(raw))
       throw new Error("刷新间隔无效。");
     if (

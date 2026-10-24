@@ -1,7 +1,7 @@
 {
   "name": "workbuddy-switch",
-  "version": "1.0.0",
-  "description": "WorkBuddy 多账号管理：一键领积分、猫猫旅行、安全切换、对话续接与用量分析",
+  "version": "1.1.0",
+  "description": "WorkBuddy、Trae CN 与 Qoder CN 账号管理：安全切换、一键领积分、对话续接与用量分析",
   "author": "koi128bit",
   "license": "MIT",
   "private": true,
@@ -31,13 +31,13 @@
     "@types/node": "^22.19.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "electron": "44.5.1",
+    "electron": "44.9.3",
     "electron-builder": "26.15.3",
     "lucide-react": "1.51.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "typescript": "7.0.2",
-    "vite": "8.3.2"
+    "vite": "8.3.5"
   },
   "build": {
     "appId": "com.koi128bit.workbuddy-switch",

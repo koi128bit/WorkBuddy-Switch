@@ -1,4 +1,6 @@
 export type Theme = "system" | "light" | "dark";
+export type Provider = "workbuddy" | "trae-cn" | "qoder-cn";
+export type EditorProvider = Exclude<Provider, "workbuddy">;
 export interface Settings {
   theme: Theme;
   privacyMode: boolean;
@@ -22,6 +24,31 @@ export interface Settings {
   checkinHour: number;
   checkinMinute: number;
   menuBarBalance: boolean;
+  activeProvider: Provider;
+  traeDataPath: string;
+  traeExecutablePath: string;
+  qoderDataPath: string;
+  qoderExecutablePath: string;
+}
+export interface EditorAccount {
+  id: string;
+  nickname: string;
+  note: string;
+  favorite: boolean;
+  capturedAt: number;
+  lastUsedAt: number;
+  automatic: boolean;
+}
+export interface EditorSnapshot {
+  provider: EditorProvider;
+  name: string;
+  accounts: EditorAccount[];
+  currentId: string | null;
+  hasLogin: boolean;
+  error: string | null;
+  client: Snapshot["client"];
+  dataPath: string;
+  recoveryPending: boolean;
 }
 export interface Resource {
   id: string;
@@ -133,6 +160,7 @@ export interface UsageQuery {
   until: number | null;
 }
 export interface Snapshot {
+  editors?: Record<EditorProvider, EditorSnapshot>;
   demo?: boolean;
   accounts: Account[];
   current: { id: string; nickname: string; phoneHint: string } | null;
@@ -163,6 +191,25 @@ export interface BackupFile {
   createdAt: number;
 }
 export interface Bridge {
+  captureEditor(
+    provider: EditorProvider,
+    nickname: string,
+  ): Promise<EditorAccount>;
+  switchEditor(provider: EditorProvider, id: string): Promise<void>;
+  editEditor(
+    provider: EditorProvider,
+    id: string,
+    patch: Partial<Pick<EditorAccount, "nickname" | "note" | "favorite">>,
+  ): Promise<void>;
+  removeEditor(provider: EditorProvider, id: string): Promise<void>;
+  restoreEditor(provider: EditorProvider): Promise<void>;
+  keepCurrentEditor(provider: EditorProvider): Promise<void>;
+  launchEditor(provider: EditorProvider): Promise<void>;
+  traySwitchEditor(provider: EditorProvider, id: string): Promise<boolean>;
+  chooseEditorPath(
+    provider: EditorProvider,
+    kind: "data" | "executable",
+  ): Promise<string | null>;
   snapshot(): Promise<Snapshot>;
   capture(): Promise<Account>;
   switchAccount(id: string): Promise<void>;

@@ -23,6 +23,21 @@ await fs.writeFile(
     theme: "light",
   }),
 );
+const editorStorage = path.join(
+  directory,
+  ...(process.platform === "win32" ? [] : ["Library", "Application Support"]),
+  "Trae CN",
+  "User",
+  "globalStorage",
+  "storage.json",
+);
+await fs.mkdir(path.dirname(editorStorage), { recursive: true });
+await fs.writeFile(
+  editorStorage,
+  JSON.stringify({
+    "iCubeAuthInfo://icube.cloudide": "tc:fake-editor-fixture-credential",
+  }),
+);
 let desktop;
 try {
   desktop = await electron.launch({
@@ -67,6 +82,33 @@ try {
   assert.equal(initial.current.id, "isolated-fixture");
   assert.equal(initial.accounts.length, 0);
   assert.ok(!JSON.stringify(initial).includes("fake-test-credential"));
+  assert.equal(initial.editors["trae-cn"].accounts.length, 0);
+  assert.equal(initial.editors["qoder-cn"].accounts.length, 0);
+  assert.ok(!JSON.stringify(initial).includes("tc:fake-editor"));
+  await page.evaluate(() =>
+    window.workbuddy.captureEditor("trae-cn", "隔离客户端测试"),
+  );
+  const capturedEditor = await page.evaluate(() => window.workbuddy.snapshot());
+  assert.equal(capturedEditor.editors["trae-cn"].accounts.length, 1);
+  assert.equal(capturedEditor.editors["qoder-cn"].accounts.length, 0);
+  assert.equal(capturedEditor.accounts.length, 0);
+  assert.ok(
+    !(
+      await fs.readFile(path.join(directory, "editor-vault.json"), "utf8")
+    ).includes("tc:fake-editor"),
+  );
+  const rejected = await page.evaluate(async () => {
+    try {
+      await window.workbuddy.switchEditor("qoder-cn", "missing-snapshot");
+      return false;
+    } catch {
+      return true;
+    }
+  });
+  assert.ok(
+    rejected,
+    "cross-client missing snapshots fail through isolated IPC",
+  );
   const popup = desktop
     .windows()
     .find((window) => window.url().endsWith("#tray"));
@@ -125,7 +167,7 @@ try {
   await popup.evaluate(() => window.workbuddy.openPage("settings"));
   await page.getByRole("heading", { name: "设置", exact: true }).waitFor();
   console.log(
-    "PASS: native desktop launch, isolated main/popup IPC, system encryption, capture, settings and tray navigation",
+    "PASS: native desktop launch, isolated main/popup/editor IPC, system encryption, separate credential vaults, capture, settings and tray navigation",
   );
 } finally {
   await desktop?.close();

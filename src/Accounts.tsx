@@ -11,6 +11,7 @@ import {
 import { Button, Empty, mask, number } from "./components";
 import { AccountTasks, CheckinStatus, type Claim, type Run } from "./Rewards";
 import type { Account, Snapshot } from "./types";
+import { accountHealth, suggestedAccount } from "./account-health";
 
 const expiry = (value?: number | null) =>
   value ? new Date(value).toLocaleDateString("sv-SE") : "未提供";
@@ -66,7 +67,9 @@ export function Accounts({
             `${account.nickname} ${account.note} ${account.id}`
               .toLowerCase()
               .includes(search.toLowerCase()) &&
-            (filter !== "favorites" || account.favorite),
+            (filter !== "favorites" || account.favorite) &&
+            (filter !== "attention" ||
+              accountHealth(account, state.settings).attention),
         )
         .sort((a, b) => {
           if (a.id === state.current?.id) return -1;
@@ -80,7 +83,7 @@ export function Accounts({
             );
           return b.lastUsedAt - a.lastUsedAt;
         }),
-    [state.accounts, state.current, search, sort, filter],
+    [state.accounts, state.current, state.settings, search, sort, filter],
   );
   const account =
     state.accounts.find((item) => item.id === inspected) ||
@@ -89,6 +92,11 @@ export function Accounts({
   const allSelected =
     accounts.length > 0 && accounts.every((item) => selected.includes(item.id));
   const valid = state.accounts.filter((item) => item.quota && !item.quotaError);
+  const suggestion = suggestedAccount(state.accounts, state.settings);
+  const health = account && accountHealth(account, state.settings);
+  const attentionCount = state.accounts.filter(
+    (item) => accountHealth(item, state.settings).attention,
+  ).length;
   const toggleAll = () =>
     setSelected(
       allSelected
@@ -111,6 +119,12 @@ export function Accounts({
           >
             <Pin size={14} />
             已收藏
+          </button>
+          <button
+            className={filter === "attention" ? "selected" : ""}
+            onClick={() => setFilter("attention")}
+          >
+            需关注{attentionCount > 0 && <span>{attentionCount}</span>}
           </button>
         </div>
         <div className="toolbar-right">
@@ -193,8 +207,16 @@ export function Accounts({
                       {item.nickname}
                       {item.favorite && <Pin size={12} />}
                       {active && <span className="badge blue">当前</span>}
+                      {suggestion?.id === item.id && (
+                        <span className="badge">建议先用</span>
+                      )}
                     </h3>
-                    <small>{mask(item.id, state.settings.privacyMode)}</small>
+                    <small>
+                      {mask(item.id, state.settings.privacyMode)}
+                      {accountHealth(item, state.settings).renew
+                        ? " · 凭据待续期"
+                        : ""}
+                    </small>
                   </span>
                 </button>
                 <div
@@ -341,6 +363,41 @@ export function Accounts({
             {account.quotaError && (
               <p className="inspector-error">{account.quotaError}</p>
             )}
+          </div>
+        )}
+        {account?.quota && !account.quotaError && (
+          <div className="quota-breakdown">
+            <div className="quota-breakdown-heading">
+              <strong>积分包明细</strong>
+              <span>
+                {health && health.expiringCredits > 0
+                  ? `${number(health.expiringCredits)} 积分将在 ${state.settings.expiryWarningDays} 天内到期`
+                  : "按官方积分包显示"}
+              </span>
+            </div>
+            {account.quota.resources
+              .filter((resource) => !resource.expired && resource.remaining > 0)
+              .map((resource) => (
+                <div className="quota-resource" key={resource.id}>
+                  <span>{resource.name || "积分包"}</span>
+                  <strong>{number(resource.remaining)}</strong>
+                  <span
+                    className={
+                      resource.expiresAt &&
+                      resource.expiresAt <=
+                        Date.now() + state.settings.expiryWarningDays * 86400000
+                        ? "pending"
+                        : "muted"
+                    }
+                  >
+                    {expiry(resource.expiresAt)}
+                  </span>
+                </div>
+              ))}
+            <small className="muted">
+              查询于 {new Date(account.quota.fetchedAt).toLocaleString("zh-CN")}{" "}
+              · 建议仅依据最近 6 小时内查询成功的临期积分
+            </small>
           </div>
         )}
       </section>

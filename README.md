@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/icon.png" width="96" height="96" alt="WorkBuddy Switch 原猫咪图标" />
   <h1>WorkBuddy Switch</h1>
-  <p>WorkBuddy 多账号管理，支持 macOS 与 Windows。<br />一键领积分 · 猫猫旅行 · 安全切换 · 对话续接</p>
+  <p>管理 WorkBuddy、Trae CN 与 Qoder CN，支持 macOS 与 Windows。<br />一键领积分 · 猫猫旅行 · 安全切换 · 对话续接</p>
   <p>
     <a href="https://github.com/koi128bit/WorkBuddy-Switch/releases/latest">下载应用</a> ·
     <a href="https://github.com/koi128bit/WorkBuddy-Switch/wiki">使用指南</a> ·
@@ -17,11 +17,21 @@
 
 <p align="center"><img src=".github/assets/dark.png" width="1120" alt="原生灰阶深色界面：账号列表、积分、签到、旅行与状态栏" /></p>
 
-WorkBuddy Switch 1.0 专注 WorkBuddy。五个页面共用简洁的原生灰阶界面，支持浅色、深色、跟随系统和紧凑布局；保留原来的猫咪图标。账号、官方积分、签到旅行和本地对话集中管理，也可以直接从菜单栏处理常用操作。
+WorkBuddy Switch 1.1 在同一个简洁灰阶界面中管理 WorkBuddy、Trae CN 和 Qoder CN。客户端各自保留独立账号列表，支持浅色、深色、跟随系统和紧凑布局；原来的猫咪图标继续保留。主窗口和菜单栏都可以选择客户端，底部状态栏随所选客户端更新。
 
 > 截图均为演示账号和模拟数据。真实积分、任务资格与奖励以官方接口为准，本地用量来自设备上的记录。
 
-## 功能
+## 支持的客户端
+
+| 客户端    | 支持功能                                                             | 账号保存方式                     |
+| --------- | -------------------------------------------------------------------- | -------------------------------- |
+| WorkBuddy | 账号切换、官方积分、签到与旅行、对话续接、Token 用量、跨设备加密备份 | 保存当前登录，或官方网页登录授权 |
+| Trae CN   | 本机登录快照、命名与备注、收藏、搜索、切换失败恢复、菜单栏切换       | 在国内版客户端登录后保存         |
+| Qoder CN  | 本机登录快照、命名与备注、收藏、搜索、切换失败恢复、菜单栏切换       | 在国内版客户端登录后保存         |
+
+Trae CN 与 Qoder CN 的快照按原客户端格式保留，只在本机恢复，不解密客户端私有密文，也不包含在 WorkBuddy 的 `.wbsbackup` 跨设备备份中。快照匹配只代表本机文件一致，登录是否有效由客户端确认；请按客户端显示的账号自行命名。
+
+## WorkBuddy 功能
 
 | 页面     | 功能                                                                                 |
 | -------- | ------------------------------------------------------------------------------------ |
@@ -31,7 +41,22 @@ WorkBuddy Switch 1.0 专注 WorkBuddy。五个页面共用简洁的原生灰阶�
 | **用量** | Token 分项、模型与对话排行、日期范围、日志 Credits 与 CSV 导出                       |
 | **设置** | 常规、自动任务、外观与隐私、连接与路径、数据与备份、关于与更新                       |
 
-底部状态栏显示 WorkBuddy 的运行状态、自动任务开关、正在执行的操作和积分刷新时间，并提供保存当前账号与隐私遮罩快捷操作。
+账号页新增「需关注」筛选，集中显示查询失败、凭据待续期、低余额与临期积分。积分包明细展示各包可用量和到期时间；「建议先用」仅依据最近 6 小时内查询成功的临期积分，不会自动切换账号。
+
+底部状态栏显示当前客户端的运行状态、自动任务开关、正在执行的操作和积分刷新时间，并提供保存当前账号与隐私遮罩快捷操作。
+
+## Trae CN 与 Qoder CN 切换
+
+<p align="center"><img src=".github/assets/trae-cn.png" width="1120" alt="Trae CN 本机登录快照，演示账号" /></p>
+
+1. 在侧栏的「客户端」选择 **Trae CN** 或 **Qoder CN**。
+2. 在对应官方客户端登录账号 A，回到本应用点击 **保存当前账号**，填写容易辨认的名称。
+3. 在官方客户端登录账号 B 后再次保存。之后在列表或菜单栏选择目标账号，确认切换。
+4. 自定义安装位置可在账号页的 **路径配置**，或「设置 → 连接与路径」中指定。Windows 的 Qoder CN 支持读取官方启动器位置。
+
+切换前正常退出目标客户端、保存切换前的登录快照，再恢复目标登录。只处理明确的登录字段或登录文件，保留设置、插件、工作区、对话、机器标识与其他客户端的状态。失败时尝试恢复原登录；中断后的加密恢复记录可通过 **恢复切换前登录** 处理。检测到后续新登录时，会停止恢复以保护新登录；此时可选择「保留当前登录并归档」，保存当前快照并归档旧恢复记录，再继续切换。
+
+国内版账号、目录和客户端独立校验；国际版、TRAE SOLO、Qoder CLI 不在本次支持范围。客户端升级导致格式变化时请重新保存快照。当前验证覆盖隔离文件、模拟进程及双平台构建；本机只读核验过 Trae CN 3.3.95，未使用真实账号执行切换，本机也未安装 Qoder CN。
 
 ## 一键领积分与猫猫旅行
 
@@ -48,7 +73,7 @@ WorkBuddy Switch 1.0 专注 WorkBuddy。五个页面共用简洁的原生灰阶�
 
 <p align="center"><img src=".github/assets/tray.png" width="346" alt="菜单栏快捷面板：账号积分、切换、一键领取、主界面与设置" /></p>
 
-点击猫咪图标即可查看最近使用的账号及缓存积分、切换账号、一键领积分，或打开主界面与设置。macOS 可在菜单栏图标旁显示当前账号的积分数字；Windows 使用系统托盘。隐私遮罩默认隐藏面板中的账号昵称，截图展示的是关闭昵称遮罩后的演示效果。
+点击猫咪图标，先选择客户端，即可查看其最近使用的账号、切换账号，或打开主界面与设置。WorkBuddy 还可查看缓存积分及一键领取。macOS 可在菜单栏图标旁显示当前账号的积分数字；Windows 使用系统托盘。隐私遮罩默认隐藏面板中的账号昵称，截图展示的是关闭昵称遮罩后的演示效果。
 
 快捷键：`⌘ / Ctrl + ,` 打开设置，`⌘ / Ctrl + 1` 显示主窗口，`⌘ / Ctrl + Shift + M` 打开快捷面板。
 
@@ -56,11 +81,11 @@ WorkBuddy Switch 1.0 专注 WorkBuddy。五个页面共用简洁的原生灰阶�
 
 从 [GitHub Releases](https://github.com/koi128bit/WorkBuddy-Switch/releases/latest) 下载，校验清单为同页的 `SHA256SUMS.txt`。
 
-| 系统              | 1.0.0 安装包                                                                                                                                                                                                                                                                            |
+| 系统              | 1.1.0 安装包                                                                                                                                                                                                                                                                            |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Apple Silicon Mac | [mac-arm64.dmg](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.0.0/WorkBuddy-Switch-1.0.0-mac-arm64.dmg)                                                                                                                                                            |
-| Intel Mac         | [mac-x64.dmg](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.0.0/WorkBuddy-Switch-1.0.0-mac-x64.dmg)                                                                                                                                                                |
-| Windows 10/11 x64 | [安装版 setup.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.0.0/WorkBuddy-Switch-1.0.0-windows-x64-setup.exe) · [便携版 portable.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.0.0/WorkBuddy-Switch-1.0.0-windows-x64-portable.exe) |
+| Apple Silicon Mac | [mac-arm64.dmg](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.1.0/WorkBuddy-Switch-1.1.0-mac-arm64.dmg)                                                                                                                                                            |
+| Intel Mac         | [mac-x64.dmg](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.1.0/WorkBuddy-Switch-1.1.0-mac-x64.dmg)                                                                                                                                                                |
+| Windows 10/11 x64 | [安装版 setup.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.1.0/WorkBuddy-Switch-1.1.0-windows-x64-setup.exe) · [便携版 portable.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.1.0/WorkBuddy-Switch-1.1.0-windows-x64-portable.exe) |
 
 macOS 打开 DMG，把 `WorkBuddy Switch.app` 拖到「应用程序」。Windows 运行安装程序选择安装位置，或直接运行便携版；便携版的应用数据仍保存在当前系统用户的数据目录。
 
@@ -116,7 +141,7 @@ WorkBuddy 5.6 的部分凭据采用本机加密封装。应用原样保留该封
 
 ## 本地开发
 
-需要 Node.js **22.16+**，桌面开发模式需要安装 WorkBuddy。测试使用独立目录和模拟凭据。
+需要 Node.js **22.16+**，调试客户端功能需要安装相应客户端。测试使用独立目录和模拟凭据。
 
 ```bash
 npm ci
@@ -137,4 +162,4 @@ npm run dist:win         # Windows 上构建 x64 安装版与便携版
 
 ## 许可
 
-[MIT](LICENSE)。依赖许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。本项目是独立社区工具，与 WorkBuddy 官方没有隶属关系。
+[MIT](LICENSE)。依赖许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。本项目是独立社区工具，与 WorkBuddy、Trae 或 Qoder 官方没有隶属关系。

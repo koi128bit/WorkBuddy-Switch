@@ -25,6 +25,11 @@ export function fixtureState(): Snapshot {
     checkinHour: 9,
     checkinMinute: 0,
     menuBarBalance: true,
+    activeProvider: "workbuddy" as const,
+    traeDataPath: "",
+    traeExecutablePath: "",
+    qoderDataPath: "",
+    qoderExecutablePath: "",
   };
   const accounts = [
     {
@@ -124,6 +129,37 @@ export function fixtureState(): Snapshot {
   }));
   return {
     demo: true,
+    editors: Object.fromEntries(
+      (["trae-cn", "qoder-cn"] as const).map((provider) => {
+        const name = provider === "trae-cn" ? "Trae CN" : "Qoder CN";
+        return [
+          provider,
+          {
+            provider,
+            name,
+            accounts: ["日常开发", "项目测试"].map((label, index) => ({
+              id: `${provider}-${index}`,
+              nickname: `${name} ${label}`,
+              note: "演示快照",
+              favorite: index === 0,
+              capturedAt: now - index * 86400000,
+              lastUsedAt: now - index * 3600000,
+              automatic: false,
+            })),
+            currentId: `${provider}-0`,
+            hasLogin: true,
+            error: null,
+            client: {
+              installed: true,
+              running: false,
+              executable: `/Applications/${name}.app`,
+            },
+            dataPath: `/Users/example/Library/Application Support/${provider === "trae-cn" ? "Trae CN" : "com.qodercn.app.stable"}`,
+            recoveryPending: false,
+          },
+        ];
+      }),
+    ) as Snapshot["editors"],
     accounts,
     current: {
       id: accounts[0].id,
@@ -148,7 +184,7 @@ export function fixtureState(): Snapshot {
     events: [],
     rewardHistory: [],
     authError: null,
-    version: "1.0.0",
+    version: "1.1.0",
     platform: "darwin",
     dataDirectory:
       "/Users/example/Library/Application Support/WorkBuddy Switch",

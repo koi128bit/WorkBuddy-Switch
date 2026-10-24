@@ -10,6 +10,50 @@ test.beforeEach(async ({ page }) => {
       const changed = () => listeners.forEach((callback) => callback());
       const bridge = {
         snapshot: async () => structuredClone(snapshot),
+        captureEditor: async (
+          provider: "trae-cn" | "qoder-cn",
+          nickname: string,
+        ) => {
+          const editor = snapshot.editors![provider];
+          const account = {
+            ...editor.accounts[0],
+            id: `${provider}-captured`,
+            nickname,
+          };
+          editor.accounts.push(account);
+          editor.currentId = account.id;
+          changed();
+          return account;
+        },
+        switchEditor: async (provider: "trae-cn" | "qoder-cn", id: string) => {
+          snapshot.editors![provider].currentId = id;
+          changed();
+        },
+        editEditor: async (
+          provider: "trae-cn" | "qoder-cn",
+          id: string,
+          patch: object,
+        ) => {
+          const account = snapshot.editors![provider].accounts.find(
+            (item) => item.id === id,
+          )!;
+          Object.assign(account, patch);
+          changed();
+        },
+        removeEditor: async (provider: "trae-cn" | "qoder-cn", id: string) => {
+          snapshot.editors![provider].accounts = snapshot.editors![
+            provider
+          ].accounts.filter((item) => item.id !== id);
+          changed();
+        },
+        launchEditor: async () => {},
+        restoreEditor: async () => {},
+        keepCurrentEditor: async (provider: "trae-cn" | "qoder-cn") => {
+          snapshot.editors![provider].recoveryPending = false;
+          changed();
+        },
+        traySwitchEditor: async () => true,
+        chooseEditorPath: async () => null,
         sessions: async () => sessions,
         usage: async (q: unknown) => {
           (window as unknown as { lastQuery: unknown }).lastQuery = q;
@@ -138,7 +182,7 @@ test.beforeEach(async ({ page }) => {
   ).toBeVisible();
 });
 
-test("all five pages render and WorkBuddy is the only managed product", async ({
+test("all five WorkBuddy pages render under the WorkBuddy client", async ({
   page,
 }) => {
   for (const label of ["积分", "对话", "用量", "设置", "账号"]) {
@@ -149,8 +193,144 @@ test("all five pages render and WorkBuddy is the only managed product", async ({
     await expect(
       page.getByRole("heading", { name: label, exact: true }),
     ).toBeVisible();
-    await expect(page.locator("body")).not.toContainText(/Trae/i);
+    await expect(
+      page.getByRole("combobox", { name: "切换客户端" }),
+    ).toHaveValue("workbuddy");
   }
+});
+test("domestic client accounts, capture, edit and confirmed switching stay isolated", async ({
+  page,
+}) => {
+  await page
+    .getByRole("combobox", { name: "切换客户端" })
+    .selectOption("trae-cn");
+  await expect(
+    page.getByRole("region", { name: "Trae CN 登录快照" }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "主导航" })
+      .getByRole("button", { name: "积分", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "保存当前账号", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "账号名称", exact: true })
+    .fill("Trae 客户端 A");
+  await page.getByRole("button", { name: "保存快照", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Trae 客户端 A" }),
+  ).toBeVisible();
+  const other = page
+    .locator(".editor-table-row")
+    .filter({ hasText: "Trae CN 项目测试" });
+  await other.getByRole("button", { name: "切换", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("正常退出 Trae CN");
+  await page.getByRole("button", { name: "切换账号", exact: true }).click();
+  await expect(other).toContainText("当前快照");
+  await page
+    .getByRole("combobox", { name: "切换客户端" })
+    .selectOption("qoder-cn");
+  await expect(
+    page.getByRole("region", { name: "Qoder CN 登录快照" }),
+  ).toBeVisible();
+  await expect(page.locator(".editor-table-row")).not.toContainText([
+    "Trae 客户端 A",
+  ]);
+  await page
+    .getByRole("combobox", { name: "切换客户端" })
+    .selectOption("workbuddy");
+  await expect(page.locator(".account-card")).toHaveCount(3);
+  await expect(
+    page
+      .getByRole("navigation", { name: "主导航" })
+      .getByRole("button", { name: "积分", exact: true }),
+  ).toBeVisible();
+});
+test("attention filter surfaces the expiring credit package and suggests its account", async ({
+  page,
+}) => {
+  await expect(
+    page.locator(".account-card").filter({ hasText: "个人实验" }),
+  ).toContainText("建议先用");
+  await page.getByRole("button", { name: /需关注/ }).click();
+  await expect(page.locator(".account-card")).toHaveCount(1);
+  await page.getByRole("button", { name: "查看个人实验" }).click();
+  await expect(page.locator(".quota-breakdown")).toContainText(
+    "96.2 积分将在 7 天内到期",
+  );
+});
+test("preserving a newer domestic login unblocks switching while keeping recovery archived", async ({
+  page,
+}) => {
+  await page.evaluate(async () => {
+    const bridge = window.workbuddy,
+      state = await bridge.snapshot();
+    state.settings.activeProvider = "trae-cn";
+    state.editors!["trae-cn"].recoveryPending = true;
+    bridge.snapshot = async () => structuredClone(state);
+    bridge.keepCurrentEditor = async () => {
+      state.editors!["trae-cn"].recoveryPending = false;
+      await bridge.saveSettings(state.settings);
+    };
+    await bridge.saveSettings(state.settings);
+  });
+  await page
+    .getByRole("button", { name: "保留当前登录并归档", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("旧恢复记录归档保留");
+  await page.getByRole("button", { name: "保留并归档", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "恢复切换前登录", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page
+      .locator(".editor-table-row")
+      .filter({ hasText: "Trae CN 项目测试" })
+      .getByRole("button", { name: "切换", exact: true }),
+  ).toBeEnabled();
+});
+test("domestic client pages and popup keep the native layout at minimum size", async ({
+  page,
+}) => {
+  for (const provider of ["trae-cn", "qoder-cn"] as const) {
+    await page
+      .getByRole("combobox", { name: "切换客户端" })
+      .selectOption(provider);
+    await page.setViewportSize({ width: 1260, height: 860 });
+    await page.locator(".toast").waitFor({ state: "hidden" });
+    await page.screenshot({
+      path: `.github/assets/${provider}.png`,
+      animations: "disabled",
+    });
+    await page.setViewportSize({ width: 940, height: 640 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    expect(
+      await page
+        .locator(".page-content")
+        .evaluate((element) => element.scrollWidth <= element.clientWidth),
+    ).toBe(true);
+    await expect(
+      page.getByRole("button", { name: "保存当前账号", exact: true }),
+    ).toBeVisible();
+  }
+  await page.goto("/#tray");
+  await page.reload();
+  await page.setViewportSize({ width: 346, height: 346 });
+  await expect(
+    page.getByRole("combobox", { name: "快捷面板客户端" }),
+  ).toHaveValue("qoder-cn");
+  await expect(
+    page.getByRole("button", { name: "一键领积分", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator(".tray-account")).toHaveCount(2);
+  await page.screenshot({
+    path: ".github/assets/tray-qoder-cn.png",
+    animations: "disabled",
+  });
 });
 test("account search, editing and favorites affect the visible account list", async ({
   page,
@@ -196,9 +376,9 @@ test("settings persist across reload, including dark theme", async ({
     .getByRole("navigation", { name: "主导航" })
     .getByRole("button", { name: "设置", exact: true })
     .click();
-  await page.getByRole("switch", { name: "切换后重新启动 WorkBuddy" }).click();
+  await page.getByRole("switch", { name: "切换后重新启动客户端" }).click();
   await expect(
-    page.getByRole("switch", { name: "切换后重新启动 WorkBuddy" }),
+    page.getByRole("switch", { name: "切换后重新启动客户端" }),
   ).toHaveAttribute("aria-checked", "false");
   await page.getByRole("button", { name: "外观与隐私", exact: true }).click();
   await page.getByRole("button", { name: "深色", exact: true }).click();

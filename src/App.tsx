@@ -53,6 +53,7 @@ import type {
   Snapshot,
   Usage,
   UsageQuery,
+  Provider,
 } from "./types";
 import {
   Button,
@@ -71,6 +72,7 @@ import {
 import appIcon from "../assets/icon.png";
 import { Accounts } from "./Accounts";
 import { RewardsPage } from "./Rewards";
+import { EditorAccounts, EditorPaths, providerNames } from "./EditorAccounts";
 
 type Page = "overview" | "accounts" | "sessions" | "usage" | "settings";
 const nav = [
@@ -138,6 +140,7 @@ export function App() {
     usageId = useRef(0),
     sessionId = useRef(0),
     api = window.workbuddy;
+  const provider = state?.settings.activeProvider || "workbuddy";
   const query = useMemo<UsageQuery>(() => {
     let since: number | null = null,
       until: number | null = null;
@@ -164,7 +167,7 @@ export function App() {
     }
   }, [api]);
   const loadData = useCallback(async () => {
-    if (!api) return;
+    if (!api || provider !== "workbuddy") return;
     const currentSessionRequest = ++sessionId.current;
     try {
       const result = await api.sessions();
@@ -186,7 +189,11 @@ export function App() {
     } catch (e) {
       if (id === usageId.current) setUsageError((e as Error).message);
     }
-  }, [api, query]);
+  }, [api, query, provider]);
+  useEffect(() => {
+    if (provider !== "workbuddy")
+      setPage((current) => (current === "settings" ? current : "accounts"));
+  }, [provider]);
   useEffect(() => {
     void reload();
     if (!api) return;
@@ -320,6 +327,9 @@ export function App() {
       </div>
     );
   const privacy = state.settings.privacyMode;
+  const editor = provider !== "workbuddy" ? state.editors?.[provider] : null;
+  const currentClient = editor?.client || state.client;
+  const clientName = providerNames[provider];
   const disabled = !!task || state.busy;
   const selected =
     selectedAccounts === null
@@ -332,13 +342,13 @@ export function App() {
     ...state.accounts.map((account) => account.quota?.fetchedAt || 0),
   );
   const clientStatus =
-    state.client.running === true
-      ? "WorkBuddy 运行中"
-      : state.client.running === null
+    currentClient.running === true
+      ? `${clientName} 运行中`
+      : currentClient.running === null
         ? "运行状态未知"
-        : state.client.installed
-          ? "WorkBuddy 未运行"
-          : "未找到 WorkBuddy";
+        : currentClient.installed
+          ? `${clientName} 未运行`
+          : `未找到 ${clientName}`;
   const name = (id: string) =>
     state.accounts.find((a) => a.id === id)?.nickname ||
     (state.current?.id === id ? state.current.nickname : mask(id, privacy));
@@ -358,36 +368,73 @@ export function App() {
           </div>
         </div>
 
+        <label className="provider-switcher">
+          <span>客户端</span>
+          <select
+            aria-label="切换客户端"
+            disabled={disabled}
+            value={provider}
+            onChange={(event) => {
+              setPage("accounts");
+              setError("");
+              void saveSettings({
+                ...state.settings,
+                activeProvider: event.target.value as Provider,
+              });
+            }}
+          >
+            <option value="workbuddy">WorkBuddy</option>
+            <option value="trae-cn">Trae CN</option>
+            <option value="qoder-cn">Qoder CN</option>
+          </select>
+        </label>
         <nav aria-label="主导航">
-          {nav.map(({ id, label, icon: Icon }) => (
-            <button
-              className={`nav-item ${page === id ? "active" : ""}`}
-              aria-label={label}
-              aria-current={page === id ? "page" : undefined}
-              key={id}
-              onClick={() => {
-                setPage(id);
-                setError("");
-              }}
-            >
-              <Icon size={18} strokeWidth={1.7} />
-              <span>{label}</span>
-              {id === "accounts" && (
-                <span className="nav-count">{state.accounts.length}</span>
-              )}
-            </button>
-          ))}
+          {nav
+            .filter(
+              (item) =>
+                provider === "workbuddy" ||
+                item.id === "accounts" ||
+                item.id === "settings",
+            )
+            .map(({ id, label, icon: Icon }) => (
+              <button
+                className={`nav-item ${page === id ? "active" : ""}`}
+                aria-label={label}
+                aria-current={page === id ? "page" : undefined}
+                key={id}
+                onClick={() => {
+                  setPage(id);
+                  setError("");
+                }}
+              >
+                <Icon size={18} strokeWidth={1.7} />
+                <span>{label}</span>
+                {id === "accounts" && (
+                  <span className="nav-count">
+                    {editor ? editor.accounts.length : state.accounts.length}
+                  </span>
+                )}
+              </button>
+            ))}
         </nav>
         <div className="sidebar-bottom">
           <div className="sidebar-current">
             <small>当前账号</small>
             <strong>
-              {state.current ? name(state.current.id) : "尚未登录"}
+              {provider === "workbuddy"
+                ? state.current
+                  ? name(state.current.id)
+                  : "尚未登录"
+                : editor?.accounts.find(
+                    (account) => account.id === editor.currentId,
+                  )?.nickname || "未匹配保存快照"}
             </strong>
             <span>
-              {state.current
-                ? mask(state.current.id, privacy)
-                : "打开 WorkBuddy 登录"}
+              {provider !== "workbuddy"
+                ? clientName
+                : state.current
+                  ? mask(state.current.id, privacy)
+                  : "打开 WorkBuddy 登录"}
             </span>
           </div>
           <button
@@ -414,7 +461,7 @@ export function App() {
               <h1>{nav.find((n) => n.id === page)?.label}</h1>
               <span className="heading-context">
                 {page === "accounts"
-                  ? `${state.accounts.length} 个账号${state.demo ? " · 演示" : ""}`
+                  ? `${clientName} · ${editor ? editor.accounts.length : state.accounts.length} 个账号${state.demo ? " · 演示" : ""}`
                   : page === "overview"
                     ? "签到与旅行奖励"
                     : page === "sessions"
@@ -425,7 +472,8 @@ export function App() {
               </span>
             </div>
             <div className="page-actions">
-              {page === "accounts" || page === "overview" ? (
+              {provider === "workbuddy" &&
+              (page === "accounts" || page === "overview") ? (
                 <>
                   <Button
                     icon={RefreshCw}
@@ -503,13 +551,13 @@ export function App() {
               </button>
             </div>
           )}
-          {state.authError && !error && (
+          {provider === "workbuddy" && state.authError && !error && (
             <div className="notice warn">
               <Info size={17} />
               <span>{state.authError}</span>
             </div>
           )}
-          {page === "overview" && (
+          {provider === "workbuddy" && page === "overview" && (
             <RewardsPage
               state={state}
               disabled={disabled}
@@ -517,7 +565,17 @@ export function App() {
               claim={claim}
             />
           )}
-          {page === "accounts" && (
+          {provider !== "workbuddy" && page === "accounts" && (
+            <EditorAccounts
+              key={provider}
+              provider={provider}
+              state={editor || undefined}
+              settings={state.settings}
+              disabled={disabled}
+              run={run}
+            />
+          )}
+          {provider === "workbuddy" && page === "accounts" && (
             <Accounts
               state={state}
               disabled={disabled}
@@ -539,7 +597,7 @@ export function App() {
               }
             />
           )}
-          {page === "sessions" && (
+          {provider === "workbuddy" && page === "sessions" && (
             <Sessions
               sessions={sessions}
               error={sessionError}
@@ -550,7 +608,7 @@ export function App() {
               resume={resume}
             />
           )}
-          {page === "usage" && (
+          {provider === "workbuddy" && page === "usage" && (
             <UsagePage
               usage={usage}
               error={usageError}
@@ -577,33 +635,45 @@ export function App() {
         </div>
       </main>
       <footer className="app-statusbar" aria-label="应用状态栏">
-        <Status ok={state.client.running === true}>{clientStatus}</Status>
-        <button disabled={disabled} onClick={() => setPage("settings")}>
-          自动任务{" "}
-          {state.settings.autoCheckin ||
-          state.settings.autoClaimTravel ||
-          state.settings.autoDepartTravel
-            ? "开启"
-            : "关闭"}
-        </button>
+        <Status ok={currentClient.running === true}>{clientStatus}</Status>
+        {provider === "workbuddy" ? (
+          <button disabled={disabled} onClick={() => setPage("settings")}>
+            自动任务{" "}
+            {state.settings.autoCheckin ||
+            state.settings.autoClaimTravel ||
+            state.settings.autoDepartTravel
+              ? "开启"
+              : "关闭"}
+          </button>
+        ) : (
+          <span>本机加密快照</span>
+        )}
         <span>
           {task ||
             (state.busy
               ? "任务执行中…"
-              : state.refreshing
-                ? "正在刷新积分…"
-                : lastRefresh
-                  ? `上次刷新 ${new Date(lastRefresh).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`
-                  : "尚未查询积分")}
+              : provider !== "workbuddy"
+                ? "登录状态由客户端确认"
+                : state.refreshing
+                  ? "正在刷新积分…"
+                  : lastRefresh
+                    ? `上次刷新 ${new Date(lastRefresh).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`
+                    : "尚未查询积分")}
         </span>
         <button
           className="statusbar-save"
           disabled={disabled}
           onClick={() =>
-            void run("保存当前账号", () => api.capture(), "当前账号已加密保存")
+            provider === "workbuddy"
+              ? void run(
+                  "保存当前账号",
+                  () => api.capture(),
+                  "当前账号已加密保存",
+                )
+              : setPage("accounts")
           }
         >
-          保存当前账号
+          {provider === "workbuddy" ? "保存当前账号" : "管理账号"}
         </button>
         <button
           className="icon-button"
@@ -1476,7 +1546,7 @@ function SettingsPage({
                   disabled={disabled}
                 />
                 <Toggle
-                  label="切换后重新启动 WorkBuddy"
+                  label="切换后重新启动客户端"
                   description="凭据写入完成后，自动打开客户端。"
                   checked={settings.restartAfterSwitch}
                   onChange={(v) => change("restartAfterSwitch", v)}
@@ -1810,6 +1880,16 @@ function SettingsPage({
                 </div>
               </>,
             )}
+            {(["trae-cn", "qoder-cn"] as const).map((provider) => (
+              <EditorPaths
+                key={provider}
+                provider={provider}
+                state={state.editors?.[provider]}
+                settings={settings}
+                disabled={disabled}
+                run={run}
+              />
+            ))}
             {section(
               "连接诊断",
               "检查安装、登录、数据库与文件权限。",
@@ -1852,8 +1932,8 @@ function SettingsPage({
         {tab === "data" && (
           <>
             {section(
-              "账号备份",
-              "加密保存，也能带到另一台设备。",
+              "WorkBuddy 账号备份",
+              "WorkBuddy 网页授权可跨设备备份；Trae CN 与 Qoder CN 快照仅限本机。",
               <>
                 <div className="setting-row">
                   <div>
@@ -2039,7 +2119,7 @@ function SettingsPage({
                       {state.platform === "darwin" ? "macOS" : "Windows"}
                     </p>
                   </div>
-                  <span className="badge green">WorkBuddy 专属</span>
+                  <span className="badge">三个客户端</span>
                 </div>
                 <div className="setting-row">
                   <div>
@@ -2101,8 +2181,9 @@ function SettingsPage({
                 <div>
                   <strong>你的账号属于你</strong>
                   <p>
-                    没有遥测、广告或第三方凭据上传。凭据仅用于 WorkBuddy
-                    官方授权与积分接口，账号库采用系统加密。对话和用量在本机处理。
+                    没有遥测、广告或第三方凭据上传。WorkBuddy
+                    凭据用于官方授权与积分接口；Trae CN 和 Qoder CN
+                    快照仅在本机恢复。账号库采用系统加密，对话和用量在本机处理。
                   </p>
                   <TextLink
                     arrow
@@ -2114,7 +2195,7 @@ function SettingsPage({
               </div>,
             )}
             <p className="about-disclaimer">
-              本项目是独立工具，与 WorkBuddy 官方没有隶属关系。
+              本项目是独立工具，与 WorkBuddy、Trae 和 Qoder 官方没有隶属关系。
             </p>
           </>
         )}

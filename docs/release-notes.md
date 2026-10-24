@@ -1,29 +1,23 @@
-WorkBuddy Switch 1.0：支持 macOS 与 Windows 的 WorkBuddy 多账号管理应用。
+WorkBuddy Switch 1.1.0：统一管理 WorkBuddy、Trae CN 与 Qoder CN，支持 macOS 和 Windows。
 
-- 全部界面统一为简洁原生灰阶风格：账号、积分、对话、用量、设置，支持浅色、深色、跟随系统与紧凑布局。
-- 保留原猫咪应用图标，增加菜单栏快捷面板、当前积分数字和底部状态栏。
-- 一键领积分：多选账号签到与领取已到达的旅行奖励，记录真实结果；未返回金额时明确显示。
-- 猫猫旅行：官方地点选择、出发、状态查询、领奖与账号独立的自动任务设置。
-- 自动签到、旅行领奖与出发默认关闭，应用运行时按所选时间和间隔执行。
-- 官方网页登录添加账号、加密保存、收藏与备注、安全切换、官方积分和到期提醒。
-- WorkBuddy 5.6 本机加密凭据支持，跨设备密码加密备份、旧版 macOS 账号迁入。
-- 本地对话恢复与跨账号续聊，迁移前备份完整数据库。
-- Token 统计覆盖消息与工具调用，按记录 ID 去重，支持时间筛选、模型与对话排行及 CSV。
+- 新增 Trae CN 与 Qoder CN 本机登录快照：保存、命名、备注、收藏、搜索、安全切换。
+- 主窗口和菜单栏都可选择客户端，底部状态栏同步切换；保留简约灰阶风格与原猫咪图标。
+- 切换前保存原登录；退出失败停止写入，启动失败尝试恢复，中断时保留系统加密恢复记录。
+- 国内版独立目录与应用校验，支持 Windows Qoder CN 启动器及手动路径配置。
+- WorkBuddy 新增需关注筛选、积分包明细和临期优先建议；原有一键领积分、猫猫旅行、自动任务、对话续接及用量功能保留。
 
-| 设备              | 下载文件                                                                 |
-| ----------------- | ------------------------------------------------------------------------ |
-| Apple Silicon Mac | `mac-arm64.dmg` 或 `mac-arm64.zip`                                       |
-| Intel Mac         | `mac-x64.dmg` 或 `mac-x64.zip`                                           |
-| Windows 10/11 x64 | `windows-x64-setup.exe`（安装版）或 `windows-x64-portable.exe`（便携版） |
+Trae CN / Qoder CN 快照仅限同机恢复，不解密原客户端私有凭据，不在 WorkBuddy 的跨设备备份中导出。请按客户端显示的账号命名，恢复后由客户端确认登录状态。国际版、SOLO、Qoder CLI 不在本次范围。
 
-完整文件名以 `WorkBuddy-Switch-1.0.0-` 开头，macOS 需要 13 或更高版本。下载后可对照 `SHA256SUMS.txt`。
+本机只读核验了 Trae CN 3.3.95；账号切换使用隔离文件与模拟进程验证，未切换用户真实账号。本机未安装 Qoder CN。Windows 原生启动、加密及打包由 Windows runner 验证。
 
-macOS 使用 ad-hoc 签名，尚未做 Apple 公证；Windows 包尚未做 Authenticode 签名，首次打开可能出现系统提示。
+| 设备              | 下载文件后缀                                         |
+| ----------------- | ---------------------------------------------------- |
+| Apple Silicon Mac | `mac-arm64.dmg` / `mac-arm64.zip`                    |
+| Intel Mac         | `mac-x64.dmg` / `mac-x64.zip`                        |
+| Windows 10/11 x64 | `windows-x64-setup.exe` / `windows-x64-portable.exe` |
 
-签到与旅行适用于国内版活动，资格和奖励以官方为准。自动任务需要应用持续运行，电脑休眠或完全退出后停止，不保证固定奖励金额。
+完整文件名以 `WorkBuddy-Switch-1.1.0-` 开头。macOS 13+；发布页附 SHA256SUMS.txt。
 
-从 0.x 升级：在 macOS「设置 → 数据与备份」迁入旧版账号，原数据保留。本机加密账号库不能直接跨系统复制，请使用 `.wbsbackup` 密码备份；本机封装凭据需先通过网页登录重新授权才能导出。
+macOS 使用 ad-hoc 签名，尚未 Apple 公证；Windows 尚未 Authenticode 签名。自动签到和旅行任务默认关闭，仅在应用运行且电脑未休眠时执行。
 
-跨账号续聊会迁移选中记录的本地归属，原账号不再拥有该记录，不生成副本，也不同步云端权限。
-
-[使用 Wiki](https://github.com/koi128bit/WorkBuddy-Switch/wiki) · [安全与隐私](https://github.com/koi128bit/WorkBuddy-Switch/blob/main/SECURITY.md) · [反馈问题](https://github.com/koi128bit/WorkBuddy-Switch/issues)
+[使用 Wiki](https://github.com/koi128bit/WorkBuddy-Switch/wiki) · [安全说明](https://github.com/koi128bit/WorkBuddy-Switch/blob/main/SECURITY.md)

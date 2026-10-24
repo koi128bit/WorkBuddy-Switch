@@ -8,6 +8,15 @@ const call =
   };
 contextBridge.exposeInMainWorld("workbuddy", {
   snapshot: call("snapshot"),
+  captureEditor: call("editor-capture"),
+  switchEditor: call("editor-switch"),
+  editEditor: call("editor-edit"),
+  removeEditor: call("editor-remove"),
+  restoreEditor: call("editor-restore"),
+  keepCurrentEditor: call("editor-keep-current"),
+  launchEditor: call("editor-launch"),
+  traySwitchEditor: call("editor-tray-switch"),
+  chooseEditorPath: call("editor-choose-path"),
   capture: call("capture"),
   switchAccount: call("switch"),
   editAccount: call("edit"),
