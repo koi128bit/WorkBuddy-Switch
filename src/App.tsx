@@ -22,6 +22,7 @@ import {
   Gauge,
   Gift,
   CalendarCheck,
+  ClipboardCheck,
   Globe,
   HardDrive,
   History,
@@ -75,6 +76,7 @@ import { RewardsPage } from "./Rewards";
 import { EditorAccounts, EditorPaths } from "./EditorAccounts";
 import { apiFor, providerNames, isWorkBuddy } from "./providers";
 import { LoginModal } from "./LoginModal";
+import { TaskRunPanel } from "./TaskRunPanel";
 
 type Page = "overview" | "accounts" | "sessions" | "usage" | "settings";
 const nav = [
@@ -274,6 +276,23 @@ export function App() {
             : "当前没有可领取的奖励",
       );
     });
+  }
+  function runTasks(ids: string[]) {
+    if (!ids.length) return;
+    void run("执行 WorkBuddy 任务", async () => {
+      const result = await api.runTasks(ids);
+      setToast(
+        `${result.status === "cancelled" ? "任务已停止" : "任务执行结束"}：领取 ${result.summary.claimed} 项，接取 ${result.summary.accepted} 项${result.summary.failed ? `，失败 ${result.summary.failed} 项` : ""}`,
+      );
+    });
+  }
+  async function stopTasks(id: string) {
+    try {
+      await api.cancelTasks(id);
+      await reload();
+    } catch (error) {
+      setError((error as Error).message);
+    }
   }
   useEffect(
     () =>
@@ -512,6 +531,15 @@ export function App() {
                       添加账号
                     </Button>
                   )}
+                  {provider === "workbuddy" && page === "accounts" && (
+                    <Button
+                      icon={ClipboardCheck}
+                      disabled={disabled || !selected.length}
+                      onClick={() => runTasks(selected)}
+                    >
+                      一键做任务
+                    </Button>
+                  )}
                   {provider === "workbuddy" && (
                     <Button
                       icon={Gift}
@@ -570,12 +598,16 @@ export function App() {
               <span>{state.authError}</span>
             </div>
           )}
+          {provider === "workbuddy" && (
+            <TaskRunPanel state={state} stop={(id) => void stopTasks(id)} />
+          )}
           {provider === "workbuddy" && page === "overview" && (
             <RewardsPage
               state={state}
               disabled={disabled}
               run={run}
               claim={claim}
+              runTasks={runTasks}
             />
           )}
           {!isWorkBuddy(provider) && page === "accounts" && (

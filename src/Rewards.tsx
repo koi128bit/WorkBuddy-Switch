@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   CalendarCheck,
+  ClipboardCheck,
   Check,
   CheckCircle2,
   CircleHelp,
@@ -246,11 +247,13 @@ export function RewardsPage({
   disabled,
   run,
   claim,
+  runTasks,
 }: {
   state: Snapshot;
   disabled: boolean;
   run: Run;
   claim: Claim;
+  runTasks: (ids: string[]) => void;
 }) {
   const [selected, setSelected] = useState(
     state.current?.id || state.accounts[0]?.id || "",
@@ -296,6 +299,13 @@ export function RewardsPage({
             <h2>{account.nickname}</h2>
             <p>{mask(account.id, state.settings.privacyMode)}</p>
           </div>
+          <Button
+            icon={ClipboardCheck}
+            disabled={disabled}
+            onClick={() => runTasks([account.id])}
+          >
+            一键做任务
+          </Button>
           <div className="reward-balance">
             <span>可用积分</span>
             <strong>
@@ -319,6 +329,9 @@ export function RewardsPage({
             {account.quotaError}
           </div>
         )}
+        <p className="quiet-note">
+          一键执行签到、成长任务接取、已达标奖励领取和旅行。需要客户端实际操作的任务会保留进度并显示待完成。
+        </p>
         <AccountTasks
           key={account.id}
           account={account}

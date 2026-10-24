@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld("workbuddy", {
   refreshQuotas: call("refresh"),
   refreshRewards: call("rewards-refresh"),
   claimRewards: call("rewards-claim"),
+  runTasks: call("tasks-run"),
+  cancelTasks: call("tasks-cancel"),
   departTravel: call("travel-depart"),
   openPage: call("open-page"),
   traySwitch: call("tray-switch"),

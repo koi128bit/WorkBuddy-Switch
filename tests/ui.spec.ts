@@ -1,15 +1,49 @@
 import { test, expect } from "@playwright/test";
 import { fixtureState, fixtureSessions, fixtureUsage } from "./fixtures";
+import type { TaskRun } from "../src/types";
 
-test('one-click tasks respect account selection and expose confirmed and pending results',async({page})=>{
-  await page.getByRole('checkbox',{name:'选择日常开发',exact:true}).uncheck();await page.getByRole('checkbox',{name:'选择团队协作',exact:true}).uncheck();
-  await page.getByRole('button',{name:'一键做任务',exact:true}).click();
-  await expect.poll(()=>page.evaluate(()=>(window as unknown as {taskIds:string[]}).taskIds)).toEqual(['wb-sample-002']);
-  await expect(page.getByRole('region',{name:'任务执行进度'})).toContainText('执行结束');await expect(page.getByRole('region',{name:'任务执行进度'})).toContainText('客户端体验任务');await expect(page.getByRole('region',{name:'任务执行进度'})).toContainText('待完成');
+test("one-click tasks respect account selection and expose confirmed and pending results", async ({
+  page,
+}) => {
+  await page
+    .getByRole("checkbox", { name: "选择日常开发", exact: true })
+    .uncheck();
+  await page
+    .getByRole("checkbox", { name: "选择团队协作", exact: true })
+    .uncheck();
+  await page.getByRole("button", { name: "一键做任务", exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { taskIds: string[] }).taskIds),
+    )
+    .toEqual(["wb-sample-002"]);
+  await expect(
+    page.getByRole("region", { name: "任务执行进度" }),
+  ).toContainText("执行结束");
+  await expect(
+    page.getByRole("region", { name: "任务执行进度" }),
+  ).toContainText("客户端体验任务");
+  await expect(
+    page.getByRole("region", { name: "任务执行进度" }),
+  ).toContainText("待完成");
 });
-test('a running one-click task can be stopped without losing its completed result',async({page})=>{
-  await page.evaluate(()=>{(window as unknown as {holdTasks:boolean}).holdTasks=true;});await page.getByRole('button',{name:'一键做任务',exact:true}).click();
-  await expect(page.getByRole('button',{name:'停止后续任务',exact:true})).toBeEnabled();await page.getByRole('button',{name:'停止后续任务',exact:true}).click();await expect(page.getByRole('region',{name:'任务执行进度'})).toContainText('已停止');await expect(page.getByRole('region',{name:'任务执行进度'})).toContainText('每日签到');
+test("a running one-click task can be stopped without losing its completed result", async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    (window as unknown as { holdTasks: boolean }).holdTasks = true;
+  });
+  await page.getByRole("button", { name: "一键做任务", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "停止后续任务", exact: true }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "停止后续任务", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "任务执行进度" }),
+  ).toContainText("已停止");
+  await expect(
+    page.getByRole("region", { name: "任务执行进度" }),
+  ).toContainText("每日签到");
 });
 
 test("all six clients can be selected and editor OAuth controls are visible", async ({
@@ -53,8 +87,83 @@ test.beforeEach(async ({ page }) => {
       if (saved) snapshot.settings = JSON.parse(saved);
       const listeners = new Set<() => void>();
       const changed = () => listeners.forEach((callback) => callback());
+      let finishTasks: ((run: TaskRun) => void) | undefined;
       const bridge = {
         snapshot: async () => structuredClone(snapshot),
+        runTasks: async (ids: string[]) => {
+          (window as unknown as { taskIds: string[] }).taskIds = ids;
+          const now = Date.now();
+          const result: TaskRun = {
+            id: "task-fixture",
+            status: "running",
+            startedAt: now,
+            finishedAt: null,
+            accountIds: ids,
+            totalAccounts: ids.length,
+            completedAccounts: 0,
+            currentAccountId: ids[0],
+            currentStep: "读取官方任务状态",
+            cancelRequested: false,
+            summary: {
+              claimed: 1,
+              accepted: 1,
+              departed: 0,
+              pending: 1,
+              skipped: 0,
+              failed: 0,
+              credit: 0.25,
+              energy: 0,
+              unknownAmounts: 0,
+            },
+            results: [
+              {
+                id: "task-result-1",
+                accountId: ids[0],
+                code: "checkin",
+                title: "每日签到",
+                status: "claimed",
+                credit: 0.25,
+                energy: null,
+                detail: "官方奖励已领取",
+                at: now,
+              },
+              {
+                id: "task-result-2",
+                accountId: ids[0],
+                code: "todo",
+                title: "客户端体验任务",
+                status: "pending",
+                credit: null,
+                energy: null,
+                detail: "请在官方客户端完成实际操作",
+                at: now,
+              },
+            ],
+          };
+          snapshot.taskRun = result;
+          snapshot.busy = true;
+          changed();
+          if ((window as unknown as { holdTasks?: boolean }).holdTasks)
+            return new Promise<TaskRun>((resolve) => {
+              finishTasks = resolve;
+            });
+          result.status = "completed";
+          result.completedAccounts = ids.length;
+          result.finishedAt = Date.now();
+          snapshot.busy = false;
+          changed();
+          return structuredClone(result);
+        },
+        cancelTasks: async () => {
+          const run = snapshot.taskRun!;
+          run.status = "cancelled";
+          run.cancelRequested = true;
+          run.finishedAt = Date.now();
+          snapshot.busy = false;
+          changed();
+          finishTasks?.(structuredClone(run));
+          return true;
+        },
         workbuddyScope: async (
           _provider: string,
           method: string,

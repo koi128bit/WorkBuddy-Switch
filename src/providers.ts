@@ -48,6 +48,8 @@ const globalMethods = new Set([
 const cnMethods = new Set([
   "refreshRewards",
   "claimRewards",
+  "runTasks",
+  "cancelTasks",
   "departTravel",
   "importLegacy",
 ]);

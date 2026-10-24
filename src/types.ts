@@ -143,6 +143,43 @@ export interface ClaimResult {
   credit: number;
   unknownAmounts: number;
 }
+export interface TaskAction {
+  id: string;
+  accountId: string;
+  code: string;
+  title: string;
+  status: "claimed" | "accepted" | "departed" | "pending" | "skipped" | "error";
+  credit: number | null;
+  energy: number | null;
+  current?: number | null;
+  target?: number | null;
+  detail: string;
+  at: number;
+}
+export interface TaskRun {
+  id: string;
+  status: "running" | "completed" | "cancelled" | "interrupted" | "failed";
+  startedAt: number;
+  finishedAt: number | null;
+  accountIds: string[];
+  totalAccounts: number;
+  completedAccounts: number;
+  currentAccountId: string | null;
+  currentStep: string;
+  cancelRequested: boolean;
+  summary: {
+    claimed: number;
+    accepted: number;
+    departed: number;
+    pending: number;
+    skipped: number;
+    failed: number;
+    credit: number;
+    energy: number;
+    unknownAmounts: number;
+  };
+  results: TaskAction[];
+}
 export interface Session {
   id: string;
   userId: string;
@@ -207,6 +244,8 @@ export interface Snapshot {
   refreshing: boolean;
   events: { id: string; at: number; message: string; level: string }[];
   rewardHistory: RewardEntry[];
+  taskRun?: TaskRun | null;
+  taskRunWarning?: string | null;
   authError: string | null;
   version: string;
   platform: string;
@@ -222,6 +261,8 @@ export interface BackupFile {
   createdAt: number;
 }
 export interface Bridge {
+  runTasks(ids?: string[] | null): Promise<TaskRun>;
+  cancelTasks(id: string): Promise<boolean>;
   workbuddyScope(
     provider: WorkBuddyProvider,
     method: string,

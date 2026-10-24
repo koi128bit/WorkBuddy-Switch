@@ -2255,3 +2255,84 @@ body:has(.tray-panel) {
   background: var(--hover);
   color: var(--muted);
 }
+
+.task-run-panel {
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.task-run-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+}
+.task-run-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.task-run-title span,
+.task-run-heading small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.task-run-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 16px 13px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.task-run-summary strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.task-run-results {
+  max-height: 280px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+}
+.task-run-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) 60px minmax(160px, 2fr);
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.task-run-row:last-child {
+  border-bottom: 0;
+}
+.task-run-row strong,
+.task-run-row small {
+  display: block;
+}
+.task-run-row small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.task-run-row p {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1050px) {
+  .task-run-row {
+    grid-template-columns: minmax(100px, 1fr) 50px minmax(140px, 1.6fr);
+    gap: 8px;
+  }
+}
