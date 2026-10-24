@@ -458,7 +458,7 @@ export class EditorOAuth {
         Buffer.from(
           `POST\n${requestPath}\n${definition.authClientId}\n${account.refreshToken}\n${timestamp}\n${nonce}`,
         ),
-        { key: context.privateKey, dsaEncoding: "ieee-p1363" },
+        { key: context.privateKey, dsaEncoding: "der" },
       ).toString("base64");
     } catch {
       throw new Error("设备签名不可用，请在本机重新授权。");
