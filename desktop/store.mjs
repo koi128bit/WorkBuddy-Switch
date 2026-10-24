@@ -129,8 +129,11 @@ export class Store {
     );
     this.records = records;
   }
-  runTasks(ids = null) {
-    return this.tasks.run(ids);
+  prepareTasks(ids = null, options = {}) {
+    return this.tasks.prepare(ids, options);
+  }
+  runTasks(ids = null, planId = null) {
+    return this.tasks.run(ids, planId);
   }
   cancelTasks(id) {
     return this.tasks.cancel(id);
