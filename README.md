@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/icon.png" width="96" height="96" alt="WorkBuddy Switch 原猫咪图标" />
   <h1>WorkBuddy Switch</h1>
-  <p>管理 WorkBuddy、Trae CN 与 Qoder CN，支持 macOS 与 Windows。<br />一键领积分 · 猫猫旅行 · 安全切换 · 对话续接</p>
+  <p>管理 WorkBuddy、Trae 与 Qoder 的国内和国际版，支持 macOS、Windows 与 Linux。<br />一键领积分 · 猫猫旅行 · 安全切换 · 对话续接</p>
   <p>
     <a href="https://github.com/koi128bit/WorkBuddy-Switch/releases/latest">下载应用</a> ·
     <a href="https://github.com/koi128bit/WorkBuddy-Switch/wiki">使用指南</a> ·
@@ -17,19 +17,24 @@
 
 <p align="center"><img src=".github/assets/dark.png" width="1120" alt="原生灰阶深色界面：账号列表、积分、签到、旅行与状态栏" /></p>
 
-WorkBuddy Switch 1.1 在同一个简洁灰阶界面中管理 WorkBuddy、Trae CN 和 Qoder CN。客户端各自保留独立账号列表，支持浅色、深色、跟随系统和紧凑布局；原来的猫咪图标继续保留。主窗口和菜单栏都可以选择客户端，底部状态栏随所选客户端更新。
+WorkBuddy Switch 1.2 在同一个简洁灰阶界面中管理 WorkBuddy、Trae 和 Qoder，提供六个独立客户端入口。客户端各自保留独立账号列表，支持浅色、深色、跟随系统和紧凑布局；原来的猫咪图标继续保留。主窗口和菜单栏都可以选择客户端，底部状态栏随所选客户端更新。
 
 > 截图均为演示账号和模拟数据。真实积分、任务资格与奖励以官方接口为准，本地用量来自设备上的记录。
 
 ## 支持的客户端
 
-| 客户端    | 支持功能                                                             | 账号保存方式                     |
-| --------- | -------------------------------------------------------------------- | -------------------------------- |
-| WorkBuddy | 账号切换、官方积分、签到与旅行、对话续接、Token 用量、跨设备加密备份 | 保存当前登录，或官方网页登录授权 |
-| Trae CN   | 本机登录快照、命名与备注、收藏、搜索、切换失败恢复、菜单栏切换       | 在国内版客户端登录后保存         |
-| Qoder CN  | 本机登录快照、命名与备注、收藏、搜索、切换失败恢复、菜单栏切换       | 在国内版客户端登录后保存         |
+| 客户端            | 账号功能                                                   | 其他功能                                               |
+| ----------------- | ---------------------------------------------------------- | ------------------------------------------------------ |
+| WorkBuddy 国内版  | 保存当前登录、官方网页登录、刷新授权、切换、跨设备加密备份 | 官方积分、一键签到与旅行领奖、自动任务、本地对话与用量 |
+| WorkBuddy 国际版  | 独立账号库与官方授权、切换、积分查询、跨设备加密备份       | 独立本地对话与用量；活动不调用国内版接口               |
+| Trae CN / 国际版  | 真实 UID 识别、官方网页登录、授权续期、完整登录快照切换    | 备注、收藏、搜索、托盘切换、切换失败恢复               |
+| Qoder CN / 国际版 | 真实 UID 识别、官方网页登录、授权续期、完整登录快照切换    | 备注、收藏、搜索、托盘切换、切换失败恢复               |
 
-Trae CN 与 Qoder CN 的快照按原客户端格式保留，只在本机恢复，不解密客户端私有密文，也不包含在 WorkBuddy 的 `.wbsbackup` 跨设备备份中。快照匹配只代表本机文件一致，登录是否有效由客户端确认；请按客户端显示的账号自行命名。
+产品、地区和本机操作系统分别适配，账号库、授权域名、应用标识及数据目录隔离。当前支持桌面客户端；Qoder IDE 插件、独立 CLI、Trae SOLO 使用不同的程序和登录目录，不共用桌面快照。
+
+Trae / Qoder 网页授权与客户端登录资料分别加密保存，用同地区真实 UID 关联。**网页登录不会直接替换桌面登录。** 首次切换前，在官方客户端登录该账号并点击「保存当前账号」一次。未关联完整客户端资料的账号会显示待关联，并禁用切换，避免拼接另一账号的资料导致退登。
+
+客户端格式暂不能识别时，可保留兼容快照；此时不把手填名称当成已验证身份。恢复成功只代表本机登录文件检查通过，最终登录状态由官方客户端与服务器确认。
 
 ## WorkBuddy 功能
 
@@ -41,22 +46,22 @@ Trae CN 与 Qoder CN 的快照按原客户端格式保留，只在本机恢复�
 | **用量** | Token 分项、模型与对话排行、日期范围、日志 Credits 与 CSV 导出                       |
 | **设置** | 常规、自动任务、外观与隐私、连接与路径、数据与备份、关于与更新                       |
 
-账号页新增「需关注」筛选，集中显示查询失败、凭据待续期、低余额与临期积分。积分包明细展示各包可用量和到期时间；「建议先用」仅依据最近 6 小时内查询成功的临期积分，不会自动切换账号。
+WorkBuddy 账号页提供「需关注」筛选，集中显示查询失败、凭据待续期、低余额与临期积分。积分包明细展示各包可用量和到期时间；「建议先用」仅依据最近 6 小时内查询成功的临期积分，不会自动切换账号。
 
 底部状态栏显示当前客户端的运行状态、自动任务开关、正在执行的操作和积分刷新时间，并提供保存当前账号与隐私遮罩快捷操作。
 
-## Trae CN 与 Qoder CN 切换
+## Trae 与 Qoder 账号
 
 <p align="center"><img src=".github/assets/trae-cn.png" width="1120" alt="Trae CN 本机登录快照，演示账号" /></p>
 
-1. 在侧栏的「客户端」选择 **Trae CN** 或 **Qoder CN**。
-2. 在对应官方客户端登录账号 A，回到本应用点击 **保存当前账号**，填写容易辨认的名称。
+1. 在侧栏的「客户端」选择 对应产品的国内版或国际版。
+2. 在对应官方客户端登录账号 A，回到本应用点击 **保存当前账号**，填写容易辨认的名称；应用会尝试识别真实 UID。
 3. 在官方客户端登录账号 B 后再次保存。之后在列表或菜单栏选择目标账号，确认切换。
 4. 自定义安装位置可在账号页的 **路径配置**，或「设置 → 连接与路径」中指定。Windows 的 Qoder CN 支持读取官方启动器位置。
 
 切换前正常退出目标客户端、保存切换前的登录快照，再恢复目标登录。只处理明确的登录字段或登录文件，保留设置、插件、工作区、对话、机器标识与其他客户端的状态。失败时尝试恢复原登录；中断后的加密恢复记录可通过 **恢复切换前登录** 处理。检测到后续新登录时，会停止恢复以保护新登录；此时可选择「保留当前登录并归档」，保存当前快照并归档旧恢复记录，再继续切换。
 
-国内版账号、目录和客户端独立校验；国际版、TRAE SOLO、Qoder CLI 不在本次支持范围。客户端升级导致格式变化时请重新保存快照。当前验证覆盖隔离文件、模拟进程及双平台构建；本机只读核验过 Trae CN 3.3.95，未使用真实账号执行切换，本机也未安装 Qoder CN。
+产品和地区分别校验。客户端升级导致格式变化时请重新保存快照。本机只读核验过 Trae CN 3.4.4 的公开格式，未使用真实账号执行切换，也未安装 Qoder CN；测试使用隔离文件、模拟接口和原生主机。
 
 ## 一键领积分与猫猫旅行
 
@@ -69,11 +74,13 @@ Trae CN 与 Qoder CN 的快照按原客户端格式保留，只在本机恢复�
 
 签到与旅行目前适用于国内版账号，并受官方活动开放情况和账号资格限制。自动任务默认关闭，只有应用运行且电脑未休眠时才执行；关闭到菜单栏或托盘后可继续运行，完全退出后停止。签到时间按北京时间计算，到达设置时间后在下一次检查中执行。
 
+在 Trae / Qoder 账号行点击「续期」可更新已识别的授权；这不会将网页 token 拼接到另一个人的客户端资料。要更新桌面快照，请在客户端正常登录后重新保存。
+
 ## 菜单栏与系统托盘
 
 <p align="center"><img src=".github/assets/tray.png" width="346" alt="菜单栏快捷面板：账号积分、切换、一键领取、主界面与设置" /></p>
 
-点击猫咪图标，先选择客户端，即可查看其最近使用的账号、切换账号，或打开主界面与设置。WorkBuddy 还可查看缓存积分及一键领取。macOS 可在菜单栏图标旁显示当前账号的积分数字；Windows 使用系统托盘。隐私遮罩默认隐藏面板中的账号昵称，截图展示的是关闭昵称遮罩后的演示效果。
+点击猫咪图标，先选择客户端，即可查看其最近使用的账号、切换账号，或打开主界面与设置。WorkBuddy 还可查看缓存积分及一键领取。macOS 可在菜单栏图标旁显示当前账号的积分数字；Windows 和 Linux 使用系统托盘。隐私遮罩默认隐藏面板中的账号昵称，截图展示的是关闭昵称遮罩后的演示效果。
 
 快捷键：`⌘ / Ctrl + ,` 打开设置，`⌘ / Ctrl + 1` 显示主窗口，`⌘ / Ctrl + Shift + M` 打开快捷面板。
 
@@ -81,11 +88,16 @@ Trae CN 与 Qoder CN 的快照按原客户端格式保留，只在本机恢复�
 
 从 [GitHub Releases](https://github.com/koi128bit/WorkBuddy-Switch/releases/latest) 下载，校验清单为同页的 `SHA256SUMS.txt`。
 
-| 系统              | 1.1.0 安装包                                                                                                                                                                                                                                                                            |
+| 系统              | 1.2.0 安装包                                                                                                                                                                                                                                                                            |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Apple Silicon Mac | [mac-arm64.dmg](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.1.0/WorkBuddy-Switch-1.1.0-mac-arm64.dmg)                                                                                                                                                            |
-| Intel Mac         | [mac-x64.dmg](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.1.0/WorkBuddy-Switch-1.1.0-mac-x64.dmg)                                                                                                                                                                |
-| Windows 10/11 x64 | [安装版 setup.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.1.0/WorkBuddy-Switch-1.1.0-windows-x64-setup.exe) · [便携版 portable.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.1.0/WorkBuddy-Switch-1.1.0-windows-x64-portable.exe) |
+| Apple Silicon Mac | [mac-arm64.dmg](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-mac-arm64.dmg)                                                                                                                                                            |
+| Intel Mac         | [mac-x64.dmg](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-mac-x64.dmg)                                                                                                                                                                |
+| Windows 10/11 x64 | [安装版 setup.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-windows-x64-setup.exe) · [便携版 portable.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-windows-x64-portable.exe) |
+
+| Linux x64 | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-linux-x64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-linux-x64.deb) |
+| Linux ARM64 | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-linux-arm64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.2.0/WorkBuddy-Switch-1.2.0-linux-arm64.deb) |
+
+Linux 需要桌面图形环境及已解锁的系统密钥环；AppImage 需要执行权限和对应系统的 FUSE 支持。WorkBuddy 国内版 Linux 由 UOS / 麒麟商店提供，其他客户端也以厂商当前发布的系统与架构版本为前提。自动发现失败时可手动选择应用及数据根目录。
 
 macOS 打开 DMG，把 `WorkBuddy Switch.app` 拖到「应用程序」。Windows 运行安装程序选择安装位置，或直接运行便携版；便携版的应用数据仍保存在当前系统用户的数据目录。
 
@@ -106,7 +118,7 @@ WorkBuddy 5.6 的部分凭据采用本机加密封装。应用原样保留该封
 
 ## 对话续接与备份
 
-跨账号继续或恢复回收站对话时，应用会先正常退出 WorkBuddy，创建包含 WAL 的完整 SQLite 备份，然后在事务中只修改选中记录的归属与删除标记。检查通过后使用当前账号打开对话。
+跨账号继续或恢复回收站对话时，应用会先正常退出 WorkBuddy，创建包含 WAL 的完整 SQLite 备份，然后在事务中只修改选中记录的归属与删除标记。检查通过后使用当前账号打开对话。国际版暂不调用未经确认的对话深链接，恢复后在客户端对话列表继续。
 
 这是**本地对话归属迁移**：原账号不再拥有这条本地记录，不会生成副本，也不同步云端权限。项目目录与依赖仍需在本机可用。备份在应用数据目录的 `session-backups/`，默认保留最近 10 份，可在设置中调整。
 
@@ -133,7 +145,7 @@ WorkBuddy 5.6 的部分凭据采用本机加密封装。应用原样保留该封
 
 <p align="center"><img src=".github/assets/dark-settings.png" width="1120" alt="统一原生风格的设置页：主题、紧凑布局和隐私遮罩" /></p>
 
-账号库使用系统 `safeStorage` 加密：macOS 由钥匙串保护，Windows 使用 DPAPI。Token 不传给界面，不写入操作日志。跨设备备份使用密码派生密钥与 AES-256-GCM；本机封装凭据需先通过官方网页登录重新授权，才能导出可移植备份。
+账号库使用系统 `safeStorage` 加密：macOS 由钥匙串保护，Windows 使用 DPAPI，Linux 使用 GNOME Keyring 或 KWallet。Linux 不接受 `basic_text` 降级，密钥环未解锁时拒绝保存和切换。Token 不传给界面，不写入操作日志。跨设备备份使用密码派生密钥与 AES-256-GCM；本机封装凭据需先通过官方网页登录重新授权，才能导出可移植备份。
 
 对话与用量在本机处理，应用没有遥测、广告或第三方账号上传服务。网络仅用于官方登录、授权续期、积分与活动，以及手动检查本仓库 Releases。领取历史只记录账号、任务、结果、金额和时间。
 
@@ -156,9 +168,10 @@ npm run test:ui          # 五页面交互、奖励、多选、主题与最小�
 
 npm run dist:mac         # macOS 上构建 arm64 / x64 DMG 与 ZIP
 npm run dist:win         # Windows 上构建 x64 安装版与便携版
+npm run dist:linux       # Linux 上构建当前架构 AppImage 与 DEB
 ```
 
-[GitHub Actions](https://github.com/koi128bit/WorkBuddy-Switch/actions/workflows/desktop.yml) 在两个系统上测试并打包，版本标签发布 Release 和 SHA-256 清单。项目结构见 [本地构建与贡献](https://github.com/koi128bit/WorkBuddy-Switch/wiki/本地构建与贡献)，界面与功能验收见 [design-qa.md](design-qa.md)。
+[GitHub Actions](https://github.com/koi128bit/WorkBuddy-Switch/actions/workflows/desktop.yml) 在macOS、Windows、Linux x64 与 Linux ARM64 四个原生 runner 上测试并打包，版本标签发布 Release 和 SHA-256 清单。项目结构见 [本地构建与贡献](https://github.com/koi128bit/WorkBuddy-Switch/wiki/本地构建与贡献)，界面与功能验收见 [design-qa.md](design-qa.md)。
 
 ## 许可
 

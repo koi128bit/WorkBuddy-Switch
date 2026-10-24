@@ -38,10 +38,12 @@ jobs:
       - run: npm test
       - run: npm run test:desktop
       - run: npm run build
-      - if: '!startsWith(matrix.platform, ''linux'')'
+      - if: "!startsWith(matrix.platform, 'linux')"
+        timeout-minutes: 3
         run: npm run test:smoke
       - if: startsWith(matrix.platform, 'linux')
         name: Native Linux Electron smoke with system encryption
+        timeout-minutes: 3
         run: dbus-run-session -- bash scripts/linux-smoke.sh
       - if: matrix.platform == 'mac'
         run: npx playwright install chromium

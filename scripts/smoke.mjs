@@ -63,7 +63,7 @@ try {
       WB_SWITCH_DEV_URL: "",
     },
   });
-  await desktop.firstWindow();
+  await desktop.firstWindow({ timeout: 30000 });
   let page;
   for (let i = 0; i < 80; i++) {
     page = desktop
@@ -73,6 +73,7 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   assert.ok(page, "main application window is loaded");
+  page.setDefaultTimeout(20000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page
@@ -153,6 +154,7 @@ try {
     .windows()
     .find((window) => window.url().endsWith("#tray"));
   assert.ok(popup, "menu-bar panel is loaded");
+  popup.setDefaultTimeout(20000);
   await popup.locator(".tray-footer").waitFor({ state: "attached" });
   await desktop.evaluate(({ BrowserWindow }) => {
     const panel = BrowserWindow.getAllWindows().find((window) =>

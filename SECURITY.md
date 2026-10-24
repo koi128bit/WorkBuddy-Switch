@@ -5,21 +5,27 @@ WorkBuddy Switch 是本地桌面工具。使用已保存账号进行切换前，
 ## 凭据如何保存
 
 - 登录快照只在主进程读取，以 Electron `safeStorage` 加密后写入应用数据目录的 `vault.json`。
-- macOS 的加密密钥由系统钥匙串保护，Windows 使用 DPAPI。系统加密不可用时，应用拒绝保存，没有明文账号库降级。
+- macOS 的加密密钥由系统钥匙串保护，Windows 使用 DPAPI，Linux 使用 GNOME Keyring / KWallet 并拒绝 basic_text 降级。系统加密不可用时，应用拒绝保存，没有明文账号库降级。
 - 账号名称、备注、账号 ID 和查询缓存属于本机元数据；账号库内这些元数据不是额外加密字段。界面的隐私遮罩也不会隐藏账号名称和对话标题。
 - Token 不通过 IPC 返回给界面，不写入操作日志。主窗口只得到必要的账号资料、设置和用量数据。
 - WorkBuddy 5.6 的 `$wbEncrypted` 本机封装保持原样；应用不提取内置密钥或尝试猜测解密。积分查询和可移植备份可通过官方网页登录重新授权。
 - 切换目标是 WorkBuddy 客户端自己的登录文件，写入它时会包含该客户端可读取的凭据。这与本工具加密的账号库是不同的文件。
 
-## Trae CN 与 Qoder CN
+## Trae 与 Qoder（国内与国际版）
 
-国内版客户端的快照单独存放在 `editor-vault.json`，完整凭据负载由本应用的系统 `safeStorage` 再加密。名称、备注、随机快照 ID 和密文指纹是本机元数据。快照只在本机恢复，不导出到 WorkBuddy 的跨设备备份，也不向界面返回凭据、指纹或加密负载。
+四个地区客户端的快照单独存放在 `editor-vault.json`，完整凭据负载由本应用的系统 `safeStorage` 再加密。名称、备注、随机快照 ID 和密文指纹是本机元数据。快照只在本机恢复，不导出到 WorkBuddy 的跨设备备份，也不向界面返回凭据、指纹或加密负载。
 
-Trae CN 只恢复 `storage.json` 的四个明确登录字段，保留设备键和全部其他字段，不修改 SQLite。Qoder CN 原样保存 `auth.v1.dat` 与存在的 `auth-profile-overlays.v1.dat`；不解密 Qoder 的私有密文，不复制 Local State 或机器标识。Windows 校验本机加密 key 的摘要，macOS 在存在机器文件时校验其摘要。摘要只用于比较，不回放机器数据。
+Trae 只恢复 `storage.json` 的四个明确登录字段，保留设备键和全部其他字段，不修改 SQLite。Qoder 原样保存 `auth.v1.dat` 与存在的 `auth-profile-overlays.v1.dat`；在用户点击读取当前账号时，通过该客户端的原生系统凭据识别 UID；不复制 Local State 或机器标识。Windows 校验本机加密 key 的摘要，macOS 在存在机器文件时校验其摘要。摘要只用于比较，不回放机器数据。
 
 切换前正常退出并确认进程已停止，保存最新原登录，再写入目标快照。写前生成系统加密的恢复记录；写后检查密文是否一致。启动失败时尝试恢复原登录；恢复失败时保留 `editor-recovery-*.json`，下次可手动恢复。发现不属于本次切换的新登录值时，拒绝覆盖。用户可选择「保留当前登录并归档」：先保存可用的当前快照，再将旧加密恢复记录改名归档，解除后续切换阻塞。快照一致并不代表服务器登录有效，客户端负责确认授权状态。
 
-客户端标识和国内版数据目录单独校验，读取拒绝越界符号链接。Qoder Windows 启动器只接受安装目录内的相对可执行文件路径。登录数据格式无法识别、加密服务不可用或退出状态无法确认时停止操作。
+客户端标识、地区和数据目录单独校验，读取拒绝越界符号链接。Qoder Windows 启动器只接受安装目录内的相对可执行文件路径。登录数据格式无法识别、加密服务不可用或退出状态无法确认时停止操作。
+
+Trae 静态格式常量从安装包公开脚本只读解析，不执行其脚本。设备密钥保留在原目录；刷新时签名在后端内存完成，不向界面或备份导出设备私钥。Qoder 系统钥匙串/DPAPI/密钥环只用于用户主动触发的本机账号识别，后台状态读取不弹出解锁请求。
+
+网页登录的 verifier、授权码和刷新凭据不返回界面；Trae 回调只监听 `127.0.0.1:17388`，校验 Host、授权状态和地区，在线探测只返回无凭据的常量响应。网页登录资料与完整客户端快照分别加密；按真实 UID 关联，未关联时不合成桌面登录文件。
+
+WorkBuddy 国际版账号单独保存在 `workbuddy-global/`，导入与读取校验地区。Trae / Qoder 的标准授权资料同样写入加密的 `editor-vault.json`，不会包含在 WorkBuddy 跨设备备份里。
 
 ## 备份与本地数据
 
@@ -33,9 +39,10 @@ Trae CN 只恢复 `storage.json` 的四个明确登录字段，保留设备键�
 
 应用没有遥测、广告或第三方凭据上传服务。网络访问限于：
 
-1. `https://www.codebuddy.cn`、`https://www.workbuddy.cn` 的官方登录、资料、授权续期、积分、签到和旅行接口。
-2. 用户打开官方授权页时，由系统浏览器完成登录。
-3. 用户检查新版本时访问本仓库 GitHub Releases API；打开仓库、Wiki、下载与安全说明使用固定 GitHub 地址。
+1. WorkBuddy：`www.codebuddy.cn` / `www.workbuddy.cn` 的国内接口，以及 `www.workbuddy.ai` 的国际接口。
+2. Trae：`www.trae.cn` / `www.trae.ai` 官方授权页、`api.trae.cn` / `grow-normal.trae.ai` 对应地区授权接口。Qoder：`qoder.com.cn` / `qoder.com` 官方授权页、`openapi.qoder.com.cn` / `openapi.qoder.sh` 对应地区授权及资料接口。
+3. 用户打开官方授权页时，由系统浏览器完成登录。
+4. 用户检查新版本时访问本仓库 GitHub Releases API；打开仓库、Wiki、下载与安全说明使用固定 GitHub 地址。
 
 请求禁用自动跨站重定向，登录 URL 校验协议、主机、用户信息和端口。浏览器授权请求在主进程内存中保存，5 分钟过期，可取消。网络使用 Electron 系统代理。
 
