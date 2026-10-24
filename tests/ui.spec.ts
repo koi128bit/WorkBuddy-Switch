@@ -289,6 +289,18 @@ test.beforeEach(async ({ page }) => {
               },
             ],
           };
+          if (dialogueCount)
+            result.results.push({
+              id: "task-dialogue-result",
+              accountId: ids[0],
+              code: "chat_5",
+              title: "真实对话 · 快速模式",
+              status: "dialogue",
+              credit: null,
+              energy: null,
+              detail: "已收到完整回复；积分消耗以官方计费为准。",
+              at: now,
+            });
           const account = snapshot.accounts.find(
             (account) => account.id === ids[0],
           );

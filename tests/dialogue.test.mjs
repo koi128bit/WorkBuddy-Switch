@@ -196,3 +196,131 @@ test("the SSE terminal marker completes the request without waiting for the conn
   );
   assert.equal(result.requestId, "real-terminal");
 });
+
+test("dialogue validation and upstream failures never reveal credentials or cause an implicit paid retry", async () => {
+  for (const prompt of ["", "x".repeat(201), "\u0000"])
+    await assert.rejects(
+      () =>
+        api.sendDialogue(document, { model: "fast-model", prompt }, () => {
+          throw new Error("must not send");
+        }),
+      /内容/,
+    );
+  for (const status of [401, 403, 402, 429, 500]) {
+    let calls = 0;
+    await assert.rejects(
+      () =>
+        api.sendDialogue(
+          document,
+          { model: "fast-model", prompt: "你好" },
+          async () => {
+            calls++;
+            return new Response(null, { status });
+          },
+        ),
+      (error) =>
+        error.kind ===
+        ([401, 403].includes(status)
+          ? "auth"
+          : [402, 429].includes(status)
+            ? "quota"
+            : "service"),
+    );
+    assert.equal(calls, 1);
+  }
+  await assert.rejects(
+    () =>
+      api.sendDialogue(
+        document,
+        { model: "fast-model", prompt: "你好" },
+        async () => {
+          throw new Error("fixture-secret");
+        },
+      ),
+    (error) =>
+      error.kind === "transport" && !error.message.includes("fixture-secret"),
+  );
+});
+test("dialogue reader accepts complete JSON and rejects malformed, blocked, oversized or missing bodies", async () => {
+  const json = await api.sendDialogue(
+    document,
+    { model: "fast-model", prompt: "你好" },
+    async () =>
+      new Response(
+        JSON.stringify({
+          id: "json-real",
+          choices: [{ message: { content: "可以" }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 2, completion_tokens: 1 },
+        }),
+        { headers: { "content-type": "application/json" } },
+      ),
+  );
+  assert.equal(json.requestId, "json-real");
+  for (const response of [
+    new Response("invalid", {
+      headers: { "content-type": "application/json" },
+    }),
+    new Response("data: {invalid}\n\n"),
+    new Response(null),
+    new Response("x".repeat(2 * 1024 * 1024 + 1)),
+    stream([
+      {
+        id: "blocked",
+        choices: [
+          { delta: { content: "部分" }, finish_reason: "content_filter" },
+        ],
+      },
+    ]),
+  ])
+    await assert.rejects(
+      () =>
+        api.sendDialogue(
+          document,
+          { model: "fast-model", prompt: "你好" },
+          async () => response,
+        ),
+      /对话/,
+    );
+});
+test("only the same account may report a verified response and a successful activity receipt cannot be replayed", async () => {
+  const result = await api.sendDialogue(
+    document,
+    { model: "glm-5.2", prompt: "你好" },
+    async () => completed(),
+  );
+  const other = parseAuth(
+    JSON.stringify({
+      account: { uid: "other" },
+      auth: { accessToken: "other-secret", domain: "www.workbuddy.cn" },
+    }),
+  );
+  await assert.rejects(
+    () =>
+      api.reportDialogue(other, result, () => {
+        throw new Error("must not send");
+      }),
+    /真实/,
+  );
+  await assert.rejects(
+    () =>
+      api.reportDialogue(
+        document,
+        result,
+        async () => new Response(null, { status: 401 }),
+      ),
+    (error) => error.kind === "auth",
+  );
+  let reports = 0;
+  await api.reportDialogue(document, result, async () => {
+    reports++;
+    return { ok: true, status: 200, json: async () => ({ code: 0, data: {} }) };
+  });
+  await assert.rejects(
+    () =>
+      api.reportDialogue(document, result, () => {
+        throw new Error("must not resend");
+      }),
+    /真实/,
+  );
+  assert.equal(reports, 1);
+});

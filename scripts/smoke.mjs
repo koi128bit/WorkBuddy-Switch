@@ -254,6 +254,28 @@ try {
   await page.evaluate(() => window.workbuddy.capture());
   const after = await page.evaluate(() => window.workbuddy.snapshot());
   assert.equal(after.accounts.length, 1);
+  const taskPlan = await page.evaluate(() =>
+    window.workbuddy.prepareTasks(["isolated-fixture"], {
+      includeAI: false,
+      maxCalls: 1,
+      prompt: "隔离测试",
+    }),
+  );
+  assert.equal(taskPlan.maxCalls, 0);
+  assert.equal(taskPlan.accountIds[0], "isolated-fixture");
+  assert.ok(!JSON.stringify(taskPlan).includes("fake-test-credential"));
+  assert.match(
+    await page.evaluate(async () => {
+      try {
+        await window.workbuddy.runTasks(["isolated-fixture"], "invalid-plan");
+        return "unexpected";
+      } catch (error) {
+        return error.message;
+      }
+    }),
+    /范围|确认/,
+  );
+
   const persisted = await fs.readFile(
     path.join(directory, "vault.json"),
     "utf8",

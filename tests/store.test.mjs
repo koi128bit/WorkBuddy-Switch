@@ -798,22 +798,20 @@ function paidDialogueServer(store, base, { advance = true } = {}) {
     calls = [];
   let sequence = 0;
   for (const id of ["a", "b"])
-    base
-      .tasks(id)
-      .push(
-        {
-          task_code: "chat_5",
-          title: "三次真实对话",
-          accept_status: "not_accepted",
-          progress: { current: 0, target: 3 },
-        },
-        {
-          task_code: "Model_chat_GLM5.2",
-          title: "GLM 模型体验",
-          accept_status: "not_accepted",
-          progress: { current: 0, target: 1 },
-        },
-      );
+    base.tasks(id).push(
+      {
+        task_code: "chat_5",
+        title: "三次真实对话",
+        accept_status: "not_accepted",
+        progress: { current: 0, target: 3 },
+      },
+      {
+        task_code: "Model_chat_GLM5.2",
+        title: "GLM 模型体验",
+        accept_status: "not_accepted",
+        progress: { current: 0, target: 1 },
+      },
+    );
   store.request = async (url, options) => {
     if (url.endsWith("/v2/chat/completions")) {
       const body = JSON.parse(options.body),
@@ -1001,3 +999,119 @@ test("uncertain paid stream results stop the account and never emit a completion
     ),
   );
 });
+
+test("growth tasks that were not accepted by the server never trigger a paid dialogue", async (t) => {
+  const f = await fixture(t);
+  await f.store.capture(parseAuth(auth("a")));
+  const base = growthServer(f.store),
+    paid = paidDialogueServer(f.store, base),
+    request = f.store.request;
+  const plan = await f.store.prepareTasks(["a"], {
+    includeAI: true,
+    maxCalls: 10,
+    prompt: "你好",
+  });
+  f.store.request = async (url, options) =>
+    url.endsWith("/growth/tasks/accept")
+      ? new Response(null, { status: 503 })
+      : request(url, options);
+  const run = await f.store.runTasks(["a"], plan.id);
+  assert.equal(run.summary.dialogues, 0);
+  assert.equal(paid.calls.length, 0);
+  assert.equal(run.summary.failed, 1);
+});
+test("changing the public preview object cannot alter the approved prompt or model and newly completed tasks are not called again", async (t) => {
+  const f = await fixture(t);
+  await f.store.capture(parseAuth(auth("a")));
+  const base = growthServer(f.store),
+    paid = paidDialogueServer(f.store, base);
+  const plan = await f.store.prepareTasks(["a"], {
+    includeAI: true,
+    maxCalls: 2,
+    prompt: "original approved prompt",
+  });
+  plan.options.prompt = "tampered";
+  plan.accounts[0].tasks[0].model = "auto";
+  const run = await f.store.runTasks(["a"], plan.id);
+  assert.ok(
+    paid.calls
+      .filter((call) => call.body)
+      .every(
+        (call) => call.body.messages[0].content === "original approved prompt",
+      ),
+  );
+  assert.equal(run.summary.dialogues, 2);
+  for (const task of base.tasks("a"))
+    if (task.task_code === "chat_5") task.accept_status = "completed";
+  const next = await f.store.prepareTasks(["a"], {
+    includeAI: true,
+    maxCalls: 20,
+    prompt: "你好",
+  });
+  assert.equal(next.maxCalls, 0);
+  const previous = paid.calls.length;
+  await f.store.runTasks(["a"], next.id);
+  assert.equal(paid.calls.length, previous);
+});
+
+test("basic previews make no upstream calls and the total dialogue budget does not spill into later accounts", async (t) => {
+  const f = await fixture(t);
+  for (const id of ["a", "b"]) await f.store.capture(parseAuth(auth(id)));
+  const base = growthServer(f.store),
+    paid = paidDialogueServer(f.store, base);
+  const basic = await f.store.prepareTasks(["a", "b"], {
+    includeAI: false,
+    maxCalls: 20,
+    prompt: "你好",
+  });
+  assert.equal(basic.maxCalls, 0);
+  assert.equal(base.calls.length, 0);
+  assert.equal(paid.calls.length, 0);
+  const limited = await f.store.prepareTasks(["a", "b"], {
+    includeAI: true,
+    maxCalls: 1,
+    prompt: "你好",
+  });
+  assert.equal(limited.maxCalls, 1);
+  assert.equal(limited.accounts[1].tasks.length, 0);
+  await f.store.runTasks(["a", "b"], limited.id);
+  assert.equal(paid.calls.filter((call) => call.body).length, 1);
+  assert.ok(paid.calls.every((call) => call.id === "a"));
+});
+for (const failure of ["report", "progress"])
+  test(`a ${failure} failure after a paid completion prevents another dialogue`, async (t) => {
+    const f = await fixture(t);
+    await f.store.capture(parseAuth(auth("a")));
+    const base = growthServer(f.store),
+      paid = paidDialogueServer(f.store, base),
+      request = f.store.request;
+    const plan = await f.store.prepareTasks(["a"], {
+      includeAI: true,
+      maxCalls: 20,
+      prompt: "你好",
+    });
+    let after = false;
+    f.store.request = async (url, options) => {
+      if (url.endsWith("/v2/report")) {
+        after = true;
+        if (failure === "report") return new Response(null, { status: 503 });
+      }
+      if (
+        after &&
+        failure === "progress" &&
+        url.endsWith("/v2/activity/growth/tasks")
+      )
+        return new Response(null, { status: 503 });
+      return request(url, options);
+    };
+    const run = await f.store.runTasks(["a"], plan.id);
+    assert.equal(run.summary.dialogues, 1);
+    assert.equal(run.dialogueAttempts, 1);
+    assert.equal(paid.calls.filter((call) => call.body).length, 1);
+    assert.ok(
+      run.results.some(
+        (entry) =>
+          entry.status === "error" && /停止继续对话/.test(entry.detail),
+      ),
+    );
+  });
