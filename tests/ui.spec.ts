@@ -1,6 +1,20 @@
 import { test, expect } from "@playwright/test";
 import { fixtureState, fixtureSessions, fixtureUsage } from "./fixtures";
 
+test('all six clients can be selected and editor OAuth controls are visible',async({page})=>{
+  await page.goto('/');
+  for(const provider of ['workbuddy','workbuddy-global','trae-cn','trae-global','qoder-cn','qoder-global']) {
+    await page.getByLabel('切换客户端',{exact:true}).selectOption(provider);
+    await expect(page.getByRole('heading',{name:'账号',exact:true})).toBeVisible();
+    if(provider.startsWith('trae')||provider.startsWith('qoder')) {
+      await expect(page.getByRole('button',{name:'网页登录',exact:true})).toBeVisible();
+      await expect(page.getByRole('button',{name:'保存当前账号',exact:true})).toBeVisible();
+      await expect(page.getByRole('button',{name:'积分',exact:true})).toHaveCount(0);
+    }
+    if(provider==='workbuddy-global')await expect(page.getByRole('button',{name:'一键领积分',exact:true})).toHaveCount(0);
+  }
+});
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(
     ({ snapshot, sessions, usage }) => {
