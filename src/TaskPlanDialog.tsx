@@ -72,7 +72,21 @@ export function TaskPlanDialog({
         description="将发送真实对话并消耗积分；实际价格由官方计费，奖励可能低于消耗。"
         checked={draft.includeAI}
         disabled={busy}
-        onChange={(includeAI) => setDraft({ ...draft, includeAI })}
+        onChange={(includeAI) =>
+          setDraft({
+            ...draft,
+            includeAI,
+            maxCalls:
+              Number.isInteger(draft.maxCalls) &&
+              draft.maxCalls >= 1 &&
+              draft.maxCalls <= 20
+                ? draft.maxCalls
+                : defaultTaskOptions.maxCalls,
+            prompt: draft.prompt.trim()
+              ? draft.prompt
+              : defaultTaskOptions.prompt,
+          })
+        }
       />
       {draft.includeAI && (
         <div className="task-plan-options">

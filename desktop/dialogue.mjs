@@ -186,9 +186,14 @@ export async function sendDialogue(
       while ((end = buffer.indexOf("\n")) >= 0) {
         line(buffer.slice(0, end).trim());
         buffer = buffer.slice(end + 1);
+        if (done) {
+          buffer = "";
+          break;
+        }
       }
+      if (done) break;
     }
-    buffer += decoder.decode();
+    if (!done) buffer += decoder.decode();
     if (response.headers.get("content-type")?.includes("application/json")) {
       let obj;
       try {
