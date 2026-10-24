@@ -81,6 +81,31 @@ console.log(
   "PASS: native PKG replaces 1.4.0 at /Applications, removes obsolete bundle files, preserves user data and leaves one application.",
 );
 
+// The earlier development-mode smoke creates a keychain item trusted by Electron,
+// while this test launches the signed application. Isolate that disposable CI item.
+for (const name of [
+  "vault.json",
+  "editor-vault.json",
+  "workbuddy-global/vault.json",
+]) {
+  try {
+    await fs.access(path.join(data, name));
+    throw new Error(
+      "Runner profile contains account data; refusing keychain fixture cleanup.",
+    );
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+}
+try {
+  await exec("/usr/bin/security", [
+    "delete-generic-password",
+    "-s",
+    "WorkBuddy Switch Safe Storage",
+  ]);
+} catch (error) {
+  if (error.code !== 44) throw error;
+}
 await exec("/usr/bin/open", ["-n", target]);
 const pattern =
   "^/Applications/WorkBuddy Switch\\.app/Contents/MacOS/WorkBuddy Switch$";
