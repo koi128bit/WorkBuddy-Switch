@@ -14,6 +14,10 @@
     inset 0 1px 0 #ffffff0d,
     0 22px 70px #00000040;
 }
+:root[data-material="vibrancy"] .app,
+:root[data-material="acrylic"] .app {
+  background-color: rgb(8 8 10 / 58%);
+}
 :root[data-glass="on"] .app::before {
   content: "";
   position: absolute;
@@ -152,6 +156,9 @@
 }
 .chart-legend .tiny-dot {
   background: var(--accent);
+}
+.plot-max {
+  background: transparent;
 }
 .token-dot.input {
   background: var(--accent);
