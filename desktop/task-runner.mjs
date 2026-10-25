@@ -243,7 +243,9 @@ export class TaskRunner {
             ) {
               pending(
                 task,
-                paid && !includeAI ? "本次未包含真实对话。" : "本次未包含兼容活动上报。",
+                paid && !includeAI
+                  ? "本次未包含真实对话。"
+                  : "本次未包含兼容活动上报。",
               );
               continue;
             }

@@ -11,7 +11,7 @@ test("extended task confirmation separates compatibility records from paid actio
       const plan = await previous(ids, options);
       return {
         ...plan,
-        maxActivities: ids.length,
+        maxActivities: plan.accountIds.length,
         accounts: plan.accounts.map((account) => ({
           ...account,
           tasks: [
