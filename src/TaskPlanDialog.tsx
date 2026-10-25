@@ -72,7 +72,7 @@ export function TaskPlanDialog({
       </p>
       <Toggle
         label="包含活动事件任务"
-        description="模板、画布、资料库等通过兼容活动上报推进；不会生成画布或长期定时任务，也不建立第三方应用授权。完成情况以官方计分为准。"
+        description="模板、灵感、画布、资料库等通过兼容活动上报推进；部分体验任务需真实对话，已计入上限。主题任务会应用官方主题，可在官方客户端改回。不会生成画布或长期定时任务，也不建立第三方应用授权。完成情况以官方计分为准。"
         checked={draft.includeActivities ?? false}
         disabled={busy}
         onChange={(includeActivities) =>
