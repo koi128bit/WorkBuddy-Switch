@@ -511,6 +511,6 @@ export async function executeActivity(document, action, request = fetch) {
   }
   return {
     dialogue,
-    detail: "已收到真实对话回复并提交活动回执，消耗以官方计费为准。",
+    detail: dialogue.hasAnswer ? "已收到真实对话回复并提交活动回执，消耗以官方计费为准。" : "模型已返回推理内容并结束响应，已提交活动回执，消耗以官方计费为准。",
   };
 }

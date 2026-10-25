@@ -129,6 +129,7 @@ export async function sendDialogue(
     buffer = "",
     requestId = "",
     content = false,
+    reasoningContent = false,
     finished = false,
     done = false,
     inputTokens = null,
@@ -148,6 +149,8 @@ export async function sendDialogue(
     const choice = obj?.choices?.[0],
       text = choice?.delta?.content ?? choice?.message?.content;
     if (typeof text === "string" && text.trim()) content = true;
+    const reasoning = choice?.delta?.reasoning_content ?? choice?.message?.reasoning_content;
+    if (typeof reasoning === "string" && reasoning.trim()) reasoningContent = true;
     if (choice?.finish_reason) {
       if (!["stop", "length"].includes(choice.finish_reason))
         throw new RewardError("对话未正常完成，已停止继续调用。", "service");
@@ -222,7 +225,7 @@ export async function sendDialogue(
   } finally {
     await reader.cancel().catch(() => {});
   }
-  if (!requestId || !content || (!done && !finished))
+  if (!requestId || (!content && !reasoningContent) || (!done && !finished))
     throw new RewardError(
       "未取得完整对话结果，消耗尚未确认，已停止继续调用。",
       "format",
@@ -237,6 +240,8 @@ export async function sendDialogue(
     inputTokens,
     outputTokens,
     finishReason,
+    hasAnswer: content,
+    hasReasoning: reasoningContent,
   });
   proofs.set(result, { accountId: document.id, origin, reported: false });
   return result;

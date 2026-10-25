@@ -408,7 +408,7 @@ export class TaskRunner {
             row.code,
             "真实对话 · " + row.modelName,
             "dialogue",
-            { detail: "已收到完整回复，对话消耗以官方计费为准。" },
+            { detail: dialogue.hasAnswer ? "已收到完整模型响应，对话消耗以官方计费为准。" : "模型已返回推理内容并结束响应，对话消耗以官方计费为准。" },
           );
           try {
             await this.store.authorized(accountId, (document) =>
