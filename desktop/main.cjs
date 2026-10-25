@@ -246,7 +246,7 @@ function createWindow() {
     minHeight: 640,
     show: false,
     title: "WorkBuddy Switch",
-    backgroundColor: "#171719",
+    backgroundColor: "#19191c",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     trafficLightPosition: { x: 20, y: 22 },
     icon: path.join(root, "assets/icon.png"),

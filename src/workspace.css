@@ -52,36 +52,6 @@ kbd {
 .dashboard {
   min-width: 0;
 }
-.dashboard-welcome {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  margin: 4px 0 28px;
-}
-.eyebrow {
-  color: var(--faint);
-  font: 9px var(--mono);
-  letter-spacing: 1.7px;
-}
-.dashboard-welcome h2 {
-  font-size: 23px;
-  letter-spacing: -0.7px;
-  font-weight: 500;
-  margin-top: 12px;
-}
-.dashboard-welcome p {
-  color: var(--faint);
-  font-size: 11px;
-  margin-top: 8px;
-}
-.workspace-date {
-  font-size: 10px;
-  color: var(--faint);
-  white-space: nowrap;
-  align-self: flex-start;
-  margin-top: 3px;
-}
 .dashboard-metrics .metric:first-child {
   padding-left: 0;
 }
@@ -151,6 +121,9 @@ kbd {
 }
 .chart-readout > small {
   font-size: 9px;
+}
+.dashboard .trend-plot {
+  height: 150px;
 }
 .trend-plot {
   position: relative;
@@ -608,7 +581,7 @@ kbd {
   height: 120px;
 }
 .reward-insights .chart-empty {
-  height: 130px;
+  height: 72px;
 }
 .reward-earned {
   font-size: 19px;
@@ -714,7 +687,7 @@ kbd {
   margin-bottom: 20px;
 }
 .api-analytics .trend-plot {
-  height: 140px;
+  height: 115px;
 }
 .theme-miniature {
   display: grid !important;
@@ -859,12 +832,6 @@ kbd {
   }
   .dashboard-lower {
     gap: 22px;
-  }
-  .dashboard-welcome h2 {
-    font-size: 21px;
-  }
-  .workspace-date {
-    display: none;
   }
   .ring-chart {
     gap: 10px;

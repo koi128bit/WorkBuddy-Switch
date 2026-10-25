@@ -50,11 +50,17 @@ test("command search supports keyboard navigation and restores focus when dismis
     page.getByRole("button", { name: "搜索页面和操作" }),
   ).toBeFocused();
 });
-test("command keyboard selection scrolls the last action into view", async ({ page }) => {
+test("command keyboard selection scrolls the last action into view", async ({
+  page,
+}) => {
   await page.getByRole("button", { name: "搜索页面和操作" }).click();
   await page.keyboard.press("ArrowUp");
-  await expect(page.getByRole("option", { name: /关闭隐私遮罩/ })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("option", { name: /关闭隐私遮罩/ })).toBeInViewport();
+  await expect(
+    page.getByRole("option", { name: /关闭隐私遮罩/ }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByRole("option", { name: /关闭隐私遮罩/ }),
+  ).toBeInViewport();
 });
 
 test("usage charts reveal real values to keyboard users and offer a data table", async ({

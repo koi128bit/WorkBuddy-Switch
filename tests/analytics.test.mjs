@@ -69,8 +69,20 @@ test("credit totals exclude failed and malformed quotas and preserve partial cov
   assert.equal(data.unknown, 3);
 });
 test("overview attention count agrees with the account filter and does not treat an unqueried quota as a failure", () => {
-  const account = { quota: null, quotaError: null, rewards: null, tokenExpiresAt: null };
-  assert.equal(creditSummary([account], { expiryWarningDays: 7, lowBalanceThreshold: 20 }, now).attention, 0);
+  const account = {
+    quota: null,
+    quotaError: null,
+    rewards: null,
+    tokenExpiresAt: null,
+  };
+  assert.equal(
+    creditSummary(
+      [account],
+      { expiryWarningDays: 7, lowBalanceThreshold: 20 },
+      now,
+    ).attention,
+    0,
+  );
 });
 test("credit expiry reflects active resource balances rather than an account-wide estimate", () => {
   const data = creditSummary(

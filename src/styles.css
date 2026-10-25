@@ -104,7 +104,7 @@ small {
   -webkit-app-region: drag;
 }
 .platform-win32 .window-drag {
-  height: 20px;
+  height: 44px;
 }
 .brand {
   display: flex;
@@ -1024,8 +1024,8 @@ input[type="checkbox"] {
   min-height: 28px;
 }
 .button.subtle-primary {
-  color: var(--blue);
-  border-color: var(--blue);
+  color: var(--text);
+  border-color: var(--line-strong);
   background: var(--blue-bg);
 }
 .inline-tasks .depart-controls select {
@@ -2622,4 +2622,34 @@ body:has(.tray-panel) {
   .api-service-heading > .api-actions {
     justify-content: flex-end;
   }
+}
+
+.api-service {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 26px;
+}
+.api-service-heading,
+.api-service > .quiet-note {
+  grid-column: 1 / -1;
+}
+.api-service > .quiet-note {
+  margin-top: 13px;
+}
+.api-connection-row {
+  flex-wrap: wrap;
+  gap: 10px;
+  align-content: start;
+  border-bottom: 1px solid var(--line);
+}
+.api-connection-row code {
+  font-size: 11px;
+}
+.api-connection-row .api-actions {
+  gap: 5px;
+}
+.api-connection-row .button {
+  font-size: 10px;
+  padding: 4px 8px;
+  min-height: 28px;
 }

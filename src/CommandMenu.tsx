@@ -29,6 +29,11 @@ export function CommandMenu({
   useEffect(() => {
     input.current?.focus();
   }, []);
+  useEffect(() => {
+    document
+      .getElementById(`${listId}-${index}`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [index, query, listId]);
   const execute = (command: WorkspaceCommand) => {
     onClose();
     command.run();

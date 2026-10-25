@@ -124,30 +124,14 @@ export function Dashboard({
   ]
     .sort((a, b) => b.at - a.at)
     .slice(0, 5);
-  const trend = (usage?.daily || [])
-    .slice(-7)
-    .map((day) => ({
-      label: day.day,
-      value: day.tokens.total,
-      count: day.tokens.requests,
-      unknown: 0,
-    }));
+  const trend = (usage?.daily || []).slice(-7).map((day) => ({
+    label: day.day,
+    value: day.tokens.total,
+    count: day.tokens.requests,
+    unknown: 0,
+  }));
   return (
     <div className="dashboard">
-      <div className="dashboard-welcome">
-        <div>
-          <span className="eyebrow">YOUR WORKSPACE, AT A GLANCE</span>
-          <h2>每一份用量，都心中有数。</h2>
-          <p>账号、积分和本机服务，尽在一处。</p>
-        </div>
-        <span className="workspace-date">
-          {new Date().toLocaleDateString("zh-CN", {
-            month: "long",
-            day: "numeric",
-            weekday: "long",
-          })}
-        </span>
-      </div>
       <div className="usage-metrics dashboard-metrics">
         <Metric
           label="可用积分"
