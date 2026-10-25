@@ -149,8 +149,10 @@ export async function sendDialogue(
     const choice = obj?.choices?.[0],
       text = choice?.delta?.content ?? choice?.message?.content;
     if (typeof text === "string" && text.trim()) content = true;
-    const reasoning = choice?.delta?.reasoning_content ?? choice?.message?.reasoning_content;
-    if (typeof reasoning === "string" && reasoning.trim()) reasoningContent = true;
+    const reasoning =
+      choice?.delta?.reasoning_content ?? choice?.message?.reasoning_content;
+    if (typeof reasoning === "string" && reasoning.trim())
+      reasoningContent = true;
     if (choice?.finish_reason) {
       if (!["stop", "length"].includes(choice.finish_reason))
         throw new RewardError("对话未正常完成，已停止继续调用。", "service");

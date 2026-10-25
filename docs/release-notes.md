@@ -1,4 +1,4 @@
-WorkBuddy Switch 1.6.0：一键任务连续推进，自动等待计分并领奖。
+WorkBuddy Switch 1.6.1：一键任务连续推进，自动等待计分并领奖。
 
 - 扩展真实专家、专家团、指定专家、桌面对话与已安装技能，预览列明实际资源和最多调用次数。
 - 新增模板、灵感、资料库、主题、画布、自动化与发现应用的兼容活动上报；确认页说明这是活动记录，不生成画布、长期定时任务或第三方授权。
@@ -9,3 +9,5 @@ WorkBuddy Switch 1.6.0：一键任务连续推进，自动等待计分并领奖�
 Mac 继续推荐 PKG 覆盖安装，Windows 使用 setup.exe 原位升级。提供 Mac Apple Silicon / Intel、Windows x64、Linux x64 / ARM64 的 12 个安装包，附 SHA256SUMS.txt。
 
 完成状态和奖励以官方回读为准，真实账号的全部任务与扣费尚未逐项验收。macOS 使用 ad-hoc 签名、未 Apple 公证，PKG 未签署 Developer ID Installer；Windows 尚未 Authenticode 签名。
+
+修复有效的仅推理响应到达输出上限后被误判为失败的问题；完整结束和真实请求标识仍需验证，部分流继续停止执行。

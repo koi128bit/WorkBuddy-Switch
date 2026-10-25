@@ -326,19 +326,48 @@ test("only the same account may report a verified response and a successful acti
 });
 
 test("a completed reasoning-only response at the approved output limit remains a verified model interaction", async () => {
-  const result = await api.sendDialogue(document,{model:"fast-model",prompt:"介绍你的用途"},async()=>stream([
-    {id:"reasoning-complete",choices:[{delta:{reasoning_content:"需要用一句话概括用途。"}}]},
-    {id:"reasoning-complete",choices:[{delta:{},finish_reason:"length"}],usage:{prompt_tokens:10,completion_tokens:64}},
-    "[DONE]",
-  ]));
-  assert.equal(result.requestId,"reasoning-complete");
-  assert.equal(result.finishReason,"length");
-  assert.equal(result.outputTokens,64);
-  assert.equal(result.hasAnswer,false);
-  assert.equal(result.hasReasoning,true);
+  const result = await api.sendDialogue(
+    document,
+    { model: "fast-model", prompt: "介绍你的用途" },
+    async () =>
+      stream([
+        {
+          id: "reasoning-complete",
+          choices: [{ delta: { reasoning_content: "需要用一句话概括用途。" } }],
+        },
+        {
+          id: "reasoning-complete",
+          choices: [{ delta: {}, finish_reason: "length" }],
+          usage: { prompt_tokens: 10, completion_tokens: 64 },
+        },
+        "[DONE]",
+      ]),
+  );
+  assert.equal(result.requestId, "reasoning-complete");
+  assert.equal(result.finishReason, "length");
+  assert.equal(result.outputTokens, 64);
+  assert.equal(result.hasAnswer, false);
+  assert.equal(result.hasReasoning, true);
   assert.ok(!JSON.stringify(result).includes("需要用一句话"));
-  let receipts=0;
-  await api.reportDialogue(document,result,async()=>{receipts++;return {ok:true,status:200,json:async()=>({code:0,data:{}})};});
-  assert.equal(receipts,1);
-  await assert.rejects(()=>api.sendDialogue(document,{model:"fast-model",prompt:"你好"},async()=>stream([{id:"reasoning-partial",choices:[{delta:{reasoning_content:"未结束"}}]}])),/完整|未确认/);
+  let receipts = 0;
+  await api.reportDialogue(document, result, async () => {
+    receipts++;
+    return { ok: true, status: 200, json: async () => ({ code: 0, data: {} }) };
+  });
+  assert.equal(receipts, 1);
+  await assert.rejects(
+    () =>
+      api.sendDialogue(
+        document,
+        { model: "fast-model", prompt: "你好" },
+        async () =>
+          stream([
+            {
+              id: "reasoning-partial",
+              choices: [{ delta: { reasoning_content: "未结束" } }],
+            },
+          ]),
+      ),
+    /完整|未确认/,
+  );
 });
