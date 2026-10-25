@@ -451,8 +451,8 @@ export async function fetchApiModels(document, request, signal) {
         : null;
       const seen = new Set();
       const models = catalog
-        .filter(
-          (model) =>
+        .filter((model) => {
+          const eligible =
             identifier(model?.id) &&
             !model.disabled &&
             !seen.has(model.id) &&
@@ -460,10 +460,11 @@ export async function fetchApiModels(document, request, signal) {
             !/^(nes-|completion-|codewise-)/.test(model.id) &&
             (!Number.isFinite(model.maxOutputTokens) ||
               model.maxOutputTokens > 256) &&
-            !model.tags?.includes("text-to-image"),
-        )
+            !model.tags?.includes("text-to-image");
+          if (eligible) seen.add(model.id);
+          return eligible;
+        })
         .map((model) => {
-          seen.add(model.id);
           return {
             id: model.id,
             object: "model",

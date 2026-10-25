@@ -161,10 +161,18 @@ export class ApiGateway {
       if (raw.version !== 1 || typeof raw.keyEncrypted !== "string")
         throw new Error("invalid");
       this.config = validateApiConfig(raw.config);
-      this.secret = this.vault.decrypt(Buffer.from(raw.keyEncrypted, "base64"));
       this.encryptedKey = raw.keyEncrypted;
-      if (!/^sk-wbs-[A-Za-z0-9_-]{43}$/.test(this.secret))
-        throw new Error("invalid");
+      try {
+        this.secret = this.vault.decrypt(
+          Buffer.from(raw.keyEncrypted, "base64"),
+        );
+        if (!/^sk-wbs-[A-Za-z0-9_-]{43}$/.test(this.secret))
+          throw new Error("invalid key");
+      } catch {
+        this.secret = "";
+        this.lastError =
+          "系统暂时无法解密 API 密钥，原配置已保留。请解锁系统密钥环后重启应用。";
+      }
     } catch (error) {
       if (error.code !== "ENOENT") {
         this.lastError =
