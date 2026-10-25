@@ -256,59 +256,195 @@ test("activity errors sanitize credentials and refuse foreign accounts and misma
 
 test("desktop activity requests use the supported protocol version and the actual host operating system", async () => {
   let captured;
-  await api.executeActivity(document, {kind:"automation",code:"automation_1"}, async (url, options) => {
-    captured={url,options};
+  await api.executeActivity(
+    document,
+    { kind: "automation", code: "automation_1" },
+    async (url, options) => {
+      captured = { url, options };
+      return json({});
+    },
+  );
+  assert.equal(captured.url, "https://copilot.tencent.com/v2/report");
+  assert.match(
+    captured.options.headers["User-Agent"],
+    /^WorkBuddy\/5\.8\.3 WorkBuddy-Switch/,
+  );
+  const [event] = JSON.parse(captured.options.body);
+  assert.equal(event.ideVersion, "5.8.3");
+  assert.equal(event.os, process.platform);
+  assert.equal(event.arch, process.arch);
+});
+
+for (const [kind, code, eventCode] of [
+  ["library", "Library_read", "library_doc_intro_click"],
+  ["appearance", "Hp_Appearance", "appearance_skin_apply"],
+  ["playbook", "playbook_prompt", "playbook_prompt_send"],
+  ["canvas", "create_canvas", "wbx_design_canvas_task_create"],
+  ["automation", "automation_1", "automated_task_create_suc"],
+  ["apps", "Buddy_App", "buddyapp_enter_click"],
+])
+  test(`activity ${kind} submits its declared record without a paid call or permission grant`, async () => {
+    const calls = [];
+    const result = await api.executeActivity(
+      document,
+      { kind, code },
+      async (url, options) => {
+        calls.push({ url, options });
+        return json({});
+      },
+    );
+    assert.equal(result.dialogue, null);
+    assert.ok(calls.every((call) => call.url.endsWith("/v2/report")));
+    const events = calls.flatMap((call) => JSON.parse(call.options.body));
+    assert.ok(events.some((event) => event.eventCode === eventCode));
+    assert.ok(
+      !events.some(
+        (event) =>
+          event.eventCode === "chat_message_response" ||
+          event.eventCode === "buddyapp_auth_confirm_click",
+      ),
+    );
+  });
+
+test("resource normalization refuses unrelated or unsafe experts and reads only installed skill metadata", async () => {
+  const team = api.activitySpec(task("Expert_team_use_3"));
+  const resources = await api.loadActivityResources(document, team, async () =>
+    json({
+      experts: [
+        {
+          expert_id: "wrong",
+          expert_type: "agent",
+          display_name_zh: "个人专家",
+        },
+        {
+          expert_id: "team-ok",
+          expert_type: "team",
+          display_name_zh: "专家团",
+        },
+        { expert_id: "team-ok", expert_type: "team", display_name_zh: "重复" },
+        { expert_id: "../bad", expert_type: "team", display_name_zh: "坏条目" },
+      ],
+    }),
+  );
+  assert.deepEqual(
+    resources.map((row) => row.id),
+    ["team-ok"],
+  );
+  const skills = await api.loadActivityResources(
+    document,
+    api.activitySpec(task("skill_1")),
+    async (url, options) => {
+      assert.ok(url.endsWith("/v2/user-asset/skill"));
+      assert.equal(options.method, "GET");
+      return json({
+        skills: [
+          {
+            skill_id: "installed-skill",
+            name: "已安装技能",
+            private_value: "never return",
+          },
+        ],
+      });
+    },
+  );
+  assert.equal(skills[0].id, "installed-skill");
+  assert.ok(!JSON.stringify(skills).includes("private_value"));
+  await assert.rejects(
+    () =>
+      api.loadActivityResources(document, team, async () =>
+        json({ not_experts: [] }),
+      ),
+    /格式/,
+  );
+  await assert.rejects(
+    () =>
+      api.loadActivityResources(
+        document,
+        api.activitySpec(task("skill_1")),
+        async () => json({}),
+      ),
+    /格式/,
+  );
+});
+
+test("a receipt authentication failure after a real reply is not an instruction to retry the paid conversation", async () => {
+  let paid = 0;
+  await assert.rejects(
+    () =>
+      api.executeActivity(
+        document,
+        {
+          kind: "desktop-chat",
+          code: "RichMeow_Chat",
+          model: "fast-model",
+          prompt: "你好",
+        },
+        async (url) => {
+          if (url.endsWith("/chat/completions")) {
+            paid++;
+            return stream();
+          }
+          return new Response(null, { status: 401 });
+        },
+      ),
+    (error) => error.kind === "receipt",
+  );
+  assert.equal(paid, 1);
+});
+
+test("skill receipts keep their actual provenance and conversation finish reason", async () => {
+  const calls=[];
+  await api.executeActivity(document,{kind:"skill",code:"skill_1",model:"fast-model",prompt:"你好",resource:{id:"installed-skill",name:"本地安装技能",type:"skill",isOfficial:false}},async(url,options)=>{
+    calls.push({url,options});
+    if(url.endsWith('/chat/completions'))return new Response('data: {"id":"skill-server-1","choices":[{"delta":{"content":"回复"},"finish_reason":"length"}]}\n\ndata: [DONE]\n\n',{headers:{'content-type':'text/event-stream'}});
     return json({});
   });
-  assert.equal(captured.url,"https://copilot.tencent.com/v2/report");
-  assert.match(captured.options.headers["User-Agent"],/^WorkBuddy\/5\.8\.3 WorkBuddy-Switch/);
-  const [event]=JSON.parse(captured.options.body);
-  assert.equal(event.ideVersion,"5.8.3");
-  assert.equal(event.os,process.platform);
-  assert.equal(event.arch,process.arch);
+  const events=calls.filter(call=>call.url.endsWith('/report')).flatMap(call=>JSON.parse(call.options.body));
+  assert.deepEqual({official:events.find(event=>event.eventCode==='skill_info').isOfficial,finish:events.find(event=>event.eventCode==='skill_request_send').finishReason},{official:false,finish:'length'});
 });
 
-for (const [kind,code,eventCode] of [
-  ["library","Library_read","library_doc_intro_click"],
-  ["appearance","Hp_Appearance","appearance_skin_apply"],
-  ["playbook","playbook_prompt","playbook_prompt_send"],
-  ["canvas","create_canvas","wbx_design_canvas_task_create"],
-  ["automation","automation_1","automated_task_create_suc"],
-  ["apps","Buddy_App","buddyapp_enter_click"],
-]) test(`activity ${kind} submits its declared record without a paid call or permission grant`, async () => {
-  const calls=[];
-  const result=await api.executeActivity(document,{kind,code},async(url,options)=>{calls.push({url,options});return json({});});
-  assert.equal(result.dialogue,null);
-  assert.ok(calls.every(call=>call.url.endsWith('/v2/report')));
-  const events=calls.flatMap(call=>JSON.parse(call.options.body));
-  assert.ok(events.some(event=>event.eventCode===eventCode));
-  assert.ok(!events.some(event=>event.eventCode==='chat_message_response'||event.eventCode==='buddyapp_auth_confirm_click'));
-});
-
-test('resource normalization refuses unrelated or unsafe experts and reads only installed skill metadata',async()=>{
-  const team=api.activitySpec(task('Expert_team_use_3'));
-  const resources=await api.loadActivityResources(document,team,async()=>json({experts:[{expert_id:'wrong',expert_type:'agent',display_name_zh:'个人专家'},{expert_id:'team-ok',expert_type:'team',display_name_zh:'专家团'},{expert_id:'team-ok',expert_type:'team',display_name_zh:'重复'},{expert_id:'../bad',expert_type:'team',display_name_zh:'坏条目'}]}));
-  assert.deepEqual(resources.map(row=>row.id),['team-ok']);
-  const skills=await api.loadActivityResources(document,api.activitySpec(task('skill_1')),async(url,options)=>{assert.ok(url.endsWith('/v2/user-asset/skill'));assert.equal(options.method,'GET');return json({skills:[{skill_id:'installed-skill',name:'已安装技能',private_value:'never return'}]});});
-  assert.equal(skills[0].id,'installed-skill');assert.ok(!JSON.stringify(skills).includes('private_value'));
-  await assert.rejects(()=>api.loadActivityResources(document,team,async()=>json({not_experts:[]})),/格式/);
-  await assert.rejects(()=>api.loadActivityResources(document,api.activitySpec(task('skill_1')),async()=>json({})),/格式/);
-});
-
-test('a receipt authentication failure after a real reply is not an instruction to retry the paid conversation',async()=>{
-  let paid=0;
-  await assert.rejects(()=>api.executeActivity(document,{kind:'desktop-chat',code:'RichMeow_Chat',model:'fast-model',prompt:'你好'},async(url)=>{
-    if(url.endsWith('/chat/completions')){paid++;return stream();}return new Response(null,{status:401});
-  }),error=>error.kind==='receipt');
-  assert.equal(paid,1);
-});
-
-test('activity input and response failures are bounded and never count as task completion',async()=>{
-  for(const response of [new Response(null,{status:401}),new Response(null,{status:503}),new Response('not JSON'),new Response('x'.repeat(4*1024*1024+1)),new Response(JSON.stringify({code:500,message:'fixture-secret'}),{headers:{'content-type':'application/json'}})]){
-    const request=async()=>response;
-    await assert.rejects(()=>api.executeActivity(document,{kind:'library',code:'Library_read'},request));
+test("activity input and response failures are bounded and never count as task completion", async () => {
+  for (const response of [
+    new Response(null, { status: 401 }),
+    new Response(null, { status: 503 }),
+    new Response("not JSON"),
+    new Response("x".repeat(4 * 1024 * 1024 + 1)),
+    new Response(JSON.stringify({ code: 500, message: "fixture-secret" }), {
+      headers: { "content-type": "application/json" },
+    }),
+  ]) {
+    const request = async () => response;
+    await assert.rejects(() =>
+      api.executeActivity(
+        document,
+        { kind: "library", code: "Library_read" },
+        request,
+      ),
+    );
   }
-  for(const code of ['constructor','__proto__','unknown'])assert.equal(api.activitySpec(task(code)),null);
-  await assert.rejects(()=>api.executeActivity(document,{kind:'template',code:'template_5',index:-1},()=>{throw Error('must not send');}),/次数/);
-  await assert.rejects(()=>api.executeActivity(document,{kind:'library',code:'Library_read'},async()=>{throw Error('fixture-secret');}),error=>error.kind==='transport'&&!error.message.includes('fixture-secret'));
+  for (const code of ["constructor", "__proto__", "unknown"])
+    assert.equal(api.activitySpec(task(code)), null);
+  await assert.rejects(
+    () =>
+      api.executeActivity(
+        document,
+        { kind: "template", code: "template_5", index: -1 },
+        () => {
+          throw Error("must not send");
+        },
+      ),
+    /次数/,
+  );
+  await assert.rejects(
+    () =>
+      api.executeActivity(
+        document,
+        { kind: "library", code: "Library_read" },
+        async () => {
+          throw Error("fixture-secret");
+        },
+      ),
+    (error) =>
+      error.kind === "transport" && !error.message.includes("fixture-secret"),
+  );
 });
