@@ -2,6 +2,50 @@ import { test, expect } from "@playwright/test";
 import { fixtureState, fixtureSessions, fixtureUsage } from "./fixtures";
 import type { TaskRun } from "../src/types";
 
+test("Raycast workspace offers an actual overview and stays dark with legacy light preferences", async ({ page }) => {
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "总览", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "总览", exact: true })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.getByRole("figure", { name: "Token 使用趋势" })).toBeVisible();
+  await expect(page.getByRole("figure", { name: "账号积分分布" })).toBeVisible();
+  await expect(page.getByText("1,287.5", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "总览", exact: true })).toBeVisible();
+});
+
+test("command search supports keyboard navigation and restores focus when dismissed", async ({ page }) => {
+  await page.getByRole("button", { name: "搜索页面和操作" }).click();
+  const dialog = page.getByRole("dialog", { name: "命令搜索" });
+  await dialog.getByRole("combobox", { name: "搜索命令" }).fill("用量");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "用量", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "搜索页面和操作" }).click();
+  await dialog.getByRole("combobox", { name: "搜索命令" }).fill("不存在的页面");
+  await expect(dialog.getByText("没有匹配的命令")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "搜索页面和操作" })).toBeFocused();
+});
+
+test("usage charts reveal real values to keyboard users and offer a data table", async ({ page }) => {
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "用量", exact: true }).click();
+  const chart = page.getByRole("figure", { name: "Token 使用趋势" });
+  await chart.getByRole("button").first().focus();
+  await expect(chart.getByRole("status")).toContainText("126,000");
+  await page.getByText("查看每日数据", { exact: true }).click();
+  await expect(page.getByRole("table", { name: "每日用量数据" })).toContainText("126,000");
+  await expect(page.getByRole("figure", { name: "Token 构成" })).toBeVisible();
+});
+
+test("dark workspace covers every page without horizontal overflow at minimum size", async ({ page }) => {
+  await page.setViewportSize({ width: 940, height: 640 });
+  for (const label of ["总览", "账号", "积分", "对话", "用量", "API", "设置"]) {
+    await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: label, exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    expect(await page.locator(".page-content").evaluate(el => el.scrollWidth <= el.clientWidth), label).toBe(true);
+  }
+});
+
 test("API page keeps completed growth task history out of the connection workflow", async ({
   page,
 }) => {
