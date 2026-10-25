@@ -15,6 +15,7 @@ const statuses = {
   skipped: "已跳过",
   error: "失败",
   dialogue: "已对话",
+  activity: "已提交活动",
 };
 export function TaskRunPanel({
   state,
@@ -88,6 +89,7 @@ export function TaskRunPanel({
             {summary.departed} 项 · 待完成 {summary.pending} 项
             {summary.failed ? ` · 失败 ${summary.failed} 项` : ""}
             {summary.dialogues ? ` · 真实对话 ${summary.dialogues} 次` : ""}
+            {summary.activities ? ` · 活动记录 ${summary.activities} 次` : ""}
           </span>
         )}
         <span>
@@ -119,7 +121,7 @@ export function TaskRunPanel({
                 className={
                   entry.status === "error"
                     ? "red"
-                    : entry.status === "pending"
+                    : entry.status === "pending" || entry.status === "activity"
                       ? "muted"
                       : "success"
                 }

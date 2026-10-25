@@ -155,7 +155,8 @@ export interface TaskAction {
     | "pending"
     | "skipped"
     | "error"
-    | "dialogue";
+    | "dialogue"
+    | "activity";
   credit: number | null;
   energy: number | null;
   current?: number | null;
@@ -165,6 +166,7 @@ export interface TaskAction {
 }
 export interface TaskOptions {
   includeAI: boolean;
+  includeActivities?: boolean;
   maxCalls: number;
   prompt: string;
 }
@@ -176,17 +178,23 @@ export interface TaskPlan {
   options: TaskOptions;
   outputLimit: number;
   maxCalls: number;
+  maxActivities?: number;
   accounts: {
     accountId: string;
     nickname: string;
     note: string;
     pendingTitles: string[];
+    pendingReasons?: {code: string; title: string; reason: string}[];
     tasks: {
       code: string;
       title: string;
-      model: string;
+      model: string | null;
       modelName: string;
       calls: number;
+      actions?: number;
+      kind?: string;
+      resources?: {id: string; name: string; type: string; title?: string; version?: string}[];
+      waitingForUnlock?: boolean;
       current: number;
       target: number;
     }[];
@@ -205,6 +213,8 @@ export interface TaskRun {
   cancelRequested: boolean;
   dialogueAttempts: number;
   dialogueLimit: number;
+  activityAttempts?: number;
+  activityLimit?: number;
   summary: {
     claimed: number;
     accepted: number;
@@ -216,6 +226,7 @@ export interface TaskRun {
     energy: number;
     unknownAmounts: number;
     dialogues: number;
+    activities?: number;
   };
   results: TaskAction[];
 }

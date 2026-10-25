@@ -3,7 +3,8 @@ import { Button, Modal, Toggle, date } from "./components";
 import type { TaskPlan, TaskOptions } from "./types";
 export const defaultTaskOptions: TaskOptions = {
   includeAI: true,
-  maxCalls: 20,
+  includeActivities: true,
+  maxCalls: 80,
   prompt: "请用一句话介绍你能帮助我完成什么工作。",
 };
 export function TaskPlanDialog({
@@ -36,7 +37,7 @@ export function TaskPlanDialog({
     valid =
       Number.isInteger(draft.maxCalls) &&
       draft.maxCalls >= 1 &&
-      draft.maxCalls <= 20 &&
+      draft.maxCalls <= 200 &&
       draft.prompt.trim().length > 0 &&
       draft.prompt.length <= 200;
   return (
@@ -59,7 +60,9 @@ export function TaskPlanDialog({
           >
             {plan.maxCalls
               ? `确认并执行（最多 ${plan.maxCalls} 条）`
-              : "执行基础任务"}
+              : plan.maxActivities
+                ? `确认并执行（最多 ${plan.maxActivities} 次活动）`
+                : "执行基础任务"}
           </Button>
         </>
       }
@@ -67,6 +70,13 @@ export function TaskPlanDialog({
       <p className="task-plan-basic">
         基础任务：签到、成长任务接取、已达标奖励领取、旅行领奖及按已保存地点出发。
       </p>
+      <Toggle
+        label="包含活动事件任务"
+        description="模板、画布、资料库等通过兼容活动上报推进；不会生成画布或长期定时任务，也不建立第三方应用授权。完成情况以官方计分为准。"
+        checked={draft.includeActivities ?? false}
+        disabled={busy}
+        onChange={(includeActivities) => setDraft({...draft, includeActivities})}
+      />
       <Toggle
         label="包含真实 AI 对话"
         description="将发送真实对话并消耗积分；实际价格由官方计费，奖励可能低于消耗。"
@@ -79,7 +89,7 @@ export function TaskPlanDialog({
             maxCalls:
               Number.isInteger(draft.maxCalls) &&
               draft.maxCalls >= 1 &&
-              draft.maxCalls <= 20
+              draft.maxCalls <= 200
                 ? draft.maxCalls
                 : defaultTaskOptions.maxCalls,
             prompt: draft.prompt.trim()
@@ -96,7 +106,7 @@ export function TaskPlanDialog({
               aria-label="本次对话总上限"
               type="number"
               min="1"
-              max="20"
+              max="200"
               value={Number.isNaN(draft.maxCalls) ? "" : draft.maxCalls}
               disabled={busy}
               onChange={(event) =>
@@ -124,8 +134,7 @@ export function TaskPlanDialog({
             />
           </label>
           <p>
-            每次请求输出上限 {plan.outputLimit} Token。当前支持普通次数、GLM-5.2
-            体验和北京时间夜间对话；只按官方进度执行。
+            每次请求输出上限 {plan.outputLimit} Token。支持普通对话、GLM-5.2、桌面端、专家、专家团、指定专家和已安装技能；夜间任务仅在北京时间夜间执行。
           </p>
         </div>
       )}
@@ -151,29 +160,30 @@ export function TaskPlanDialog({
                   {task.title}
                   <small>
                     {task.modelName} · 官方进度 {task.current}/{task.target}
+                    {task.waitingForUnlock ? " · 解锁后自动继续" : ""}
+                    {!!task.resources?.length && ` · ${task.resources.map(resource => resource.name).join("、")}`}
                   </small>
                 </span>
-                <span>最多 {task.calls} 条</span>
+                <span>{task.calls ? `最多 ${task.calls} 条对话` : `最多 ${task.actions || 0} 次活动`}</span>
               </div>
             ))}
             {account.note && <p>{account.note}</p>}
             {account.pendingTitles.length > 0 && (
               <details>
                 <summary>
-                  仍需客户端操作或暂不满足条件（{account.pendingTitles.length}{" "}
+                  需本人操作或暂不可执行（{account.pendingTitles.length}{" "}
                   项）
                 </summary>
-                <p>
-                  {account.pendingTitles.slice(0, 8).join("、")}
-                  {account.pendingTitles.length > 8 ? "等" : ""}
-                </p>
+                {account.pendingReasons?.length ? account.pendingReasons.map(item => (
+                  <p key={item.code}><strong>{item.title}</strong> · {item.reason}</p>
+                )) : <p>{account.pendingTitles.join("、")}</p>}
               </details>
             )}
           </section>
         ))}
       </div>
       <p className="task-plan-footnote">
-        未确认不会发送对话。失败、进度不推进或点击停止后，本账号不再继续发送；已发出的请求可能已经产生积分消耗。确认范围之外的新任务留待下次操作。
+        一次确认后会自动接取、执行、等待计分并领奖；范围内的前置任务解锁后继续处理。未确认不会发送对话；请求失败或进度不推进时停止本账号后续对话，已发出的请求可能已产生积分消耗。需本人操作的任务会逐项保留原因。
       </p>
     </Modal>
   );
