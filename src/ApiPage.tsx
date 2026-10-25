@@ -10,6 +10,7 @@ import {
   SectionHeader,
 } from "./components";
 import type { ApiConfig, ApiStatus } from "./types";
+import { ApiAnalytics } from "./ApiAnalytics";
 
 export function ApiPage({ privacy }: { privacy: boolean }) {
   const api = window.workbuddy;
@@ -213,6 +214,7 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
           </div>
         ))}
       </div>
+      <ApiAnalytics status={status} />
       <div className="api-columns">
         <section className="settings-card api-config">
           <SectionHeader

@@ -37,7 +37,6 @@ import {
   Search,
   Settings2,
   ShieldCheck,
-  Sun,
   Trash2,
   Upload,
   Users,
@@ -45,6 +44,9 @@ import {
   X,
   Zap,
   Cable,
+  Command,
+  ChevronRight,
+  LayoutDashboard,
 } from "lucide-react";
 import type {
   Account,
@@ -82,9 +84,20 @@ import { LoginModal } from "./LoginModal";
 import { TaskRunPanel } from "./TaskRunPanel";
 import { TaskPlanDialog, defaultTaskOptions } from "./TaskPlanDialog";
 import { ApiPage } from "./ApiPage";
+import { Dashboard } from "./Dashboard";
+import { CommandMenu } from "./CommandMenu";
+import { BalanceBars, RingChart, TrendChart } from "./Charts";
 
-type Page = "overview" | "accounts" | "sessions" | "usage" | "settings" | "api";
+type Page =
+  | "dashboard"
+  | "overview"
+  | "accounts"
+  | "sessions"
+  | "usage"
+  | "settings"
+  | "api";
 const nav = [
+  { id: "dashboard", label: "总览", icon: LayoutDashboard },
   { id: "accounts", label: "账号", icon: Users },
   { id: "overview", label: "积分", icon: Gift },
   { id: "sessions", label: "对话", icon: MessageSquare },
@@ -124,8 +137,9 @@ type Confirmation = {
 };
 
 export function App() {
-  const [page, setPage] = useState<Page>("accounts"),
+  const [page, setPage] = useState<Page>("dashboard"),
     [state, setState] = useState<Snapshot | null>(null);
+  const [commandOpen, setCommandOpen] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]),
     [usage, setUsage] = useState<Usage>(emptyUsage);
   const [error, setError] = useState(""),
@@ -242,16 +256,20 @@ export function App() {
     return () => clearTimeout(timer);
   }, [toast]);
   useEffect(() => {
-    const mode = state?.settings.theme || "system",
-      media = matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => {
-      document.documentElement.dataset.theme =
-        mode === "system" ? (media.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = "dark";
+  }, []);
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        if (!state || confirmation || edit || login || transfer || taskPlan)
+          return;
+        event.preventDefault();
+        setCommandOpen((value) => !value);
+      }
     };
-    apply();
-    media.addEventListener("change", apply);
-    return () => media.removeEventListener("change", apply);
-  }, [state?.settings.theme]);
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, [state, confirmation, edit, login, transfer, taskPlan]);
   async function run(
     label: string,
     action: () => Promise<unknown>,
@@ -396,6 +414,18 @@ export function App() {
   const name = (id: string) =>
     state.accounts.find((a) => a.id === id)?.nickname ||
     (state.current?.id === id ? state.current.nickname : mask(id, privacy));
+  const availableNav = nav.filter(
+    (item) =>
+      (isWorkBuddy(provider) &&
+        (item.id !== "overview" || provider === "workbuddy")) ||
+      item.id === "accounts" ||
+      item.id === "settings",
+  );
+  const navigate = (id: Page) => {
+    setPage(id);
+    setError("");
+  };
+  const shortcut = state.platform === "darwin" ? "⌘ K" : "Ctrl K";
   return (
     <div
       className={`app ${state.settings.compactMode ? "compact" : ""} platform-${state.platform}`}
@@ -407,8 +437,8 @@ export function App() {
             <img src={appIcon} alt="WorkBuddy Switch" />
           </span>
           <div>
-            <strong>WorkBuddy</strong>
-            <span>Switch</span>
+            <strong>WorkBuddy Switch</strong>
+            <span>你的 AI 工作台</span>
           </div>
         </div>
 
@@ -434,35 +464,25 @@ export function App() {
             ))}
           </select>
         </label>
+        <div className="nav-group-label">工作空间</div>
         <nav aria-label="主导航">
-          {nav
-            .filter(
-              (item) =>
-                (isWorkBuddy(provider) &&
-                  (item.id !== "overview" || provider === "workbuddy")) ||
-                item.id === "accounts" ||
-                item.id === "settings",
-            )
-            .map(({ id, label, icon: Icon }) => (
-              <button
-                className={`nav-item ${page === id ? "active" : ""}`}
-                aria-label={label}
-                aria-current={page === id ? "page" : undefined}
-                key={id}
-                onClick={() => {
-                  setPage(id);
-                  setError("");
-                }}
-              >
-                <Icon size={18} strokeWidth={1.7} />
-                <span>{label}</span>
-                {id === "accounts" && (
-                  <span className="nav-count">
-                    {editor ? editor.accounts.length : state.accounts.length}
-                  </span>
-                )}
-              </button>
-            ))}
+          {availableNav.map(({ id, label, icon: Icon }) => (
+            <button
+              className={`nav-item ${page === id ? "active" : ""}`}
+              aria-label={label}
+              aria-current={page === id ? "page" : undefined}
+              key={id}
+              onClick={() => navigate(id)}
+            >
+              <Icon size={16} strokeWidth={1.7} />
+              <span>{label}</span>
+              {id === "accounts" && (
+                <span className="nav-count">
+                  {editor ? editor.accounts.length : state.accounts.length}
+                </span>
+              )}
+            </button>
+          ))}
         </nav>
         <div className="sidebar-bottom">
           <div className="sidebar-current">
@@ -500,24 +520,39 @@ export function App() {
       </aside>
       <main className="main">
         <header className="topbar window-drag">
-          <span>WorkBuddy Switch</span>
+          <div className="workspace-breadcrumb">
+            <span>工作空间</span>
+            <ChevronRight size={12} />
+            <strong>{nav.find((item) => item.id === page)?.label}</strong>
+          </div>
+          <button
+            className="command-trigger"
+            aria-label="搜索页面和操作"
+            onClick={() => setCommandOpen(true)}
+          >
+            <Search size={14} />
+            <span>搜索页面和操作…</span>
+            <kbd>{shortcut}</kbd>
+          </button>
         </header>
         <div className="page-content">
           <div className="page-heading">
             <div>
               <h1>{nav.find((n) => n.id === page)?.label}</h1>
               <span className="heading-context">
-                {page === "accounts"
-                  ? `${clientName} · ${editor ? editor.accounts.length : state.accounts.length} 个账号${state.demo ? " · 演示" : ""}`
-                  : page === "overview"
-                    ? "签到与旅行奖励"
-                    : page === "sessions"
-                      ? `${sessions.filter((item) => !item.deleted).length} 条本地对话`
-                      : page === "usage"
-                        ? "本地 Token 记录"
-                        : page === "api"
-                          ? "OpenAI 兼容接口"
-                          : "偏好与自动任务"}
+                {page === "dashboard"
+                  ? "账号、积分与本机服务的全景视图"
+                  : page === "accounts"
+                    ? `${clientName} · ${editor ? editor.accounts.length : state.accounts.length} 个账号${state.demo ? " · 演示" : ""}`
+                    : page === "overview"
+                      ? "每日签到、成长任务与旅行奖励"
+                      : page === "sessions"
+                        ? `${sessions.filter((item) => !item.deleted).length} 条本地对话`
+                        : page === "usage"
+                          ? "本地 Token 记录"
+                          : page === "api"
+                            ? "OpenAI 兼容接口"
+                            : "偏好与自动任务"}
               </span>
             </div>
             <div className="page-actions">
@@ -619,7 +654,10 @@ export function App() {
             </div>
           )}
           {provider === "workbuddy" &&
-            (page === "accounts" || page === "overview") && (
+            (page === "accounts" ||
+              page === "overview" ||
+              (page === "dashboard" &&
+                state.taskRun?.status === "running")) && (
               <TaskRunPanel state={state} stop={(id) => void stopTasks(id)} />
             )}
           {provider === "workbuddy" && page === "overview" && (
@@ -628,6 +666,15 @@ export function App() {
               disabled={disabled}
               run={run}
               claim={claim}
+              runTasks={runTasks}
+            />
+          )}
+          {isWorkBuddy(provider) && page === "dashboard" && (
+            <Dashboard
+              key={provider}
+              state={state}
+              disabled={disabled}
+              navigate={navigate}
               runTasks={runTasks}
             />
           )}
@@ -755,7 +802,47 @@ export function App() {
         >
           {privacy ? <EyeOff size={15} /> : <Eye size={15} />}
         </button>
+        <button
+          className="statusbar-command"
+          aria-label="打开命令搜索"
+          onClick={() => setCommandOpen(true)}
+        >
+          <Command size={12} />
+          命令<kbd>{shortcut}</kbd>
+        </button>
       </footer>
+      {commandOpen && (
+        <CommandMenu
+          onClose={() => setCommandOpen(false)}
+          commands={[
+            ...availableNav.map((item) => ({
+              id: item.id,
+              label: `打开${item.label}`,
+              keywords: `${item.id} ${item.id === "usage" ? "analytics token 数据 图表" : item.id === "api" ? "接口 模型 key" : ""}`,
+              detail: `${clientName} · ${item.label}`,
+              icon: item.icon,
+              run: () => navigate(item.id),
+            })),
+            ...(!disabled
+              ? [
+                  {
+                    id: "privacy",
+                    label: privacy ? "关闭隐私遮罩" : "开启隐私遮罩",
+                    keywords: "privacy 隐私",
+                    detail: "账号 ID 与目录显示",
+                    icon: ShieldCheck,
+                    run: () => {
+                      void saveSettings({
+                        ...state.settings,
+                        privacyMode: !privacy,
+                      });
+                    },
+                  },
+                ]
+              : []),
+          ]}
+        />
+      )}
       {toast && (
         <div role="status" className="toast">
           <CheckCircle2 size={17} />
@@ -1026,49 +1113,20 @@ function Sessions({
   );
 }
 
-function UsageChart({
-  usage,
-  small = false,
-}: {
-  usage: Usage;
-  small?: boolean;
-}) {
-  const max = Math.max(1, ...usage.daily.map((d) => d.tokens.total));
-  const points = usage.daily.length
-    ? usage.daily.slice(-30)
-    : Array.from({ length: 7 }, (_, i) => ({
-        day: `day-${i}`,
-        tokens: { total: 0 },
-      }));
+function UsageChart({ usage }: { usage: Usage }) {
   return (
-    <div
-      className={`usage-chart ${small ? "small" : ""}`}
-      aria-label="每日 Token 用量"
-    >
-      <div className="chart-grid">
-        <span />
-        <span />
-        <span />
-      </div>
-      <div className="chart-bars">
-        {points.map((d, i) => (
-          <div className="bar-column" key={d.day}>
-            <div className="bar-space">
-              <span
-                className={`chart-bar ${i === points.length - 1 ? "latest" : ""}`}
-                style={{
-                  height: `${d.tokens.total ? Math.max(3, (d.tokens.total / max) * 100) : 2}%`,
-                }}
-                title={`${d.day}: ${number(d.tokens.total, 0)} Tokens`}
-              />
-            </div>
-            <span className="bar-label">
-              {d.day.startsWith("day") ? "—" : d.day.slice(5).replace("-", "/")}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
+    <TrendChart
+      title="Token 使用趋势"
+      points={usage.daily
+        .slice(-90)
+        .map((day) => ({
+          label: day.day,
+          value: day.tokens.total,
+          count: day.tokens.requests,
+          unknown: 0,
+        }))}
+      empty={!usage.records}
+    />
   );
 }
 function UsagePage({
@@ -1218,6 +1276,15 @@ function UsagePage({
             title="Token 构成"
             detail="推理 Token 已包含在输出中"
           />
+          <RingChart
+            title="Token 构成"
+            segments={[
+              { label: "输入", value: usage.total.input },
+              { label: "输出", value: usage.total.output },
+              { label: "缓存读取", value: usage.total.cacheRead },
+              { label: "缓存写入", value: usage.total.cacheWrite },
+            ]}
+          />
           <div className="token-breakdown">
             {[
               ["输入", usage.total.input, "input"],
@@ -1276,6 +1343,64 @@ function UsagePage({
           )}
         </section>
       </div>
+      <section className="data-section model-comparison">
+        <SectionHeader
+          title="模型消耗对比"
+          detail={
+            modelSort === "credits"
+              ? "当前筛选 · 显式 Credits"
+              : "当前筛选 · 总 Token"
+          }
+        />
+        <BalanceBars
+          title="模型消耗对比"
+          unit={modelSort === "credits" ? "Credits" : "Tokens"}
+          rows={models
+            .slice(0, 6)
+            .map((model) => ({
+              label: model.name,
+              value:
+                modelSort === "credits" ? model.credits : model.tokens.total,
+              detail: `${number(model.tokens.requests)} 次请求`,
+            }))}
+        />
+      </section>
+      <details className="data-table-details">
+        <summary>查看每日数据</summary>
+        <div className="data-table-scroll">
+          <table aria-label="每日用量数据">
+            <thead>
+              <tr>
+                <th>日期</th>
+                <th>输入</th>
+                <th>输出</th>
+                <th>缓存读取</th>
+                <th>缓存写入</th>
+                <th>总 Token</th>
+                <th>请求</th>
+                <th>Credits</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usage.daily.map((day) => (
+                <tr key={day.day}>
+                  <td>{day.day}</td>
+                  <td>{number(day.tokens.input)}</td>
+                  <td>{number(day.tokens.output)}</td>
+                  <td>{number(day.tokens.cacheRead)}</td>
+                  <td>{number(day.tokens.cacheWrite)}</td>
+                  <td>{number(day.tokens.total)}</td>
+                  <td>{number(day.tokens.requests)}</td>
+                  <td>{number(day.credits)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!usage.daily.length && (
+            <p className="subtle-empty">暂无每日用量记录。</p>
+          )}
+        </div>
+      </details>
       <section className="panel">
         <SectionHeader
           title="对话用量排行"
@@ -1741,30 +1866,31 @@ function SettingsPage({
           <>
             {section(
               "外观",
-              "清晰的层次，熟悉的节奏。",
+              "统一深色外观，兼顾密度与可读性。",
               <>
                 <div className="theme-picker">
-                  {[
-                    { value: "light", label: "浅色", icon: Sun },
-                    { value: "dark", label: "深色", icon: Moon },
-                    { value: "system", label: "跟随系统", icon: Monitor },
-                  ].map(({ value, label, icon: Icon }) => (
-                    <button
-                      key={value}
-                      aria-pressed={settings.theme === value}
-                      disabled={disabled}
-                      className={`theme-option ${value} ${settings.theme === value ? "selected" : ""}`}
-                      onClick={() =>
-                        change("theme", value as Settings["theme"])
-                      }
-                    >
-                      <span>
-                        <Icon size={15} />
-                        {label}
-                        {settings.theme === value && <Check size={15} />}
-                      </span>
-                    </button>
-                  ))}
+                  <button
+                    aria-label="深色"
+                    aria-pressed="true"
+                    disabled={disabled}
+                    className="theme-option dark selected"
+                    onClick={() => change("theme", "dark")}
+                  >
+                    <span className="theme-miniature">
+                      <span />
+                      <span />
+                      <span />
+                    </span>
+                    <span>
+                      <Moon size={15} />
+                      Raycast Dark
+                      <Check size={15} />
+                    </span>
+                  </button>
+                  <div className="theme-description">
+                    <strong>专注于内容的深色工作台</strong>
+                    <p>石墨灰层次、细分隔线与珊瑚红强调，全界面保持统一。</p>
+                  </div>
                 </div>
                 <Toggle
                   label="紧凑布局"

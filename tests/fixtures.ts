@@ -1,4 +1,4 @@
-import type { Snapshot, Usage, Session } from "../src/types";
+import type { Snapshot, Usage, Session, ApiStatus } from "../src/types";
 
 export function fixtureState(): Snapshot {
   const now = Date.now();
@@ -272,5 +272,54 @@ export function fixtureUsage(): Usage {
     records: 286,
     scannedFiles: 24,
     warnings: [],
+  };
+}
+
+export function fixtureApi(): ApiStatus {
+  return {
+    running: true,
+    baseUrl: "http://127.0.0.1:8317/v1",
+    activeRequests: 0,
+    hasKey: true,
+    config: {
+      port: 8317,
+      autoStart: false,
+      accounts: [{ provider: "workbuddy", id: "wb-sample-001" }],
+      strategy: "round_robin",
+      maxConcurrency: 2,
+      maxOutputTokens: 4096,
+      requestsPerMinute: 60,
+    },
+    accounts: fixtureState().accounts.map((account) => ({
+      provider: "workbuddy",
+      id: account.id,
+      nickname: account.nickname,
+      available: true,
+      remaining: account.quota?.remaining ?? null,
+      cooldownUntil: 0,
+    })),
+    totals: {
+      requests: 24,
+      succeeded: 23,
+      failed: 1,
+      inputTokens: 12800,
+      outputTokens: 3460,
+      unknownUsage: 1,
+    },
+    recent: Array.from({ length: 24 }, (_, i) => ({
+      requestId: `request-${i}`,
+      at: Date.now() - i * 5 * 3600000,
+      model: ["deepseek-v4-flash", "fast-model", "deepseek-v4-pro"][i % 3],
+      provider: "workbuddy",
+      accountId: "wb-sample-001",
+      status: i === 8 ? "error" : "ok",
+      statusCode: i === 8 ? 502 : 200,
+      durationMs: 800 + i * 120,
+      inputTokens: i === 8 ? null : 540 + i * 21,
+      outputTokens: i === 8 ? null : 120 + i * 10,
+      errorCode: i === 8 ? "upstream_error" : "",
+    })),
+    lastError: "",
+    models: [{ id: "deepseek-v4-flash" }, { id: "fast-model" }],
   };
 }

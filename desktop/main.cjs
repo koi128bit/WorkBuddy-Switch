@@ -246,7 +246,7 @@ function createWindow() {
     minHeight: 640,
     show: false,
     title: "WorkBuddy Switch",
-    backgroundColor: nativeTheme.shouldUseDarkColors ? "#252525" : "#fafafa",
+    backgroundColor: "#171719",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     trafficLightPosition: { x: 20, y: 22 },
     icon: path.join(root, "assets/icon.png"),
@@ -602,7 +602,7 @@ async function start() {
       pollingLogins.delete(key);
     }
   });
-  nativeTheme.themeSource = store.settings.theme;
+  nativeTheme.themeSource = "dark";
   handle("snapshot", async () => ({
     ...(await scopedWorkBuddy(
       store.settings.activeProvider === "workbuddy-global"
@@ -837,7 +837,7 @@ async function start() {
         }
         throw error;
       }
-      nativeTheme.themeSource = value.theme;
+      nativeTheme.themeSource = "dark";
       scheduleRefresh();
       scheduleAutomation();
       updateTray();

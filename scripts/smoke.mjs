@@ -123,8 +123,12 @@ try {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page
-    .getByRole("heading", { name: "账号", exact: true })
+    .getByRole("heading", { name: "总览", exact: true })
     .waitFor({ timeout: 20000 });
+  await page
+    .getByRole("navigation", { name: "主导航" })
+    .getByRole("button", { name: "账号", exact: true })
+    .click();
   const security = await desktop.evaluate(({ BrowserWindow }) => {
     const p =
       BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences();

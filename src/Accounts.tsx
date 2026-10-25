@@ -13,6 +13,7 @@ import { AccountTasks, CheckinStatus, type Claim, type Run } from "./Rewards";
 import type { Account, Snapshot } from "./types";
 import { accountHealth, suggestedAccount } from "./account-health";
 import { apiFor } from "./providers";
+import { creditSummary } from "./analytics";
 
 const expiry = (value?: number | null) =>
   value ? new Date(value).toLocaleDateString("sv-SE") : "未提供";
@@ -106,8 +107,35 @@ export function Accounts({
         ? selected.filter((id) => !accounts.some((item) => item.id === id))
         : [...new Set([...selected, ...accounts.map((item) => item.id)])],
     );
+  const summary = creditSummary(state.accounts, state.settings);
   return (
     <>
+      <div className="account-summary-strip" aria-label="账号积分摘要">
+        <div>
+          <small>可用积分合计</small>
+          <strong>{summary.known ? number(summary.remaining) : "—"}</strong>
+        </div>
+        <div>
+          <small>{state.settings.expiryWarningDays} 天内到期</small>
+          <strong className={summary.expiring ? "pending" : ""}>
+            {summary.known ? number(summary.expiring) : "—"}
+          </strong>
+        </div>
+        <div>
+          <small>已查询账号</small>
+          <strong>
+            {summary.known}
+            <span>/ {state.accounts.length}</span>
+          </strong>
+        </div>
+        <div>
+          <small>需关注</small>
+          <strong>
+            {attentionCount}
+            <span>个账号</span>
+          </strong>
+        </div>
+      </div>
       <div className="filter-toolbar">
         <div className="tabs">
           <button
@@ -234,6 +262,18 @@ export function Accounts({
                   <strong>
                     {item.quotaError ? "—" : number(item.quota?.remaining)}
                   </strong>
+                  {item.quota && !item.quotaError && (
+                    <span
+                      className="quota-mini-track"
+                      aria-label={`剩余 ${item.quota.total ? Math.round(Math.min(1, item.quota.remaining / item.quota.total) * 100) : 0}%`}
+                    >
+                      <span
+                        style={{
+                          width: `${item.quota.total ? Math.min(100, Math.max(0, (item.quota.remaining / item.quota.total) * 100)) : 0}%`,
+                        }}
+                      />
+                    </span>
+                  )}
                   {item.quotaError && <small className="red">查询失败</small>}
                 </div>
                 <span className={urgent ? "pending" : "muted"}>

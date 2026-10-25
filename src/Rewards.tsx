@@ -14,6 +14,9 @@ import {
 } from "lucide-react";
 import { Button, date, Empty, mask, number, Toggle } from "./components";
 import type { Account, Snapshot } from "./types";
+import { rewardSeries } from "./analytics";
+import { TrendChart } from "./Charts";
+import { SectionHeader } from "./components";
 
 export type Run = (
   label: string,
@@ -272,6 +275,9 @@ export function RewardsPage({
   const history = (state.rewardHistory || []).filter(
     (item) => historyScope === "all" || item.accountId === account.id,
   );
+  const trend = rewardSeries(state.rewardHistory || [], account.id);
+  const earned = trend.reduce((sum, point) => sum + (point.value ?? 0), 0);
+  const unknown = trend.reduce((sum, point) => sum + point.unknown, 0);
   return (
     <div className="rewards-layout">
       <aside className="reward-accounts" aria-label="积分账号选择">
@@ -323,6 +329,29 @@ export function RewardsPage({
             )}
           </div>
         </div>
+        <section className="reward-insights data-section">
+          <SectionHeader
+            title="奖励领取趋势"
+            detail="近 7 天 · 当前账号 · 北京日期"
+          >
+            <span className="reward-earned">
+              +{number(earned)}
+              <small>已知积分</small>
+            </span>
+          </SectionHeader>
+          <TrendChart
+            title="奖励领取趋势"
+            points={trend}
+            unit="积分"
+            empty={!trend.some((point) => point.count)}
+            emptyText="暂无奖励领取记录"
+          />
+          <p className="chart-footnote">
+            本应用执行的签到与旅行奖励
+            {unknown ? ` · ${unknown} 笔未返回金额` : ""}
+            。成长任务结果见任务执行记录。
+          </p>
+        </section>
         {account.quotaError && (
           <div className="notice warn">
             <Info size={16} />

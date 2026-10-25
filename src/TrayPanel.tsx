@@ -42,16 +42,8 @@ export function TrayPanel() {
     };
   }, [api]);
   useEffect(() => {
-    const mode = state?.settings.theme || "system",
-      media = matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => {
-      document.documentElement.dataset.theme =
-        mode === "system" ? (media.matches ? "dark" : "light") : mode;
-    };
-    apply();
-    media.addEventListener("change", apply);
-    return () => media.removeEventListener("change", apply);
-  }, [state?.settings.theme]);
+    document.documentElement.dataset.theme = "dark";
+  }, []);
   async function run(action: () => Promise<unknown>) {
     if (busy || state?.busy) return;
     setBusy(true);
