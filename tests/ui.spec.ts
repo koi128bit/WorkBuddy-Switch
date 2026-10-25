@@ -7,6 +7,20 @@ import {
 } from "./fixtures";
 import type { TaskRun } from "../src/types";
 
+test("glass appearance can be disabled without changing dark mode or losing settings", async ({ page }) => {
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "设置", exact: true }).click();
+  await page.getByRole("button", { name: "外观与隐私", exact: true }).click();
+  const toggle = page.getByRole("switch", { name: "毛玻璃效果", exact: true });
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator("html")).toHaveAttribute("data-material", "opaque");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-material", "opaque");
+  expect((await page.evaluate(() => window.workbuddy.snapshot())).settings.glassEffect).toBe(false);
+});
+
 test("Raycast workspace offers an actual overview and stays dark with legacy light preferences", async ({
   page,
 }) => {
