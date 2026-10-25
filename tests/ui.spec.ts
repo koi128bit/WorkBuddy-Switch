@@ -87,6 +87,51 @@ test("dark workspace covers every page without horizontal overflow at minimum si
   }
 });
 
+test("API analytics switches real retained history between requests and tokens", async ({ page }) => {
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "API", exact: true }).click();
+  const chart = page.getByRole("figure", { name: "API 请求趋势" });
+  await expect(chart).toBeVisible();
+  await page.getByRole("button", { name: "Token", exact: true }).click();
+  await expect(chart.getByRole("status")).toContainText("Tokens");
+  await expect(page.getByText("1 次用量未返回", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "30 天", exact: true }).click();
+  await expect(chart.getByRole("button")).toHaveCount(30);
+  await page.getByRole("button", { name: "7 天", exact: true }).click();
+  await page.getByRole("button", { name: "请求量", exact: true }).click();
+  await page.screenshot({ path: ".github/assets/api.png", animations: "disabled" });
+});
+
+test("overview handles absent usage, quotas and API state without manufactured chart data", async ({ page }) => {
+  await page.evaluate(async () => {
+    const state = await window.workbuddy.snapshot();
+    state.accounts.forEach(account => { account.quota = null; account.quotaError = null; });
+    window.workbuddy.snapshot = async () => structuredClone(state);
+    window.workbuddy.usage = async () => ({ total: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, requests: 0, total: 0 }, credits: 0, daily: [], models: [], sessions: [], fetchedAt: Date.now(), records: 0, scannedFiles: 0, warnings: [] });
+    window.workbuddy.apiStatus = async () => { throw new Error("unavailable"); };
+    await window.workbuddy.saveSettings(state.settings);
+  });
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "总览", exact: true }).click();
+  await expect(page.getByText("暂无用量记录", { exact: true })).toBeVisible();
+  await expect(page.getByText("API 状态暂不可用", { exact: true })).toBeVisible();
+  await expect(page.getByRole("figure", { name: "Token 使用趋势" }).getByRole("button")).toHaveCount(0);
+  expect(await page.locator(".dashboard").innerText()).not.toMatch(/NaN|Infinity/);
+});
+
+test("command shortcut and every settings section work in the compact dark workspace", async ({ page }) => {
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "搜索命令" }).fill("设置");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "设置", exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 940, height: 640 });
+  for (const [label, slug] of [["常规", "general"], ["自动任务", "automation"], ["外观与隐私", "appearance"], ["连接与路径", "connection"], ["数据与备份", "data"], ["关于与更新", "about"]]) {
+    await page.getByRole("navigation", { name: "设置分类" }).getByRole("button", { name: label, exact: true }).click();
+    expect(await page.locator(".page-content").evaluate(el => el.scrollWidth <= el.clientWidth), label).toBe(true);
+    await page.screenshot({ path: `outputs/screenshots/v1.8-settings-${slug}.png`, animations: "disabled" });
+  }
+  await page.keyboard.press("Control+k");
+  await page.screenshot({ path: ".github/assets/command-search.png", animations: "disabled" });
+});
+
 test("API page keeps completed growth task history out of the connection workflow", async ({
   page,
 }) => {
