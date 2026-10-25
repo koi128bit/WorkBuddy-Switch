@@ -2,6 +2,39 @@ import { test, expect } from "@playwright/test";
 import { fixtureState, fixtureSessions, fixtureUsage } from "./fixtures";
 import type { TaskRun } from "../src/types";
 
+test("extended task confirmation separates compatibility records from paid actions and shows each manual reason", async ({ page }) => {
+  await page.evaluate(() => {
+    const previous = window.workbuddy.prepareTasks;
+    window.workbuddy.prepareTasks = async (ids, options) => {
+      const plan = await previous(ids, options);
+      return {
+        ...plan,
+        maxActivities: 2,
+        accounts: plan.accounts.map(account => ({
+          ...account,
+          tasks: [...account.tasks, {code:"template_5",title:"使用 5 个模板",kind:"template",model:null,modelName:"兼容活动上报",calls:0,actions:2,current:0,target:5,resources:[],waitingForUnlock:false}],
+          pendingReasons: [{code:"wb_wechat_oa_subscribe_task",title:"关注官方公众号",reason:"需要本人在微信关注官方公众号。"}],
+          pendingTitles: ["关注官方公众号"],
+        })),
+      };
+    };
+  });
+  await page.getByRole("button", {name:"一键做任务",exact:true}).click();
+  const dialog = page.getByRole("dialog", {name:"执行前确认"});
+  await expect(dialog.getByRole("switch", {name:"包含活动事件任务",exact:true})).toBeChecked();
+  await expect(dialog).toContainText("不会生成画布或长期定时任务");
+  await expect(dialog).toContainText("最多 2 次活动");
+  await dialog.getByText(/需本人操作或暂不可执行/).first().click();
+  await expect(dialog.getByText("需要本人在微信关注官方公众号。").first()).toBeVisible();
+  await page.getByLabel("本次对话总上限",{exact:true}).fill("80");
+  await expect(dialog.getByRole("button",{name:"更新范围",exact:true})).toBeEnabled();
+  await dialog.getByRole("button",{name:"更新范围",exact:true}).click();
+  await expect(dialog.getByRole("button",{name:/确认并执行/})).toBeEnabled();
+  await page.setViewportSize({width:940,height:720});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:"outputs/screenshots/v1.6-task-confirmation.png",animations:"disabled"});
+});
+
 test("one-click tasks respect account selection and expose confirmed and pending results", async ({
   page,
 }) => {
