@@ -115,7 +115,9 @@ async function activityRequest(
         "X-Domain": new URL(host).hostname,
         "X-Product": "SaaS",
         "X-Client-Platform": web ? "web" : "desktop",
-        "User-Agent": web ? "WorkBuddy-Switch" : `WorkBuddy/${activityProtocolVersion} WorkBuddy-Switch`,
+        "User-Agent": web
+          ? "WorkBuddy-Switch"
+          : `WorkBuddy/${activityProtocolVersion} WorkBuddy-Switch`,
         "X-Request-ID": randomUUID(),
         Origin: origin,
         Referer: `${origin}/profile/growth-center`,
@@ -218,7 +220,7 @@ export async function loadActivityResources(document, spec, request = fetch) {
     return rows.slice(0, 100).flatMap((raw) => {
       const id = raw?.skill_id || raw?.id,
         name = clean(raw?.name || raw?.display_name);
-      return resourceId(id) && name ? [{ id, name, type: "skill" }] : [];
+      return resourceId(id) && name ? [{ id, name, type: "skill", isOfficial: raw.is_official === true || raw.isOfficial === true }] : [];
     });
   }
   return [];
@@ -367,12 +369,13 @@ function conversationEvents(result, action) {
     mode: "craft",
     agentType: "conversation",
     agentName: "workbuddy-switch",
+    ...(result.finishReason ? {finishReason: result.finishReason} : {}),
   };
   const usage = {
     inputToken: result.inputTokens,
     outputToken: result.outputTokens,
     isSuccessful: true,
-    finishReason: result.finishReason || "stop",
+    ...(result.finishReason ? {finishReason: result.finishReason} : {}),
   };
   const events = [
     event("agent_task_created", {
@@ -419,13 +422,13 @@ function conversationEvents(result, action) {
         ...common,
         skillName: action.resource.name,
         skillId: action.resource.id,
-        isOfficial: true,
+        isOfficial: action.resource.isOfficial === true,
       }),
       event("skill_request_send", {
         ...common,
         skills: action.resource.id,
         skillNames: action.resource.name,
-        isOfficial: true,
+        isOfficial: action.resource.isOfficial === true,
       }),
     );
   return events;

@@ -133,6 +133,7 @@ export async function sendDialogue(
     done = false,
     inputTokens = null,
     outputTokens = null,
+    finishReason = null,
     actualModel = model;
   const accept = (obj) => {
     if (obj?.error)
@@ -151,6 +152,7 @@ export async function sendDialogue(
       if (!["stop", "length"].includes(choice.finish_reason))
         throw new RewardError("对话未正常完成，已停止继续调用。", "service");
       finished = true;
+      finishReason = choice.finish_reason;
     }
     if (obj?.usage) {
       inputTokens = tokens(obj.usage.prompt_tokens);
@@ -234,6 +236,7 @@ export async function sendDialogue(
     inputLength: [...prompt].length,
     inputTokens,
     outputTokens,
+    finishReason,
   });
   proofs.set(result, { accountId: document.id, origin, reported: false });
   return result;
