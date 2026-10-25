@@ -11,6 +11,14 @@ const amount = (value) =>
   Number(value) >= 0
     ? Number(value)
     : null;
+function taskExpertId(value) {
+  if (typeof value !== "string" || value.length > 2000) return null;
+  let decoded = value;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {}
+  return decoded.match(/\bex_[A-Za-z0-9]{6,120}\b/)?.[0] || null;
+}
 export function requireTaskCode(value) {
   if (
     typeof value !== "string" ||
@@ -49,6 +57,9 @@ export function parseGrowthTasks(data) {
     return [
       {
         code: raw.task_code,
+        ...(taskExpertId(raw.jump_url)
+          ? { expertId: taskExpertId(raw.jump_url) }
+          : {}),
         title: clean(raw.title, 120) || raw.task_code,
         description: clean(raw.task_desc || raw.description, 500),
         status,

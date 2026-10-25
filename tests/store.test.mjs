@@ -1203,7 +1203,8 @@ test("full task scope runs activities and real experts, waits for delayed scorin
     if (url.endsWith("/v2/report")) {
       for (const event of JSON.parse(options.body)) {
         const code =
-          event.eventCode === "web_element_click" && event.elementId === "library_doc_intro_click"
+          event.eventCode === "web_element_click" &&
+          event.elementId === "library_doc_intro_click"
             ? "Library_read"
             : event.eventCode === "template_used"
               ? "template_5"
@@ -1272,7 +1273,8 @@ test("full task scope runs activities and real experts, waits for delayed scorin
     assert.equal(row.accept_status, "claimed", row.task_code);
   assert.equal(result.dialogueAttempts, 4);
   assert.equal(result.summary.dialogues, 4);
-  assert.ok(result.summary.activities >= 3);
+  assert.equal(result.summary.activities, 1);
+  assert.equal(result.results.filter(row=>row.code === "template_5" && row.status === "dialogue").length, 2);
   assert.ok(
     result.results.some(
       (row) => row.code === "template_5" && row.status === "claimed",

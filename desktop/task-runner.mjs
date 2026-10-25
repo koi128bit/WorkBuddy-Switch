@@ -237,10 +237,13 @@ export class TaskRunner {
               continue;
             }
             const paid = activity ? activity.paid : true;
-            if ((paid && !includeAI) || (!paid && !includeActivities)) {
+            if (
+              (paid && !includeAI) ||
+              (activity?.compatibility && !includeActivities)
+            ) {
               pending(
                 task,
-                paid ? "本次未包含真实对话。" : "本次未包含兼容活动上报。",
+                paid && !includeAI ? "本次未包含真实对话。" : "本次未包含兼容活动上报。",
               );
               continue;
             }
@@ -258,7 +261,7 @@ export class TaskRunner {
             }
             let resources = [];
             try {
-              if (activity && paid && activity.kind !== "desktop-chat")
+              if (activity?.requiresResource)
                 resources = await this.store.authorized(accountId, (document) =>
                   loadActivityResources(document, activity, this.store.request),
                 );
@@ -266,12 +269,7 @@ export class TaskRunner {
               pending(task, "查询可用资源失败：" + error.message);
               continue;
             }
-            if (
-              activity &&
-              paid &&
-              activity.kind !== "desktop-chat" &&
-              !resources.length
-            ) {
+            if (activity?.requiresResource && !resources.length) {
               pending(
                 task,
                 activity.kind === "skill"
@@ -280,6 +278,13 @@ export class TaskRunner {
               );
               continue;
             }
+            if (
+              activity?.requiresResource &&
+              !activity.expertId &&
+              task.current > 0 &&
+              resources.length > task.current
+            )
+              resources = resources.slice(task.current);
             const count = Math.min(
               spec.remaining,
               limit,
@@ -386,6 +391,7 @@ export class TaskRunner {
                 resource: row.resources?.[index],
               },
               this.store.request,
+              { shouldStop: () => this.stopped(), pause: this.pause },
             ),
           );
           await this.add(
@@ -430,6 +436,12 @@ export class TaskRunner {
           }
         }
       } catch (error) {
+        if (error.kind === "cancelled" && this.stopped()) {
+          await this.add(accountId, row.code, row.title, "pending", {
+            detail: error.message,
+          });
+          break;
+        }
         if (error.kind === "receipt")
           await this.add(
             accountId,

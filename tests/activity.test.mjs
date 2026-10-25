@@ -86,7 +86,13 @@ test("activity records are bounded, sent only to official endpoints, and never l
     calls.every((call) => call.url === "https://www.workbuddy.cn/v2/report"),
   );
   const events = calls.flatMap((call) => JSON.parse(call.options.body));
-  assert.ok(events.some((event) => event.eventCode === "web_element_click" && event.elementId === "library_doc_intro_click"));
+  assert.ok(
+    events.some(
+      (event) =>
+        event.eventCode === "web_element_click" &&
+        event.elementId === "library_doc_intro_click",
+    ),
+  );
   assert.ok(
     !events.some((event) => event.eventCode === "chat_message_response"),
   );
@@ -119,7 +125,12 @@ test("targeted experts are selected from real market results by exact name and p
       assert.equal(JSON.parse(options.body).keyword, "抖音策略师");
       return json({
         experts: [
-          { expert_id: "wrong", display_name_zh: "抖音策略师", profession_zh: "抖音策略师", expert_type: "agent" },
+          {
+            expert_id: "wrong",
+            display_name_zh: "抖音策略师",
+            profession_zh: "抖音策略师",
+            expert_type: "agent",
+          },
           {
             expert_id: "ex_FbY5nlWTqDod",
             display_name_zh: "抖音策略师",
@@ -175,7 +186,38 @@ test("expert activities use a bounded real conversation and join only the actual
   assert.ok(!JSON.stringify(result).includes("fixture-secret"));
 });
 
-test("failed paid activities never fabricate a successful use event or retry a paid request",async()=>{const events=[];let paid=0;await assert.rejects(()=>api.executeActivity(document,{kind:'expert',code:'expert_5',model:'fast-model',prompt:'你好',resource:{id:'verified-expert',name:'专家',type:'agent'}},async(url,options)=>{if(url.endsWith('/chat/completions')){paid++;return new Response(null,{status:429});}events.push(...JSON.parse(options.body));return json({});}),/服务|额度|停止/);assert.equal(paid,1);assert.ok(!events.some(event=>['expert_actual_use','chat_message_response'].includes(event.eventCode)));});
+test("failed paid activities never fabricate a successful use event or retry a paid request", async () => {
+  const events = [];
+  let paid = 0;
+  await assert.rejects(
+    () =>
+      api.executeActivity(
+        document,
+        {
+          kind: "expert",
+          code: "expert_5",
+          model: "fast-model",
+          prompt: "你好",
+          resource: { id: "verified-expert", name: "专家", type: "agent" },
+        },
+        async (url, options) => {
+          if (url.endsWith("/chat/completions")) {
+            paid++;
+            return new Response(null, { status: 429 });
+          }
+          events.push(...JSON.parse(options.body));
+          return json({});
+        },
+      ),
+    /服务|额度|停止/,
+  );
+  assert.equal(paid, 1);
+  assert.ok(
+    !events.some((event) =>
+      ["expert_actual_use", "chat_message_response"].includes(event.eventCode),
+    ),
+  );
+});
 
 test("activity errors sanitize credentials and refuse foreign accounts and mismatched action types", async () => {
   assert.equal(typeof api.executeActivity, "function");
@@ -264,14 +306,17 @@ for (const [kind, code, eventCode] of [
       },
     );
     assert.equal(result.dialogue, null);
-    assert.ok(calls.every((call) => (call.url.endsWith("/v2/report") || call.url.endsWith("/v2/user-asset/appearance/set"))));
+    assert.ok(
+      calls.every(
+        (call) =>
+          call.url.endsWith("/v2/report") ||
+          call.url.endsWith("/v2/user-asset/appearance/set"),
+      ),
+    );
     const events = calls.flatMap((call) => JSON.parse(call.options.body));
     assert.ok(events.some((event) => event.eventCode === eventCode));
     assert.ok(
-      !events.some(
-        (event) =>
-          event.eventCode === "chat_message_response",
-      ),
+      !events.some((event) => event.eventCode === "chat_message_response"),
     );
   });
 
