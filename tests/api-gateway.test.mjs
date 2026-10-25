@@ -504,3 +504,18 @@ test("no selected credentials means no listener can be started and startup error
   await assert.rejects(f.gateway.start(), /账号/);
   assert.equal(f.gateway.snapshot().running, false);
 });
+test('a temporarily unavailable system keyring never replaces or archives a valid API key file',async t=>{
+  const f=await fixture(t);await f.gateway.stop();
+  const file=path.join(f.directory,'api-gateway.json'),before=await fs.readFile(file,'utf8');
+  const blocked=new ApiGateway({directory:f.directory,stores:f.stores,vault:{...f.vault,decrypt(){throw new Error('keyring temporarily locked');}}});
+  await blocked.init();t.after(()=>blocked.stop());
+  assert.equal(await fs.readFile(file,'utf8'),before,'encrypted key must remain byte-for-byte unchanged');
+  assert.equal(blocked.snapshot().hasKey,false);assert.equal(blocked.snapshot().running,false);
+  assert.match(blocked.snapshot().lastError,/解密|密钥|加密/);
+});
+test('duplicate official catalog entries are deduplicated without replacing the first model capabilities',async t=>{
+  const f=await fixture(t,async()=>Response.json({code:0,data:{models:[{id:'fast-model',name:'first',maxOutputTokens:4096},{id:'fast-model',name:'duplicate',maxOutputTokens:8192}]}}));
+  const value=await(await fetch(f.status.baseUrl+'/models',{headers:f.headers})).json();
+  assert.deepEqual(value.data.map(model=>model.id),['fast-model','global:fast-model']);
+  assert.equal(value.data[0].name,'first');
+});
