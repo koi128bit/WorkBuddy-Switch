@@ -8,6 +8,12 @@ import {
   claimGrowthTask,
 } from "./growth-tasks.mjs";
 import { dialogueSpec, sendDialogue, reportDialogue } from "./dialogue.mjs";
+import {
+  activitySpec,
+  loadActivityResources,
+  executeActivity,
+  pendingReason,
+} from "./activity.mjs";
 import { setTimeout as delay } from "node:timers/promises";
 
 const runStates = [
@@ -25,6 +31,7 @@ const actionStates = [
   "skipped",
   "error",
   "dialogue",
+  "activity",
 ];
 const counters = [
   "claimed",
@@ -75,6 +82,7 @@ function restoreRun(run) {
   summary.credit = amount(run.summary?.credit);
   summary.energy = amount(run.summary?.energy);
   summary.dialogues = amount(run.summary?.dialogues ?? 0, true);
+  summary.activities = amount(run.summary?.activities ?? 0, true);
   return {
     id: text(run.id, 200),
     status: run.status,
@@ -89,6 +97,8 @@ function restoreRun(run) {
     cancelRequested: run.cancelRequested,
     dialogueAttempts: amount(run.dialogueAttempts ?? 0, true),
     dialogueLimit: amount(run.dialogueLimit ?? 0, true),
+    activityAttempts: amount(run.activityAttempts ?? 0, true),
+    activityLimit: amount(run.activityLimit ?? 0, true),
     summary,
     results: run.results.map((entry) => {
       if (
@@ -119,6 +129,7 @@ export class TaskRunner {
   pendingPlan = null;
   constructor(store) {
     this.store = store;
+    this.pause = delay;
   }
   get file() {
     return path.join(this.store.directory, "task-run.json");
@@ -132,17 +143,19 @@ export class TaskRunner {
     const selected = this.store.rewardTargets(ids),
       {
         includeAI = true,
-        maxCalls = 20,
+        includeActivities = false,
+        maxCalls = 80,
         prompt = "请用一句话介绍你能帮助我完成什么工作。",
       } = options;
     if (!selected.length) throw new Error("请先选择要执行任务的账号。");
     if (
       typeof includeAI !== "boolean" ||
+      typeof includeActivities !== "boolean" ||
       !Number.isSafeInteger(maxCalls) ||
       maxCalls < 1 ||
-      maxCalls > 20
+      maxCalls > 200
     )
-      throw new Error("对话总上限须为 1–20 条。");
+      throw new Error("对话总上限须为 1–200 条。");
     if (
       typeof prompt !== "string" ||
       !prompt.trim() ||
@@ -157,12 +170,14 @@ export class TaskRunner {
           createdAt: now,
           expiresAt: now + 10 * 60 * 1000,
           accountIds: selected,
-          options: { includeAI, maxCalls, prompt },
+          options: { includeAI, includeActivities, maxCalls, prompt },
           outputLimit: 64,
           maxCalls: 0,
+          maxActivities: 0,
           accounts: [],
         };
-      let budget = includeAI ? maxCalls : 0;
+      let budget = includeAI ? maxCalls : 0,
+        activityBudget = includeActivities ? 200 : 0;
       for (const [index, accountId] of selected.entries()) {
         const account = {
           accountId,
@@ -171,65 +186,144 @@ export class TaskRunner {
               ?.profile.nickname || "WorkBuddy 账号",
           tasks: [],
           pendingTitles: [],
+          pendingReasons: [],
           note: "",
         };
         plan.accounts.push(account);
-        if (!includeAI) {
+        const pending = (task, reason) => {
+          account.pendingTitles.push(task.title);
+          account.pendingReasons.push({
+            code: task.code,
+            title: task.title,
+            reason,
+          });
+        };
+        if (!includeAI && !includeActivities) {
           account.note = "仅执行基础任务，不发送对话。";
           continue;
         }
-        if (index >= 20 || !budget) {
-          account.note = "本次对话上限已分配，此账号只执行基础任务。";
+        if (index >= 20) {
+          account.note =
+            "本次最多预览 20 个账号的体验任务，此账号只执行基础任务。";
           continue;
         }
         try {
           const tasks = await this.store.authorized(accountId, (document) =>
             getGrowthTasks(document, this.store.request),
           );
-          tasks.sort(
-            (a, b) =>
-              Number(b.code === "Model_chat_GLM5.2") -
-              Number(a.code === "Model_chat_GLM5.2"),
-          );
-          let perAccount = 6;
+          tasks.sort((a, b) => {
+            const priority = (task) =>
+              task.code === "Model_chat_GLM5.2"
+                ? 0
+                : activitySpec({ ...task, locked: false })?.paid === false
+                  ? 1
+                  : task.code === "expert_5"
+                    ? 4
+                    : task.code === "chat_5"
+                      ? 8
+                      : 3;
+            return priority(a) - priority(b);
+          });
+          let perAccount = 40,
+            perAccountActivities = 40;
           for (const task of tasks) {
-            const spec = dialogueSpec(task, now);
+            if (task.claimed || task.claimable) continue;
+            const candidate = { ...task, locked: false },
+              activity = activitySpec(candidate),
+              chat = dialogueSpec(candidate, now),
+              spec = activity || chat;
             if (!spec) {
-              if (!task.claimed && !task.claimable)
-                account.pendingTitles.push(task.title);
+              pending(task, pendingReason(task));
               continue;
             }
-            const calls = Math.min(spec.remaining, perAccount, budget);
-            if (calls) {
-              account.tasks.push({
-                code: task.code,
-                title: task.title,
-                model: spec.model,
-                modelName: spec.modelName,
-                calls,
-                current: task.current,
-                target: task.target,
-              });
-              budget -= calls;
-              perAccount -= calls;
-              plan.maxCalls += calls;
+            const paid = activity ? activity.paid : true;
+            if ((paid && !includeAI) || (!paid && !includeActivities)) {
+              pending(
+                task,
+                paid ? "本次未包含真实对话。" : "本次未包含兼容活动上报。",
+              );
+              continue;
+            }
+            const limit = paid
+              ? Math.min(perAccount, budget)
+              : Math.min(perAccountActivities, activityBudget);
+            if (!limit) {
+              pending(
+                task,
+                paid
+                  ? "本次对话预算已分配，可提高上限后重新预览。"
+                  : "本次活动次数已达到上限。",
+              );
+              continue;
+            }
+            let resources = [];
+            try {
+              if (activity && paid && activity.kind !== "desktop-chat")
+                resources = await this.store.authorized(accountId, (document) =>
+                  loadActivityResources(document, activity, this.store.request),
+                );
+            } catch (error) {
+              pending(task, "查询可用资源失败：" + error.message);
+              continue;
+            }
+            if (
+              activity &&
+              paid &&
+              activity.kind !== "desktop-chat" &&
+              !resources.length
+            ) {
+              pending(
+                task,
+                activity.kind === "skill"
+                  ? "此账号尚无可用的已安装技能，请先安装一个官方技能。"
+                  : "未找到与任务对应的可用专家，请在官方成长中心核对。",
+              );
+              continue;
+            }
+            const count = Math.min(
+              spec.remaining,
+              limit,
+              resources.length || 40,
+            );
+            account.tasks.push({
+              code: task.code,
+              title: task.title,
+              model: spec.model,
+              modelName: spec.modelName,
+              calls: paid ? count : 0,
+              actions: paid ? 0 : count,
+              current: task.current,
+              target: task.target,
+              ...(activity ? { kind: activity.kind } : {}),
+              resources: resources.slice(0, count),
+              waitingForUnlock: task.locked,
+            });
+            if (paid) {
+              budget -= count;
+              perAccount -= count;
+              plan.maxCalls += count;
+            } else {
+              activityBudget -= count;
+              perAccountActivities -= count;
+              plan.maxActivities += count;
             }
           }
           if (!account.tasks.length)
-            account.note = "当前没有可自动尝试的已知对话任务。";
+            account.note =
+              "当前没有待执行的已知体验任务，仍会签到、接取及领取已达标奖励。";
         } catch (error) {
-          account.note = `对话范围查询失败，本次只执行基础任务：${error.message}`;
+          account.note =
+            "执行范围查询失败，本次只执行基础任务：" + error.message;
         }
       }
       this.pendingPlan = plan;
       return structuredClone(plan);
     });
   }
-  async dialogues(accountId, tasks, plan) {
+  async dialogues(accountId, tasks, plan, execution) {
     const approved =
-        plan.accounts.find((account) => account.accountId === accountId)
-          ?.tasks || [],
-      used = new Map();
+      plan.accounts.find((account) => account.accountId === accountId)?.tasks ||
+      [];
     const advanced = (before, after) =>
       approved.some((row) => {
         const old = before.find((task) => task.code === row.code),
@@ -242,92 +336,144 @@ export class TaskRunner {
             (fresh.current ?? 0) > (old.current ?? 0))
         );
       });
-    while (!this.stopped() && this.current.dialogueAttempts < plan.maxCalls) {
+    while (!this.stopped()) {
       const row = approved.find((row) => {
         const task = tasks.find((task) => task.code === row.code),
-          spec = task && dialogueSpec(task);
+          spec = task && (row.kind ? activitySpec(task) : dialogueSpec(task));
+        if (
+          !spec ||
+          task.status === "not_accepted" ||
+          execution.failed.has(row.code)
+        )
+          return false;
+        const paid = row.calls > 0;
         return (
-          spec &&
-          spec.model === row.model &&
-          task.status !== "not_accepted" &&
-          (used.get(row.code) || 0) < row.calls
+          (!paid ||
+            (!execution.blockedPaid &&
+              this.current.dialogueAttempts < plan.maxCalls)) &&
+          (paid || this.current.activityAttempts < plan.maxActivities) &&
+          (execution.used.get(row.code) || 0) <
+            (paid ? row.calls : row.actions) &&
+          (!paid || spec.model === row.model) &&
+          (!row.kind || spec.kind === row.kind)
         );
       });
       if (!row) break;
+      const paid = row.calls > 0,
+        index = execution.used.get(row.code) || 0;
       await this.step(
         accountId,
-        `真实对话：${row.title}（最多 ${plan.maxCalls} 条）`,
+        (paid ? "真实对话：" : "活动记录：") + row.title,
       );
       if (this.stopped()) break;
-      this.current.dialogueAttempts++;
-      used.set(row.code, (used.get(row.code) || 0) + 1);
+      if (paid) this.current.dialogueAttempts++;
+      else this.current.activityAttempts++;
+      execution.used.set(row.code, index + 1);
       await this.flush();
       if (this.stopped()) break;
       let result;
       try {
-        result = await this.store.authorized(accountId, (document) =>
-          sendDialogue(
-            document,
-            { model: row.model, prompt: plan.options.prompt },
-            this.store.request,
-          ),
-        );
-        await this.add(
-          accountId,
-          row.code,
-          `真实对话 · ${row.modelName}`,
-          "dialogue",
-          {
-            detail: `已收到完整回复${result.inputTokens !== null ? `，输入 ${result.inputTokens} Token` : ""}${result.outputTokens !== null ? `，输出 ${result.outputTokens} Token` : ""}。对话消耗以官方计费为准。`,
-          },
-        );
+        if (row.kind) {
+          result = await this.store.authorized(accountId, (document) =>
+            executeActivity(
+              document,
+              {
+                kind: row.kind,
+                code: row.code,
+                index: row.current + index,
+                model: row.model,
+                prompt: plan.options.prompt,
+                resource: row.resources?.[index],
+              },
+              this.store.request,
+            ),
+          );
+          await this.add(
+            accountId,
+            row.code,
+            paid ? "真实对话 · " + row.title : row.title,
+            paid ? "dialogue" : "activity",
+            { detail: result.detail },
+          );
+        } else {
+          const dialogue = await this.store.authorized(accountId, (document) =>
+            sendDialogue(
+              document,
+              { model: row.model, prompt: plan.options.prompt },
+              this.store.request,
+            ),
+          );
+          await this.add(
+            accountId,
+            row.code,
+            "真实对话 · " + row.modelName,
+            "dialogue",
+            { detail: "已收到完整回复，对话消耗以官方计费为准。" },
+          );
+          try {
+            await this.store.authorized(accountId, (document) =>
+              reportDialogue(document, dialogue, this.store.request),
+            );
+          } catch (error) {
+            await this.add(accountId, row.code, "对话活动回执", "error", {
+              detail:
+                "真实对话已完成，但活动回执失败，本账号停止继续对话：" +
+                error.message,
+            });
+            execution.blockedPaid = true;
+            execution.failed.add(row.code);
+            continue;
+          }
+        }
       } catch (error) {
-        await this.add(
-          accountId,
-          row.code,
-          `真实对话 · ${row.modelName}`,
-          "error",
-          { detail: error.message },
-        );
-        break;
-      }
-      try {
-        await this.store.authorized(accountId, (document) =>
-          reportDialogue(document, result, this.store.request),
-        );
-      } catch (error) {
-        await this.add(accountId, row.code, "对话活动回执", "error", {
-          detail: `真实对话已完成，但活动回执失败，本账号停止继续对话：${error.message}`,
+        if (error.kind === "receipt")
+          await this.add(
+            accountId,
+            row.code,
+            "真实对话 · " + row.title,
+            "dialogue",
+            { detail: "已收到完整回复，活动回执尚未确认。" },
+          );
+        await this.add(accountId, row.code, paid ? "真实对话 · " + row.title : row.title, "error", {
+          detail: error.message,
         });
-        break;
+        execution.failed.add(row.code);
+        if (paid) execution.blockedPaid = true;
+        continue;
       }
       let fresh = tasks,
         progress = false;
       try {
-        for (let attempt = 0; attempt < 2; attempt++) {
-          if (attempt) {
-            if (this.stopped()) break;
-            await delay(1000);
-          }
+        for (const milliseconds of [0, 750, 1500, 3000, 5000]) {
+          if (this.stopped()) break;
+          if (milliseconds) await this.pause(milliseconds);
+          if (this.stopped()) break;
           fresh = await this.store.authorized(accountId, (document) =>
             getGrowthTasks(document, this.store.request),
           );
           progress = advanced(tasks, fresh);
-          if (progress || this.stopped()) break;
+          if (progress) break;
         }
       } catch (error) {
-        await this.add(accountId, row.code, "回读对话进度", "error", {
-          detail: `对话已完成，但官方进度查询失败，本账号停止继续对话：${error.message}`,
+        await this.add(accountId, row.code, "回读任务进度", "error", {
+          detail:
+            (paid
+              ? "对话已完成，但官方进度查询失败，本账号停止继续对话："
+              : "活动已提交，但官方进度查询失败：") + error.message,
         });
-        break;
+        execution.failed.add(row.code);
+        if (paid) execution.blockedPaid = true;
       }
       tasks = fresh;
-      if (!progress) {
-        await this.add(accountId, row.code, row.title, "pending", {
-          detail:
-            "真实对话已完成，但官方未确认任务进度，本账号已停止继续对话。",
-        });
-        break;
+      if (!progress && !this.stopped()) {
+        execution.notes.set(
+          row.code,
+          paid
+            ? "真实对话已完成，但官方未确认任务进度，本账号已停止继续对话。"
+            : "活动记录已提交，官方尚未确认进度，本轮不会重复提交此任务。",
+        );
+        execution.failed.add(row.code);
+        if (paid) execution.blockedPaid = true;
       }
     }
     return tasks;
@@ -400,6 +546,7 @@ export class TaskRunner {
         summary.unknownAmounts++;
     } else if (status === "accepted") summary.accepted++;
     else if (status === "dialogue") summary.dialogues++;
+    else if (status === "activity") summary.activities++;
     else if (status === "departed") summary.departed++;
     else if (status === "pending") summary.pending++;
     else if (status === "skipped") summary.skipped++;
@@ -433,101 +580,165 @@ export class TaskRunner {
       });
       return;
     }
-    if (this.stopped()) return;
-    const pending = tasks.filter(
-      (task) => !task.claimed && !task.locked && task.status === "not_accepted",
-    );
-    if (pending.length) {
-      await this.step(accountId, `接取 ${pending.length} 项成长任务`);
-      if (this.stopped()) return;
-      try {
-        await store.authorized(accountId, (document) =>
-          acceptGrowthTasks(
-            document,
-            pending.map((task) => task.code),
-            store.request,
-          ),
-        );
-        const fresh = await store.authorized(accountId, (document) =>
-          getGrowthTasks(document, store.request),
-        );
-        tasks = fresh;
-        for (const task of pending) {
-          const updated = fresh.find((item) => item.code === task.code);
+    const execution = {
+        used: new Map(),
+        failed: new Set(),
+        notes: new Map(),
+        blockedPaid: false,
+      },
+      claimed = new Set(),
+      accepted = new Set();
+    let acceptFailed = false;
+    for (let round = 0; round < (plan ? 6 : 1) && !this.stopped(); round++) {
+      const before = JSON.stringify(
+        tasks.map((task) => [
+          task.code,
+          task.status,
+          task.current,
+          task.locked,
+        ]),
+      );
+      const pending = tasks.filter(
+        (task) =>
+          !task.claimed &&
+          !task.locked &&
+          task.status === "not_accepted" &&
+          !accepted.has(task.code),
+      );
+      if (pending.length && !acceptFailed) {
+        await this.step(accountId, "接取 " + pending.length + " 项成长任务");
+        if (this.stopped()) return;
+        try {
+          await store.authorized(accountId, (document) =>
+            acceptGrowthTasks(
+              document,
+              pending.map((task) => task.code),
+              store.request,
+            ),
+          );
+          const fresh = await store.authorized(accountId, (document) =>
+            getGrowthTasks(document, store.request),
+          );
+          tasks = fresh;
+          for (const task of pending) {
+            accepted.add(task.code);
+            const updated = fresh.find((item) => item.code === task.code);
+            await this.add(
+              accountId,
+              task.code,
+              task.title,
+              updated &&
+                ["accepted", "in_progress", "completed", "claimed"].includes(
+                  updated.status,
+                )
+                ? "accepted"
+                : "pending",
+              {
+                detail:
+                  updated?.status === "not_accepted"
+                    ? "接取请求已提交，官方状态尚未确认。"
+                    : "任务接取后将以官方进度为准。",
+              },
+            );
+          }
+        } catch (error) {
+          acceptFailed = true;
+          await this.add(accountId, "accept", "接取成长任务", "error", {
+            detail: error.message,
+          });
+        }
+      }
+      if (plan && !this.stopped())
+        tasks = await this.dialogues(accountId, tasks, plan, execution);
+      let claimedAny = false;
+      for (const task of tasks) {
+        if (this.stopped()) return;
+        if (
+          task.claimed ||
+          task.locked ||
+          !task.claimable ||
+          !task.hasReward ||
+          claimed.has(task.code)
+        )
+          continue;
+        await this.step(accountId, "领取：" + task.title);
+        if (this.stopped()) return;
+        try {
+          const result = await store.authorized(accountId, (document) =>
+            claimGrowthTask(document, task.code, store.request),
+          );
+          claimed.add(task.code);
+          claimedAny = true;
           await this.add(
             accountId,
             task.code,
             task.title,
-            updated &&
-              ["accepted", "in_progress", "completed", "claimed"].includes(
-                updated.status,
-              )
-              ? "accepted"
-              : "pending",
+            result.already ? "skipped" : "claimed",
             {
-              detail:
-                updated?.status === "not_accepted"
-                  ? "接取请求已提交，官方状态尚未确认。"
-                  : "任务接取后将以官方进度为准。",
+              credit: result.credit,
+              energy: result.energy,
+              detail: result.already
+                ? "奖励此前已领取。"
+                : "奖励按官方返回结果记录。",
             },
           );
+        } catch (error) {
+          claimed.add(task.code);
+          await this.add(accountId, task.code, task.title, "error", {
+            detail: error.message,
+          });
         }
+      }
+      if (!plan || this.stopped()) break;
+      if (
+        !claimedAny &&
+        JSON.stringify(
+          tasks.map((task) => [
+            task.code,
+            task.status,
+            task.current,
+            task.locked,
+          ]),
+        ) === before
+      )
+        break;
+      try {
+        tasks = await store.authorized(accountId, (document) =>
+          getGrowthTasks(document, store.request),
+        );
       } catch (error) {
-        await this.add(accountId, "accept", "接取成长任务", "error", {
+        await this.add(accountId, "growth-refresh", "回读任务进度", "error", {
           detail: error.message,
         });
+        break;
       }
     }
-    if (plan && !this.stopped())
-      tasks = await this.dialogues(accountId, tasks, plan);
     for (const task of tasks) {
       if (this.stopped()) return;
+      if (claimed.has(task.code)) continue;
       if (task.claimed) {
         await this.add(accountId, task.code, task.title, "skipped", {
           detail: "奖励已领取。",
         });
         continue;
       }
-      if (task.locked) {
-        await this.add(accountId, task.code, task.title, "skipped", {
-          detail: "任务尚未解锁。",
-        });
-        continue;
-      }
-      if (!task.claimable || !task.hasReward) {
-        await this.add(accountId, task.code, task.title, "pending", {
+      const plannedReason = plan?.accounts
+        .find((account) => account.accountId === accountId)
+        ?.pendingReasons?.find((row) => row.code === task.code)?.reason;
+      await this.add(
+        accountId,
+        task.code,
+        task.title,
+        task.locked ? "skipped" : "pending",
+        {
           current: task.current,
           target: task.target,
-          detail: task.hasReward
-            ? "等待在官方客户端完成实际操作，已保留当前进度。"
-            : "该任务没有可领取的奖励。",
-        });
-        continue;
-      }
-      await this.step(accountId, `领取：${task.title}`);
-      if (this.stopped()) return;
-      try {
-        const result = await store.authorized(accountId, (document) =>
-          claimGrowthTask(document, task.code, store.request),
-        );
-        await this.add(
-          accountId,
-          task.code,
-          task.title,
-          result.already ? "skipped" : "claimed",
-          {
-            credit: result.credit,
-            energy: result.energy,
-            detail: result.already
-              ? "奖励此前已领取。"
-              : "奖励按官方返回结果记录。",
-          },
-        );
-      } catch (error) {
-        await this.add(accountId, task.code, task.title, "error", {
-          detail: error.message,
-        });
-      }
+          detail:
+            execution.notes.get(task.code) ||
+            plannedReason ||
+            pendingReason(task),
+        },
+      );
     }
   }
   run(ids = null, planId = null) {
@@ -558,6 +769,8 @@ export class TaskRunner {
         cancelRequested: false,
         dialogueAttempts: 0,
         dialogueLimit: plan?.maxCalls || 0,
+        activityAttempts: 0,
+        activityLimit: plan?.maxActivities || 0,
         results: [],
         summary: {
           claimed: 0,
@@ -570,6 +783,7 @@ export class TaskRunner {
           energy: 0,
           unknownAmounts: 0,
           dialogues: 0,
+          activities: 0,
         },
       };
       try {

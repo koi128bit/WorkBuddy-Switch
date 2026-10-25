@@ -58,12 +58,19 @@ const tokens = (value) =>
     : null;
 export async function sendDialogue(
   document,
-  { model, prompt },
+  { model, prompt, expertId },
   request = fetch,
 ) {
   const origin = domesticOrigin(document);
   if (!allowedModels.has(model))
     throw new RewardError("对话模型不在确认范围内。", "input");
+  if (
+    expertId !== undefined &&
+    (typeof expertId !== "string" ||
+      !/^[A-Za-z0-9_.-]{1,160}$/.test(expertId) ||
+      expertId.includes(".."))
+  )
+    throw new RewardError("专家标识无效。", "input");
   if (
     typeof prompt !== "string" ||
     !prompt.trim() ||
@@ -93,6 +100,7 @@ export async function sendDialogue(
           "X-Agent-Type": "main",
           "X-Conversation-ID": conversationId,
           "X-Request-ID": randomUUID(),
+          ...(expertId ? { "X-Expert-Id": expertId } : {}),
         },
         body: JSON.stringify({
           model,
@@ -217,7 +225,7 @@ export async function sendDialogue(
       "未取得完整对话结果，消耗尚未确认，已停止继续调用。",
       "format",
     );
-  const result = {
+  const result = Object.freeze({
     conversationId,
     requestId,
     model: actualModel,
@@ -226,11 +234,16 @@ export async function sendDialogue(
     inputLength: [...prompt].length,
     inputTokens,
     outputTokens,
-  };
+  });
   proofs.set(result, { accountId: document.id, origin, reported: false });
   return result;
 }
-export async function reportDialogue(document, result, request = fetch) {
+export async function reportDialogue(
+  document,
+  result,
+  request = fetch,
+  reporter = null,
+) {
   const origin = domesticOrigin(document),
     proof = proofs.get(result);
   if (
@@ -242,6 +255,10 @@ export async function reportDialogue(document, result, request = fetch) {
     throw new RewardError("只允许记录本次真实完成的对话。", "input");
   proof.reported = true;
   try {
+    if (reporter) {
+      await reporter(document, result);
+      return;
+    }
     await requestReward(
       document,
       "/v2/report",
