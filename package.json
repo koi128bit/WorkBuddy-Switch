@@ -1,7 +1,7 @@
 {
   "name": "workbuddy-switch",
-  "version": "1.7.0",
-  "description": "WorkBuddy、Trae 与 Qoder 多账号管理：国内及国际版、三系统、安全切换、一键任务与本机 OpenAI 兼容 API",
+  "version": "1.8.0",
+  "description": "Raycast Dark 毛玻璃工作台：WorkBuddy、Trae、Qoder 多账号切换，积分任务、用量图表与本机 OpenAI 兼容 API",
   "author": "koi128bit",
   "license": "MIT",
   "private": true,

@@ -152,6 +152,57 @@ try {
       "native Linux smoke uses a real unlocked system keyring",
     );
   const initial = await page.evaluate(() => window.workbuddy.snapshot());
+  assert.ok(["vibrancy", "acrylic", "opaque"].includes(initial.windowMaterial));
+  await page.waitForFunction(
+    (kind) => document.documentElement.dataset.material === kind,
+    initial.windowMaterial,
+  );
+  const materialWindow = await desktop.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows().find(
+      (value) => value.getTitle() === "WorkBuddy Switch",
+    );
+    return {
+      background: window.getBackgroundColor(),
+      opacity: window.getOpacity(),
+      shadow: window.hasShadow(),
+    };
+  });
+  assert.equal(
+    materialWindow.opacity,
+    1,
+    "glass never fades text with whole-window opacity",
+  );
+  if (initial.windowMaterial !== "opaque") {
+    // Electron deliberately omits alpha from getBackgroundColor().
+    assert.equal(materialWindow.background, "#000000");
+    assert.equal(
+      await page
+        .locator("body")
+        .evaluate((el) => getComputedStyle(el).backgroundColor),
+      "rgba(0, 0, 0, 0)",
+    );
+  }
+  await page.evaluate(async () => {
+    const snapshot = await window.workbuddy.snapshot();
+    await window.workbuddy.saveSettings({
+      ...snapshot.settings,
+      glassEffect: false,
+    });
+  });
+  await page.waitForFunction(
+    () => document.documentElement.dataset.material === "opaque",
+  );
+  await page.evaluate(async () => {
+    const snapshot = await window.workbuddy.snapshot();
+    await window.workbuddy.saveSettings({
+      ...snapshot.settings,
+      glassEffect: true,
+    });
+  });
+  await page.waitForFunction(
+    (kind) => document.documentElement.dataset.material === kind,
+    initial.windowMaterial,
+  );
   const apiInitial = await page.evaluate(() => window.workbuddy.apiStatus());
   assert.equal(apiInitial.running, false);
   assert.equal(apiInitial.hasKey, true);

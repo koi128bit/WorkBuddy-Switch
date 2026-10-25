@@ -15,11 +15,11 @@
   </p>
 </div>
 
-<p align="center"><img src=".github/assets/dark.png" width="1120" alt="原生灰阶深色界面：账号列表、积分、签到、旅行与状态栏" /></p>
+<p align="center"><img src=".github/assets/overview.png" width="1120" alt="Raycast Dark 总览：积分、Token 趋势、账号分布、任务状态与本机 API" /></p>
 
-WorkBuddy Switch 1.7.0 在同一个简洁灰阶界面中管理 WorkBuddy、Trae 和 Qoder，提供六个独立客户端入口。客户端各自保留独立账号列表，支持浅色、深色、跟随系统和紧凑布局；原来的猫咪图标继续保留。主窗口和菜单栏都可以选择客户端，底部状态栏随所选客户端更新。
+WorkBuddy Switch 1.8.0 采用统一的 Raycast Dark 工作台：深色毛玻璃、紧凑导航、细分隔线与珊瑚红强调。新增总览、交互图表和命令搜索，管理 WorkBuddy、Trae 和 Qoder 的六个独立客户端入口。账号库、原猫咪图标、菜单栏与固定位置覆盖升级继续保留。
 
-> 截图均为演示账号和模拟数据。真实积分、任务资格与奖励以官方接口为准，本地用量来自设备上的记录。
+> 截图均为演示账号和模拟数据。真实积分、任务资格与奖励以官方接口为准，本地用量来自设备上的记录。原生毛玻璃的透底效果随系统与窗口后的内容变化。
 
 ## 支持的客户端
 
@@ -40,16 +40,28 @@ Trae / Qoder 网页授权与客户端登录资料分别加密保存，用同地�
 
 | 页面     | 功能                                                                                 |
 | -------- | ------------------------------------------------------------------------------------ |
+| **总览** | 可用积分、临期积分、近 7 天 Token 趋势、账号余额分布、任务状态与本机服务             |
 | **账号** | 官方网页登录添加、保存当前登录、搜索、收藏、备注、排序、多选领取、安全切换和加密备份 |
 | **积分** | 一键做任务、每日签到、猫猫旅行、成长任务进度、按账号配置自动任务和执行结果           |
 | **对话** | 搜索本地记录、按账号筛选、恢复回收站对话、迁移到当前账号继续                         |
-| **用量** | Token 分项、模型与对话排行、日期范围、日志 Credits 与 CSV 导出                       |
-| **API** | OpenAI 兼容接口、账号池、模型目录、流式回复、限额、用量与调用测试 |
+| **用量** | 交互折线图、Token 构成环图、模型消耗对比、每日数据表、筛选与 CSV 导出                |
+| **API**  | OpenAI 兼容接口、账号池、模型目录、流式回复、请求趋势、成功率与延迟                  |
 | **设置** | 常规、自动任务、外观与隐私、连接与路径、数据与备份、关于与更新                       |
 
 WorkBuddy 账号页提供「需关注」筛选，集中显示查询失败、凭据待续期、低余额与临期积分。积分包明细展示各包可用量和到期时间；「建议先用」仅依据最近 6 小时内查询成功的临期积分，不会自动切换账号。
 
 底部状态栏显示当前客户端的运行状态、自动任务开关、正在执行的操作和积分刷新时间，并提供保存当前账号与隐私遮罩快捷操作。
+
+## 数据视图与命令搜索
+
+- **总览**：展示最近 7 天、全部当前地区 WorkBuddy 账号的本地用量；积分汇总保留已查询账号数量，查询失败或未查询时显示未知。
+- **用量图表**：悬停或用 Tab 聚焦折线图上的日期，查看当天值；环图可聚焦分项，模型条形图跟随排序。展开「查看每日数据」可读取精确数字。
+- **奖励趋势**：积分页展示当前账号近 7 天在本应用执行的签到与旅行领奖；未返回的奖励金额单独标注。成长任务结果显示在任务执行记录中。
+- **API 分析**：切换 7 / 30 天、请求量 / Token，查看成功率、P50 / P95 延迟和模型分布。分析仅覆盖保留的最近 100 条请求，累计用量另列；未知用量不推算。
+- **毛玻璃**：macOS 使用原生背景模糊，Windows 11 22H2 及以上使用 Acrylic；其他系统保留深色兼容外观。「设置 → 外观与隐私」可关闭；系统减少透明度和高对比度优先，不降低文字透明度。
+- **命令搜索**：按 `⌘ / Ctrl + K` 或点击顶部搜索框，输入页面名称，以方向键选择、回车打开、Esc 关闭。命令只提供当前客户端可用的入口。
+
+![命令搜索，演示数据](.github/assets/command-search.png)
 
 ## Trae 与 Qoder 账号
 
@@ -86,7 +98,6 @@ curl http://127.0.0.1:8317/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{"model":"fast-model","messages":[{"role":"user","content":"你好"}],"max_tokens":256}'
 ```
-
 
 ## 一键做任务
 
@@ -125,19 +136,19 @@ curl http://127.0.0.1:8317/v1/chat/completions \
 
 点击猫咪图标，先选择客户端，即可查看其最近使用的账号、切换账号，或打开主界面与设置。WorkBuddy 还可查看缓存积分及一键领取。macOS 可在菜单栏图标旁显示当前账号的积分数字；Windows 和 Linux 使用系统托盘。隐私遮罩默认隐藏面板中的账号昵称，截图展示的是关闭昵称遮罩后的演示效果。
 
-快捷键：`⌘ / Ctrl + ,` 打开设置，`⌘ / Ctrl + 1` 显示主窗口，`⌘ / Ctrl + Shift + M` 打开快捷面板。
+快捷键：`⌘ / Ctrl + K` 打开命令搜索，`⌘ / Ctrl + ,` 打开设置，`⌘ / Ctrl + 1` 显示主窗口，`⌘ / Ctrl + Shift + M` 打开快捷面板。
 
 ## 下载与安装
 
 从 [GitHub Releases](https://github.com/koi128bit/WorkBuddy-Switch/releases/latest) 下载，校验清单为同页的 `SHA256SUMS.txt`。
 
-| 系统              | 1.7.0 安装包                                                                                                                                                                                                                                                                            |
+| 系统              | 1.8.0 安装包                                                                                                                                                                                                                                                                            |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Apple Silicon Mac | [覆盖安装 PKG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.7.0/WorkBuddy-Switch-1.7.0-mac-arm64.pkg) · [DMG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.7.0/WorkBuddy-Switch-1.7.0-mac-arm64.dmg)                                        |
-| Intel Mac         | [覆盖安装 PKG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.7.0/WorkBuddy-Switch-1.7.0-mac-x64.pkg) · [DMG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.7.0/WorkBuddy-Switch-1.7.0-mac-x64.dmg)                                            |
-| Windows 10/11 x64 | [安装版 setup.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.7.0/WorkBuddy-Switch-1.7.0-windows-x64-setup.exe) · [便携版 portable.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.7.0/WorkBuddy-Switch-1.7.0-windows-x64-portable.exe) |
-| Linux x64         | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.7.0/WorkBuddy-Switch-1.7.0-linux-x86_64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.7.0/WorkBuddy-Switch-1.7.0-linux-amd64.deb)                                  |
-| Linux ARM64       | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.7.0/WorkBuddy-Switch-1.7.0-linux-arm64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.7.0/WorkBuddy-Switch-1.7.0-linux-arm64.deb)                                   |
+| Apple Silicon Mac | [覆盖安装 PKG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.8.0/WorkBuddy-Switch-1.8.0-mac-arm64.pkg) · [DMG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.8.0/WorkBuddy-Switch-1.8.0-mac-arm64.dmg)                                        |
+| Intel Mac         | [覆盖安装 PKG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.8.0/WorkBuddy-Switch-1.8.0-mac-x64.pkg) · [DMG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.8.0/WorkBuddy-Switch-1.8.0-mac-x64.dmg)                                            |
+| Windows 10/11 x64 | [安装版 setup.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.8.0/WorkBuddy-Switch-1.8.0-windows-x64-setup.exe) · [便携版 portable.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.8.0/WorkBuddy-Switch-1.8.0-windows-x64-portable.exe) |
+| Linux x64         | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.8.0/WorkBuddy-Switch-1.8.0-linux-x86_64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.8.0/WorkBuddy-Switch-1.8.0-linux-amd64.deb)                                  |
+| Linux ARM64       | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.8.0/WorkBuddy-Switch-1.8.0-linux-arm64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.8.0/WorkBuddy-Switch-1.8.0-linux-arm64.deb)                                   |
 
 Linux 需要桌面图形环境及已解锁的系统密钥环；AppImage 需要执行权限和对应系统的 FUSE 支持。WorkBuddy 国内版 Linux 由 UOS / 麒麟商店提供，其他客户端也以厂商当前发布的系统与架构版本为前提。自动发现失败时可手动选择应用及数据根目录。
 

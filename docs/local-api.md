@@ -18,3 +18,7 @@ curl http://127.0.0.1:8317/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{"model":"fast-model","messages":[{"role":"user","content":"你好"}],"max_tokens":256}'
 ```
+
+## 请求分析
+
+1.8 起 API 页面展示 7 / 30 天请求与 Token 趋势、成功率、P50 / P95 耗时和模型分布。数据仅来自保留的最近 100 条请求元数据，按北京时间分日；累计请求与 Token 总数单独显示。图表按实际返回的输入 / 输出求和，任一缺失时标记该次未知，不从文本长度估算。成功率按该区间保留记录计算，延迟包括成功、失败和取消请求。
