@@ -618,9 +618,10 @@ export function App() {
               <span>{state.authError}</span>
             </div>
           )}
-          {provider === "workbuddy" && (
-            <TaskRunPanel state={state} stop={(id) => void stopTasks(id)} />
-          )}
+          {provider === "workbuddy" &&
+            (page === "accounts" || page === "overview") && (
+              <TaskRunPanel state={state} stop={(id) => void stopTasks(id)} />
+            )}
           {provider === "workbuddy" && page === "overview" && (
             <RewardsPage
               state={state}

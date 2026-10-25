@@ -555,7 +555,7 @@ export async function* apiChatFrames(response, model, requestId) {
           return safe;
         });
       }
-      const reason = choice.finish_reason ?? null;
+      const reason = choice.finish_reason || null;
       if (reason !== null) {
         if (
           !["stop", "length", "tool_calls", "content_filter"].includes(reason)

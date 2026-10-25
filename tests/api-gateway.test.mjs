@@ -551,12 +551,32 @@ test("duplicate official catalog entries are deduplicated without replacing the 
   );
   assert.equal(value.data[0].name, "first");
 });
-test('upstream empty finish strings on intermediate chunks are treated as unfinished, not as an invalid terminal status',async t=>{
-  const f=await fixture(t,async()=>new Response([
-    'data: '+JSON.stringify({id:'real-empty-finish',choices:[{index:0,delta:{content:'OK'},finish_reason:''}]})+'\n\n',
-    'data: '+JSON.stringify({id:'real-empty-finish',choices:[{index:0,delta:{},finish_reason:'stop'}]})+'\n\n',
-    'data: [DONE]\n\n',
-  ].join(''),{headers:{'content-type':'text/event-stream'}}));
-  const response=await f.send();assert.equal(response.status,200);
-  assert.equal((await response.json()).choices[0].message.content,'OK');
+test("upstream empty finish strings on intermediate chunks are treated as unfinished, not as an invalid terminal status", async (t) => {
+  const f = await fixture(
+    t,
+    async () =>
+      new Response(
+        [
+          "data: " +
+            JSON.stringify({
+              id: "real-empty-finish",
+              choices: [
+                { index: 0, delta: { content: "OK" }, finish_reason: "" },
+              ],
+            }) +
+            "\n\n",
+          "data: " +
+            JSON.stringify({
+              id: "real-empty-finish",
+              choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+            }) +
+            "\n\n",
+          "data: [DONE]\n\n",
+        ].join(""),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+  );
+  const response = await f.send();
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).choices[0].message.content, "OK");
 });

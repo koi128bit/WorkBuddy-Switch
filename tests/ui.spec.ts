@@ -2,25 +2,82 @@ import { test, expect } from "@playwright/test";
 import { fixtureState, fixtureSessions, fixtureUsage } from "./fixtures";
 import type { TaskRun } from "../src/types";
 
-test('API page keeps completed growth task history out of the connection workflow',async({page})=>{
-  await page.getByRole('button',{name:'一键做任务',exact:true}).click();
-  await page.getByRole('button',{name:/确认并执行/}).click();
-  await expect(page.getByRole('region',{name:'任务执行进度'})).toBeVisible();
-  await page.getByRole('button',{name:'API',exact:true}).click();
-  await expect(page.getByRole('region',{name:'任务执行进度'})).toHaveCount(0);
+test("API page keeps completed growth task history out of the connection workflow", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "一键做任务", exact: true }).click();
+  await page.getByRole("button", { name: /确认并执行/ }).click();
+  await expect(
+    page.getByRole("region", { name: "任务执行进度" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "API", exact: true }).click();
+  await expect(page.getByRole("region", { name: "任务执行进度" })).toHaveCount(
+    0,
+  );
 });
-test('API test conversation can be stopped while its upstream request is still pending',async({page})=>{
-  await page.evaluate(async()=>{
-    const account=(await window.workbuddy.snapshot()).accounts[0];
-    const value={running:true,baseUrl:'http://127.0.0.1:8317/v1',activeRequests:1,hasKey:true,lastError:'',models:[],recent:[],totals:{requests:0,succeeded:0,failed:0,inputTokens:0,outputTokens:0,unknownUsage:0},config:{port:8317,autoStart:false,accounts:[{provider:'workbuddy',id:account.id}],strategy:'round_robin',maxConcurrency:2,maxOutputTokens:4096,requestsPerMinute:60},accounts:[{provider:'workbuddy',id:account.id,nickname:account.nickname,available:true,remaining:10,cooldownUntil:0}]};
-    let finish:(value:{model:string;message:string})=>void=()=>{};
-    Object.assign(window.workbuddy,{apiStatus:async()=>structuredClone(value),apiTest:()=>new Promise(resolve=>{finish=resolve;}),apiStop:async()=>{value.running=false;value.activeRequests=0;finish({model:'fast-model',message:'测试已取消'});return structuredClone(value);}});
+test("API test conversation can be stopped while its upstream request is still pending", async ({
+  page,
+}) => {
+  await page.evaluate(async () => {
+    const account = (await window.workbuddy.snapshot()).accounts[0];
+    const value = {
+      running: true,
+      baseUrl: "http://127.0.0.1:8317/v1",
+      activeRequests: 1,
+      hasKey: true,
+      lastError: "",
+      models: [],
+      recent: [],
+      totals: {
+        requests: 0,
+        succeeded: 0,
+        failed: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        unknownUsage: 0,
+      },
+      config: {
+        port: 8317,
+        autoStart: false,
+        accounts: [{ provider: "workbuddy", id: account.id }],
+        strategy: "round_robin",
+        maxConcurrency: 2,
+        maxOutputTokens: 4096,
+        requestsPerMinute: 60,
+      },
+      accounts: [
+        {
+          provider: "workbuddy",
+          id: account.id,
+          nickname: account.nickname,
+          available: true,
+          remaining: 10,
+          cooldownUntil: 0,
+        },
+      ],
+    };
+    let finish: (value: { model: string; message: string }) => void = () => {};
+    Object.assign(window.workbuddy, {
+      apiStatus: async () => structuredClone(value),
+      apiTest: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      apiStop: async () => {
+        value.running = false;
+        value.activeRequests = 0;
+        finish({ model: "fast-model", message: "测试已取消" });
+        return structuredClone(value);
+      },
+    });
   });
-  await page.getByRole('button',{name:'API',exact:true}).click();
-  await page.getByRole('button',{name:'测试对话',exact:true}).click();
-  await expect(page.getByRole('button',{name:'停止服务',exact:true})).toBeEnabled();
-  await page.getByRole('button',{name:'停止服务',exact:true}).click();
-  await expect(page.getByText('已停止',{exact:true})).toBeVisible();
+  await page.getByRole("button", { name: "API", exact: true }).click();
+  await page.getByRole("button", { name: "测试对话", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "停止服务", exact: true }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "停止服务", exact: true }).click();
+  await expect(page.getByText("已停止", { exact: true })).toBeVisible();
 });
 
 test("local API page saves explicit account scope, controls the listener and never renders credentials", async ({

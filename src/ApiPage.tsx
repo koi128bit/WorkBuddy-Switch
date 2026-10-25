@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Copy, KeyRound, Play, RefreshCw, Square } from "lucide-react";
 import {
   Button,
@@ -13,6 +13,7 @@ import type { ApiConfig, ApiStatus } from "./types";
 
 export function ApiPage({ privacy }: { privacy: boolean }) {
   const api = window.workbuddy;
+  const operation = useRef(0);
   const [status, setStatus] = useState<ApiStatus | null>(null),
     [draft, setDraft] = useState<ApiConfig | null>(null);
   const [busy, setBusy] = useState(""),
@@ -55,16 +56,18 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
     action: () => Promise<T>,
     done: (value: T) => void,
   ) => {
-    if (busy) return;
+    if (busy && !(busy === "测试对话" && label === "停止服务")) return;
+    const current = ++operation.current;
     setBusy(label);
     setError("");
     setMessage("");
     try {
-      done(await action());
+      const value = await action();
+      if (current === operation.current) done(value);
     } catch (error) {
-      setError((error as Error).message);
+      if (current === operation.current) setError((error as Error).message);
     } finally {
-      setBusy("");
+      if (current === operation.current) setBusy("");
     }
   };
   if (!status || !draft)
@@ -113,7 +116,7 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
             {status.running ? (
               <Button
                 icon={Square}
-                disabled={!!busy}
+                disabled={!!busy && busy !== "测试对话"}
                 onClick={() =>
                   void run(
                     "停止服务",
