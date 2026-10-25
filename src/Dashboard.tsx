@@ -151,8 +151,12 @@ export function Dashboard({
         />
         <Metric
           label="临期积分"
-          value={credit.known ? number(credit.expiring) : "—"}
-          detail={`${state.settings.expiryWarningDays} 天内到期 · 按已查积分包`}
+          value={
+            credit.known && (credit.expiryKnown || !credit.expiryUnknown)
+              ? number(credit.expiring)
+              : "—"
+          }
+          detail={`${state.settings.expiryWarningDays} 天内到期${credit.expiryUnknown ? ` · ${credit.expiryUnknown} 个账号到期未知` : " · 按已查积分包"}`}
           icon={CalendarCheck}
         />
         <Metric

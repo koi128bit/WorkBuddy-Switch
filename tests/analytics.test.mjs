@@ -107,12 +107,43 @@ test("credit expiry reflects active resource balances rather than an account-wid
   assert.equal(data.expiring, 20);
 });
 test("a positive balance without an expiry date is marked unknown rather than reporting no expiring credits", () => {
-  const data = creditSummary([{ quotaError: null, quota: { total: 100, remaining: 60, used: 40, resources: [{ remaining: 60, expiresAt: null, expired: false }] } }], { expiryWarningDays: 7, lowBalanceThreshold: 20 }, now);
+  const data = creditSummary(
+    [
+      {
+        quotaError: null,
+        quota: {
+          total: 100,
+          remaining: 60,
+          used: 40,
+          resources: [{ remaining: 60, expiresAt: null, expired: false }],
+        },
+      },
+    ],
+    { expiryWarningDays: 7, lowBalanceThreshold: 20 },
+    now,
+  );
   assert.equal(data.expiryUnknown, 1);
   assert.equal(data.expiryKnown, 0);
 });
 test("partial expiry coverage retains known expiring credits and identifies missing account dates", () => {
-  const data = creditSummary([{ quotaError: null, quota: { total: 100, remaining: 60, used: 40, resources: [{ remaining: 20, expiresAt: now + 86400000, expired: false }, { remaining: 40, expiresAt: null, expired: false }] } }], { expiryWarningDays: 7, lowBalanceThreshold: 20 }, now);
+  const data = creditSummary(
+    [
+      {
+        quotaError: null,
+        quota: {
+          total: 100,
+          remaining: 60,
+          used: 40,
+          resources: [
+            { remaining: 20, expiresAt: now + 86400000, expired: false },
+            { remaining: 40, expiresAt: null, expired: false },
+          ],
+        },
+      },
+    ],
+    { expiryWarningDays: 7, lowBalanceThreshold: 20 },
+    now,
+  );
   assert.equal(data.expiring, 20);
   assert.equal(data.expiryKnown, 1);
   assert.equal(data.expiryUnknown, 1);

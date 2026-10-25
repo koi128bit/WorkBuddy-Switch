@@ -61,6 +61,8 @@ export function creditSummary(
     total = 0,
     known = 0,
     expiring = 0,
+    expiryKnown = 0,
+    expiryUnknown = 0,
     attention = 0;
   for (const account of accounts) {
     const quota = account.quota;
@@ -74,6 +76,21 @@ export function creditSummary(
       remaining += quota.remaining;
       used += quota.used;
       total += quota.total;
+      const active = quota.resources.filter(
+        (resource) =>
+          !resource.expired &&
+          validAmount(resource.remaining) &&
+          resource.remaining > 0,
+      );
+      const dated = active.filter(
+        (resource) => validAmount(resource.expiresAt) && resource.expiresAt > 0,
+      );
+      if (dated.length) expiryKnown++;
+      if (
+        quota.remaining > 0 &&
+        (!active.length || dated.length < active.length)
+      )
+        expiryUnknown++;
       soon = quota.resources
         .filter(
           (resource) =>
@@ -95,6 +112,8 @@ export function creditSummary(
     known,
     unknown: accounts.length - known,
     expiring,
+    expiryKnown,
+    expiryUnknown,
     attention,
   };
 }

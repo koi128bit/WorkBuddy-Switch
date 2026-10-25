@@ -116,9 +116,14 @@ export function Accounts({
           <strong>{summary.known ? number(summary.remaining) : "—"}</strong>
         </div>
         <div>
-          <small>{state.settings.expiryWarningDays} 天内到期</small>
+          <small>
+            {state.settings.expiryWarningDays} 天内到期
+            {summary.expiryUnknown ? " · 部分未知" : ""}
+          </small>
           <strong className={summary.expiring ? "pending" : ""}>
-            {summary.known ? number(summary.expiring) : "—"}
+            {summary.known && (summary.expiryKnown || !summary.expiryUnknown)
+              ? number(summary.expiring)
+              : "—"}
           </strong>
         </div>
         <div>
