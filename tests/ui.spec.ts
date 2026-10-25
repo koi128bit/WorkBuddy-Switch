@@ -11,21 +11,21 @@ test("extended task confirmation separates compatibility records from paid actio
       const plan = await previous(ids, options);
       return {
         ...plan,
-        maxActivities: 2,
+        maxActivities: ids.length,
         accounts: plan.accounts.map((account) => ({
           ...account,
           tasks: [
             ...account.tasks,
             {
-              code: "template_5",
-              title: "使用 5 个模板",
-              kind: "template",
+              code: "Library_read",
+              title: "查看资料库",
+              kind: "library",
               model: null,
               modelName: "兼容活动上报",
               calls: 0,
-              actions: 2,
+              actions: 1,
               current: 0,
-              target: 5,
+              target: 1,
               resources: [],
               waitingForUnlock: false,
             },
@@ -48,7 +48,9 @@ test("extended task confirmation separates compatibility records from paid actio
     dialog.getByRole("switch", { name: "包含活动事件任务", exact: true }),
   ).toBeChecked();
   await expect(dialog).toContainText("不会生成画布或长期定时任务");
-  await expect(dialog).toContainText("最多 2 次活动");
+  await expect(dialog).toContainText("主题任务会应用官方主题");
+  await expect(dialog).toContainText("部分体验任务需真实对话，已计入上限");
+  await expect(dialog).toContainText("最多 1 次活动");
   await dialog
     .getByText(/需本人操作或暂不可执行/)
     .first()
