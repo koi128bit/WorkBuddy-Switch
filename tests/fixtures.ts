@@ -206,7 +206,7 @@ export function fixtureState(): Snapshot {
     events: [],
     rewardHistory: [],
     authError: null,
-    version: "1.6.2",
+    version: "1.7.0",
     platform: "darwin",
     dataDirectory:
       "/Users/example/Library/Application Support/WorkBuddy Switch",
