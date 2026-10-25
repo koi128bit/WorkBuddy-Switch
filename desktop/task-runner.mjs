@@ -434,9 +434,15 @@ export class TaskRunner {
             "dialogue",
             { detail: "已收到完整回复，活动回执尚未确认。" },
           );
-        await this.add(accountId, row.code, paid ? "真实对话 · " + row.title : row.title, "error", {
-          detail: error.message,
-        });
+        await this.add(
+          accountId,
+          row.code,
+          paid ? "真实对话 · " + row.title : row.title,
+          "error",
+          {
+            detail: error.message,
+          },
+        );
         execution.failed.add(row.code);
         if (paid) execution.blockedPaid = true;
         continue;

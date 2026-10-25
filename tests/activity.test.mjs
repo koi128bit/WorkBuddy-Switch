@@ -393,14 +393,43 @@ test("a receipt authentication failure after a real reply is not an instruction 
 });
 
 test("skill receipts keep their actual provenance and conversation finish reason", async () => {
-  const calls=[];
-  await api.executeActivity(document,{kind:"skill",code:"skill_1",model:"fast-model",prompt:"你好",resource:{id:"installed-skill",name:"本地安装技能",type:"skill",isOfficial:false}},async(url,options)=>{
-    calls.push({url,options});
-    if(url.endsWith('/chat/completions'))return new Response('data: {"id":"skill-server-1","choices":[{"delta":{"content":"回复"},"finish_reason":"length"}]}\n\ndata: [DONE]\n\n',{headers:{'content-type':'text/event-stream'}});
-    return json({});
-  });
-  const events=calls.filter(call=>call.url.endsWith('/report')).flatMap(call=>JSON.parse(call.options.body));
-  assert.deepEqual({official:events.find(event=>event.eventCode==='skill_info').isOfficial,finish:events.find(event=>event.eventCode==='skill_request_send').finishReason},{official:false,finish:'length'});
+  const calls = [];
+  await api.executeActivity(
+    document,
+    {
+      kind: "skill",
+      code: "skill_1",
+      model: "fast-model",
+      prompt: "你好",
+      resource: {
+        id: "installed-skill",
+        name: "本地安装技能",
+        type: "skill",
+        isOfficial: false,
+      },
+    },
+    async (url, options) => {
+      calls.push({ url, options });
+      if (url.endsWith("/chat/completions"))
+        return new Response(
+          'data: {"id":"skill-server-1","choices":[{"delta":{"content":"回复"},"finish_reason":"length"}]}\n\ndata: [DONE]\n\n',
+          { headers: { "content-type": "text/event-stream" } },
+        );
+      return json({});
+    },
+  );
+  const events = calls
+    .filter((call) => call.url.endsWith("/report"))
+    .flatMap((call) => JSON.parse(call.options.body));
+  assert.deepEqual(
+    {
+      official: events.find((event) => event.eventCode === "skill_info")
+        .isOfficial,
+      finish: events.find((event) => event.eventCode === "skill_request_send")
+        .finishReason,
+    },
+    { official: false, finish: "length" },
+  );
 });
 
 test("activity input and response failures are bounded and never count as task completion", async () => {

@@ -184,7 +184,7 @@ export interface TaskPlan {
     nickname: string;
     note: string;
     pendingTitles: string[];
-    pendingReasons?: {code: string; title: string; reason: string}[];
+    pendingReasons?: { code: string; title: string; reason: string }[];
     tasks: {
       code: string;
       title: string;
@@ -193,7 +193,13 @@ export interface TaskPlan {
       calls: number;
       actions?: number;
       kind?: string;
-      resources?: {id: string; name: string; type: string; title?: string; version?: string}[];
+      resources?: {
+        id: string;
+        name: string;
+        type: string;
+        title?: string;
+        version?: string;
+      }[];
       waitingForUnlock?: boolean;
       current: number;
       target: number;

@@ -220,7 +220,16 @@ export async function loadActivityResources(document, spec, request = fetch) {
     return rows.slice(0, 100).flatMap((raw) => {
       const id = raw?.skill_id || raw?.id,
         name = clean(raw?.name || raw?.display_name);
-      return resourceId(id) && name ? [{ id, name, type: "skill", isOfficial: raw.is_official === true || raw.isOfficial === true }] : [];
+      return resourceId(id) && name
+        ? [
+            {
+              id,
+              name,
+              type: "skill",
+              isOfficial: raw.is_official === true || raw.isOfficial === true,
+            },
+          ]
+        : [];
     });
   }
   return [];
@@ -369,13 +378,13 @@ function conversationEvents(result, action) {
     mode: "craft",
     agentType: "conversation",
     agentName: "workbuddy-switch",
-    ...(result.finishReason ? {finishReason: result.finishReason} : {}),
+    ...(result.finishReason ? { finishReason: result.finishReason } : {}),
   };
   const usage = {
     inputToken: result.inputTokens,
     outputToken: result.outputTokens,
     isSuccessful: true,
-    ...(result.finishReason ? {finishReason: result.finishReason} : {}),
+    ...(result.finishReason ? { finishReason: result.finishReason } : {}),
   };
   const events = [
     event("agent_task_created", {

@@ -75,7 +75,9 @@ export function TaskPlanDialog({
         description="模板、画布、资料库等通过兼容活动上报推进；不会生成画布或长期定时任务，也不建立第三方应用授权。完成情况以官方计分为准。"
         checked={draft.includeActivities ?? false}
         disabled={busy}
-        onChange={(includeActivities) => setDraft({...draft, includeActivities})}
+        onChange={(includeActivities) =>
+          setDraft({ ...draft, includeActivities })
+        }
       />
       <Toggle
         label="包含真实 AI 对话"
@@ -134,7 +136,8 @@ export function TaskPlanDialog({
             />
           </label>
           <p>
-            每次请求输出上限 {plan.outputLimit} Token。支持普通对话、GLM-5.2、桌面端、专家、专家团、指定专家和已安装技能；夜间任务仅在北京时间夜间执行。
+            每次请求输出上限 {plan.outputLimit}{" "}
+            Token。支持普通对话、GLM-5.2、桌面端、专家、专家团、指定专家和已安装技能；夜间任务仅在北京时间夜间执行。
           </p>
         </div>
       )}
@@ -161,22 +164,32 @@ export function TaskPlanDialog({
                   <small>
                     {task.modelName} · 官方进度 {task.current}/{task.target}
                     {task.waitingForUnlock ? " · 解锁后自动继续" : ""}
-                    {!!task.resources?.length && ` · ${task.resources.map(resource => resource.name).join("、")}`}
+                    {!!task.resources?.length &&
+                      ` · ${task.resources.map((resource) => resource.name).join("、")}`}
                   </small>
                 </span>
-                <span>{task.calls ? `最多 ${task.calls} 条对话` : `最多 ${task.actions || 0} 次活动`}</span>
+                <span>
+                  {task.calls
+                    ? `最多 ${task.calls} 条对话`
+                    : `最多 ${task.actions || 0} 次活动`}
+                </span>
               </div>
             ))}
             {account.note && <p>{account.note}</p>}
             {account.pendingTitles.length > 0 && (
               <details>
                 <summary>
-                  需本人操作或暂不可执行（{account.pendingTitles.length}{" "}
-                  项）
+                  需本人操作或暂不可执行（{account.pendingTitles.length} 项）
                 </summary>
-                {account.pendingReasons?.length ? account.pendingReasons.map(item => (
-                  <p key={item.code}><strong>{item.title}</strong> · {item.reason}</p>
-                )) : <p>{account.pendingTitles.join("、")}</p>}
+                {account.pendingReasons?.length ? (
+                  account.pendingReasons.map((item) => (
+                    <p key={item.code}>
+                      <strong>{item.title}</strong> · {item.reason}
+                    </p>
+                  ))
+                ) : (
+                  <p>{account.pendingTitles.join("、")}</p>
+                )}
               </details>
             )}
           </section>
