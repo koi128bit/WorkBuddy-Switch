@@ -1,4 +1,5 @@
 import type { Account, ApiStatus, RewardEntry, Settings } from "./types";
+import { accountHealth } from "./account-health.ts";
 
 export interface SeriesPoint {
   label: string;
@@ -85,15 +86,7 @@ export function creditSummary(
         .reduce((sum, resource) => sum + resource.remaining, 0);
       expiring += soon;
     }
-    if (
-      !valid ||
-      soon > 0 ||
-      (quota && quota.remaining <= settings.lowBalanceThreshold) ||
-      (account.tokenExpiresAt && account.tokenExpiresAt <= now) ||
-      account.rewards?.checkinError ||
-      account.rewards?.travelError
-    )
-      attention++;
+    if (accountHealth(account, settings, now).attention) attention++;
   }
   return {
     remaining,
