@@ -147,6 +147,10 @@ try {
       "native Linux smoke uses a real unlocked system keyring",
     );
   const initial = await page.evaluate(() => window.workbuddy.snapshot());
+  const apiInitial = await page.evaluate(() => window.workbuddy.apiStatus());
+  assert.equal(apiInitial.running, false);
+  assert.equal(apiInitial.hasKey, true);
+  assert.equal(JSON.stringify(apiInitial).includes('sk-wbs-'), false);
   assert.equal(initial.current.id, "isolated-fixture");
   assert.equal(initial.accounts.length, 0);
   assert.equal(initial.taskRun.status, "interrupted");
