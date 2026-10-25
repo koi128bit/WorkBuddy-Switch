@@ -44,6 +44,14 @@ export function TrayPanel() {
   useEffect(() => {
     document.documentElement.dataset.theme = "dark";
   }, []);
+  useEffect(() => {
+    document.documentElement.dataset.material =
+      state?.settings.glassEffect === false
+        ? "opaque"
+        : state?.windowMaterial || "opaque";
+    document.documentElement.dataset.glass =
+      state?.settings.glassEffect === false ? "off" : "on";
+  }, [state?.windowMaterial, state?.settings.glassEffect]);
   async function run(action: () => Promise<unknown>) {
     if (busy || state?.busy) return;
     setBusy(true);

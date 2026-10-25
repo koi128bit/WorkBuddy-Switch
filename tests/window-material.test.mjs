@@ -21,7 +21,11 @@ test("Windows 11 22H2 enables Acrylic without removing the native frame", () => 
   assert.equal(value.options.frame, undefined);
 });
 test("older Windows and Linux retain an opaque, usable dark window", () => {
-  for (const value of [{ platform: "win32", release: "10.0.19045" }, { platform: "win32", release: "unknown" }, { platform: "linux", release: "6.8" }]) {
+  for (const value of [
+    { platform: "win32", release: "10.0.19045" },
+    { platform: "win32", release: "unknown" },
+    { platform: "linux", release: "6.8" },
+  ]) {
     const material = windowMaterial(value);
     assert.equal(material.kind, "opaque");
     assert.equal(material.options.backgroundColor, "#19191c");
@@ -29,8 +33,16 @@ test("older Windows and Linux retain an opaque, usable dark window", () => {
   }
 });
 test("reduce transparency, high contrast and the user's off switch disable native blur", () => {
-  for (const preference of [{ enabled: false }, { reducedTransparency: true }, { highContrast: true }]) {
-    for (const platform of ["darwin", "win32"]) assert.equal(windowMaterial({ platform, release: "10.0.26100", ...preference }).kind, "opaque");
+  for (const preference of [
+    { enabled: false },
+    { reducedTransparency: true },
+    { highContrast: true },
+  ]) {
+    for (const platform of ["darwin", "win32"])
+      assert.equal(
+        windowMaterial({ platform, release: "10.0.26100", ...preference }).kind,
+        "opaque",
+      );
   }
 });
 test("a fresh glass setting has a default, persists off and rejects non-boolean values", () => {

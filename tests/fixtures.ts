@@ -6,6 +6,7 @@ export function fixtureState(): Snapshot {
     theme: "light" as const,
     privacyMode: true,
     compactMode: false,
+    glassEffect: true,
     launchAtLogin: false,
     closeToTray: true,
     autoCapture: false,
@@ -206,7 +207,7 @@ export function fixtureState(): Snapshot {
     events: [],
     rewardHistory: [],
     authError: null,
-    version: "1.7.0",
+    version: "1.8.0",
     platform: "darwin",
     dataDirectory:
       "/Users/example/Library/Application Support/WorkBuddy Switch",

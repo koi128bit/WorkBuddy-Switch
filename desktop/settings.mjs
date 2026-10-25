@@ -7,6 +7,7 @@ export const defaults = Object.freeze({
   theme: "system",
   privacyMode: true,
   compactMode: false,
+  glassEffect: true,
   launchAtLogin: false,
   closeToTray: true,
   autoCapture: false,

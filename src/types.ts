@@ -11,6 +11,7 @@ export interface Settings {
   theme: Theme;
   privacyMode: boolean;
   compactMode: boolean;
+  glassEffect: boolean;
   launchAtLogin: boolean;
   closeToTray: boolean;
   autoCapture: boolean;
@@ -305,6 +306,7 @@ export interface Snapshot {
   authError: string | null;
   version: string;
   platform: string;
+  windowMaterial?: "vibrancy" | "acrylic" | "opaque";
   dataDirectory: string;
 }
 export interface Diagnostics {

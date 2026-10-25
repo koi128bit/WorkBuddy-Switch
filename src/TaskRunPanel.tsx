@@ -30,7 +30,7 @@ export function TaskRunPanel({
   useEffect(() => {
     if (run?.id !== lastRun.current) {
       lastRun.current = run?.id;
-      setExpanded(run?.status === "running");
+      setExpanded(!!run);
     }
   }, [run?.id, run?.status]);
   if (!run)

@@ -7,8 +7,13 @@ import {
 } from "./fixtures";
 import type { TaskRun } from "../src/types";
 
-test("glass appearance can be disabled without changing dark mode or losing settings", async ({ page }) => {
-  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "设置", exact: true }).click();
+test("glass appearance can be disabled without changing dark mode or losing settings", async ({
+  page,
+}) => {
+  await page
+    .getByRole("navigation", { name: "主导航" })
+    .getByRole("button", { name: "设置", exact: true })
+    .click();
   await page.getByRole("button", { name: "外观与隐私", exact: true }).click();
   const toggle = page.getByRole("switch", { name: "毛玻璃效果", exact: true });
   await expect(toggle).toHaveAttribute("aria-checked", "true");
@@ -18,7 +23,10 @@ test("glass appearance can be disabled without changing dark mode or losing sett
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-material", "opaque");
-  expect((await page.evaluate(() => window.workbuddy.snapshot())).settings.glassEffect).toBe(false);
+  expect(
+    (await page.evaluate(() => window.workbuddy.snapshot())).settings
+      .glassEffect,
+  ).toBe(false);
 });
 
 test("Raycast workspace offers an actual overview and stays dark with legacy light preferences", async ({
@@ -240,14 +248,25 @@ test("API page keeps completed growth task history out of the connection workflo
     0,
   );
 });
-test("saved completed task details stay collapsed when returning to account management", async ({ page }) => {
+test("saved completed task details stay collapsed when returning to account management", async ({
+  page,
+}) => {
   await page.getByRole("button", { name: "一键做任务", exact: true }).click();
   await page.getByRole("button", { name: /确认并执行/ }).click();
   const panel = page.getByRole("region", { name: "任务执行进度" });
   await expect(panel).toContainText("执行结束");
-  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "API", exact: true }).click();
-  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "账号", exact: true }).click();
-  await expect(panel.getByRole("button", { name: /一键任务/ })).toHaveAttribute("aria-expanded", "false");
+  await page
+    .getByRole("navigation", { name: "主导航" })
+    .getByRole("button", { name: "API", exact: true })
+    .click();
+  await page
+    .getByRole("navigation", { name: "主导航" })
+    .getByRole("button", { name: "账号", exact: true })
+    .click();
+  await expect(panel.getByRole("button", { name: /一键任务/ })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
   await expect(panel.locator(".task-run-results")).toHaveCount(0);
   await panel.getByRole("button", { name: /一键任务/ }).click();
   await expect(panel.locator(".task-run-results")).toBeVisible();

@@ -259,6 +259,14 @@ export function App() {
     document.documentElement.dataset.theme = "dark";
   }, []);
   useEffect(() => {
+    document.documentElement.dataset.material =
+      state?.settings.glassEffect === false
+        ? "opaque"
+        : state?.windowMaterial || "opaque";
+    document.documentElement.dataset.glass =
+      state?.settings.glassEffect === false ? "off" : "on";
+  }, [state?.windowMaterial, state?.settings.glassEffect]);
+  useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         if (!state || confirmation || edit || login || transfer || taskPlan)
@@ -1117,14 +1125,12 @@ function UsageChart({ usage }: { usage: Usage }) {
   return (
     <TrendChart
       title="Token 使用趋势"
-      points={usage.daily
-        .slice(-90)
-        .map((day) => ({
-          label: day.day,
-          value: day.tokens.total,
-          count: day.tokens.requests,
-          unknown: 0,
-        }))}
+      points={usage.daily.slice(-90).map((day) => ({
+        label: day.day,
+        value: day.tokens.total,
+        count: day.tokens.requests,
+        unknown: 0,
+      }))}
       empty={!usage.records}
     />
   );
@@ -1355,14 +1361,11 @@ function UsagePage({
         <BalanceBars
           title="模型消耗对比"
           unit={modelSort === "credits" ? "Credits" : "Tokens"}
-          rows={models
-            .slice(0, 6)
-            .map((model) => ({
-              label: model.name,
-              value:
-                modelSort === "credits" ? model.credits : model.tokens.total,
-              detail: `${number(model.tokens.requests)} 次请求`,
-            }))}
+          rows={models.slice(0, 6).map((model) => ({
+            label: model.name,
+            value: modelSort === "credits" ? model.credits : model.tokens.total,
+            detail: `${number(model.tokens.requests)} 次请求`,
+          }))}
         />
       </section>
       <details className="data-table-details">
@@ -1892,6 +1895,13 @@ function SettingsPage({
                     <p>石墨灰层次、细分隔线与珊瑚红强调，全界面保持统一。</p>
                   </div>
                 </div>
+                <Toggle
+                  label="毛玻璃效果"
+                  description="模糊窗口后的背景，保留清晰文字。系统减少透明度设置优先；不支持时使用深色兼容材质。"
+                  checked={settings.glassEffect !== false}
+                  disabled={disabled}
+                  onChange={(value) => change("glassEffect", value)}
+                />
                 <Toggle
                   label="紧凑布局"
                   description="缩小表格行高和间距，显示更多内容。"

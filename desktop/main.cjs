@@ -18,6 +18,7 @@ const {
 } = require("electron");
 const path = require("node:path");
 const os = require("node:os");
+const { windowMaterial } = require("./window-material.cjs");
 const fs = require("node:fs/promises");
 const { pathToFileURL } = require("node:url");
 const { execFile } = require("node:child_process");
@@ -138,6 +139,37 @@ function changed() {
     trayWindow.webContents.send("wb:changed");
   updateTray();
 }
+function currentMaterial(panel = false) {
+  return windowMaterial({
+    platform: process.platform,
+    release: os.release(),
+    enabled: store?.settings.glassEffect !== false,
+    reducedTransparency: nativeTheme.prefersReducedTransparency,
+    highContrast:
+      nativeTheme.shouldUseHighContrastColors || nativeTheme.inForcedColorsMode,
+    panel,
+  });
+}
+function applyWindowMaterial() {
+  for (const [window, panel] of [
+    [mainWindow, false],
+    [trayWindow, true],
+  ]) {
+    if (!window || window.isDestroyed()) continue;
+    const material = currentMaterial(panel);
+    if (process.platform === "darwin")
+      window.setVibrancy(material.options.vibrancy || null);
+    if (
+      process.platform === "win32" &&
+      windowMaterial({ platform: "win32", release: os.release() }).kind ===
+        "acrylic"
+    )
+      window.setBackgroundMaterial(
+        material.options.backgroundMaterial || "none",
+      );
+    window.setBackgroundColor(material.options.backgroundColor);
+  }
+}
 function showWindow() {
   trayWindow?.hide();
   if (!mainWindow || mainWindow.isDestroyed()) createWindow();
@@ -246,7 +278,7 @@ function createWindow() {
     minHeight: 640,
     show: false,
     title: "WorkBuddy Switch",
-    backgroundColor: "#19191c",
+    ...currentMaterial().options,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     trafficLightPosition: { x: 20, y: 22 },
     icon: path.join(root, "assets/icon.png"),
@@ -627,6 +659,7 @@ async function start() {
     editors: await editorStore.snapshots(),
     version: app.getVersion(),
     platform: process.platform,
+    windowMaterial: currentMaterial().kind,
     dataDirectory: app.getPath("userData"),
   }));
   handle("workbuddy-scope", async (provider, method, args) => {
@@ -838,6 +871,7 @@ async function start() {
         throw error;
       }
       nativeTheme.themeSource = "dark";
+      applyWindowMaterial();
       scheduleRefresh();
       scheduleAutomation();
       updateTray();
@@ -955,6 +989,10 @@ async function start() {
   createWindow();
   createTray();
   createTrayWindow();
+  nativeTheme.on("updated", () => {
+    applyWindowMaterial();
+    changed();
+  });
   createApplicationMenu();
   scheduleRefresh();
   if (store.settings.autoCapture) {
@@ -987,11 +1025,7 @@ function createTrayWindow() {
     resizable: false,
     skipTaskbar: true,
     alwaysOnTop: true,
-    transparent: true,
-    ...(process.platform === "darwin"
-      ? { vibrancy: "popover", visualEffectState: "active" }
-      : {}),
-    backgroundColor: "#00000000",
+    ...currentMaterial(true).options,
     roundedCorners: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
