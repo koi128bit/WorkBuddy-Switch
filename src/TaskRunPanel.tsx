@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ClipboardCheck,
@@ -24,8 +24,15 @@ export function TaskRunPanel({
   state: Snapshot;
   stop: (id: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(true),
-    run = state.taskRun;
+  const run = state.taskRun;
+  const [expanded, setExpanded] = useState(run?.status === "running");
+  const lastRun = useRef(run?.id);
+  useEffect(() => {
+    if (run?.id !== lastRun.current) {
+      lastRun.current = run?.id;
+      setExpanded(run?.status === "running");
+    }
+  }, [run?.id, run?.status]);
   if (!run)
     return state.taskRunWarning ? (
       <p className="quiet-note">{state.taskRunWarning}</p>
