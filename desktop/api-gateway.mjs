@@ -1,0 +1,980 @@
+import http from "node:http";
+import fs from "node:fs/promises";
+import path from "node:path";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
+import { atomicWrite, readBounded } from "./files.mjs";
+import {
+  ApiError,
+  prepareApiRequest,
+  openApiChat,
+  fetchApiModels,
+  apiChatFrames,
+  aggregateApiFrames,
+} from "./api-upstream.mjs";
+
+export const apiDefaults = Object.freeze({
+  port: 8317,
+  autoStart: false,
+  accounts: [],
+  strategy: "round_robin",
+  maxConcurrency: 2,
+  maxOutputTokens: 4096,
+  requestsPerMinute: 60,
+});
+const realms = ["workbuddy", "workbuddy-global"];
+const ref = (account) => account.provider + ":" + account.id;
+const safeNumber = (value) =>
+  Number.isSafeInteger(value) && value >= 0 ? value : 0;
+const totals = () => ({
+  requests: 0,
+  succeeded: 0,
+  failed: 0,
+  inputTokens: 0,
+  outputTokens: 0,
+  unknownUsage: 0,
+});
+const clean = (value) =>
+  typeof value === "string"
+    ? value.replace(/[\x00-\x1f]/g, " ").slice(0, 200)
+    : "";
+export function validateApiConfig(value) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).some((key) => !Object.hasOwn(apiDefaults, key))
+  )
+    throw new Error("API 设置格式无效。");
+  const config = { ...apiDefaults, ...value };
+  for (const [key, min, max] of [
+    ["port", 1024, 65535],
+    ["maxConcurrency", 1, 8],
+    ["maxOutputTokens", 16, 32768],
+    ["requestsPerMinute", 1, 600],
+  ])
+    if (
+      !Number.isInteger(config[key]) ||
+      config[key] < min ||
+      config[key] > max
+    )
+      throw new Error("API 设置 " + key + " 不在支持范围内。");
+  if (
+    typeof config.autoStart !== "boolean" ||
+    !["round_robin", "sequential", "expiring"].includes(config.strategy) ||
+    !Array.isArray(config.accounts) ||
+    config.accounts.length > 100
+  )
+    throw new Error("API 账号或调度设置无效。");
+  const seen = new Set();
+  config.accounts = config.accounts.map((account) => {
+    if (
+      !account ||
+      Object.keys(account).some((key) => !["provider", "id"].includes(key)) ||
+      !realms.includes(account.provider) ||
+      typeof account.id !== "string" ||
+      !/^[A-Za-z0-9_.:@-]{1,200}$/.test(account.id) ||
+      seen.has(ref(account))
+    )
+      throw new Error("API 账号选择无效或重复。");
+    seen.add(ref(account));
+    return { provider: account.provider, id: account.id };
+  });
+  return config;
+}
+function restoreRecent(raw) {
+  return (Array.isArray(raw) ? raw : [])
+    .slice(0, 100)
+    .filter(
+      (value) =>
+        value &&
+        ["ok", "error", "cancelled"].includes(value.status) &&
+        realms.includes(value.provider),
+    )
+    .map((value) => ({
+      requestId: clean(value.requestId),
+      at: safeNumber(value.at),
+      model: clean(value.model),
+      provider: value.provider,
+      accountId: clean(value.accountId),
+      status: value.status,
+      statusCode: safeNumber(value.statusCode),
+      durationMs: safeNumber(value.durationMs),
+      inputTokens: Number.isSafeInteger(value.inputTokens)
+        ? Math.max(0, value.inputTokens)
+        : null,
+      outputTokens: Number.isSafeInteger(value.outputTokens)
+        ? Math.max(0, value.outputTokens)
+        : null,
+      errorCode: clean(value.errorCode),
+    }));
+}
+export class ApiGateway {
+  config = structuredClone(apiDefaults);
+  server = null;
+  secret = "";
+  encryptedKey = "";
+  lastError = "";
+  recent = [];
+  totals = totals();
+  active = new Map();
+  leases = new Set();
+  cooldowns = new Map();
+  sessions = new Map();
+  cursors = new Map();
+  modelCache = new Map();
+  modelPromises = new Map();
+  renewals = new Map();
+  writeTail = Promise.resolve();
+  draining = false;
+  constructor({
+    directory,
+    vault,
+    stores,
+    request = fetch,
+    onChange = () => {},
+    listenPort,
+  }) {
+    Object.assign(this, {
+      directory,
+      vault,
+      stores,
+      request,
+      onChange,
+      listenPort,
+    });
+  }
+  async init() {
+    await fs.mkdir(this.directory, { recursive: true, mode: 0o700 });
+    try {
+      const raw = JSON.parse(
+        await readBounded(
+          path.join(this.directory, "api-gateway.json"),
+          1024 * 1024,
+        ),
+      );
+      if (raw.version !== 1 || typeof raw.keyEncrypted !== "string")
+        throw new Error("invalid");
+      this.config = validateApiConfig(raw.config);
+      this.secret = this.vault.decrypt(Buffer.from(raw.keyEncrypted, "base64"));
+      this.encryptedKey = raw.keyEncrypted;
+      if (!/^sk-wbs-[A-Za-z0-9_-]{43}$/.test(this.secret))
+        throw new Error("invalid");
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        this.lastError =
+          "API 配置无法读取，已停止自动启动并保留原文件，请重新保存配置。";
+        try {
+          await fs.rename(
+            path.join(this.directory, "api-gateway.json"),
+            path.join(
+              this.directory,
+              "api-gateway-damaged-" + Date.now() + ".json",
+            ),
+          );
+        } catch (moveError) {
+          if (moveError.code !== "ENOENT") throw moveError;
+        }
+        this.config = structuredClone(apiDefaults);
+      }
+      if (this.vault.available()) {
+        this.secret = "sk-wbs-" + randomBytes(32).toString("base64url");
+        this.encryptedKey = this.vault.encrypt(this.secret).toString("base64");
+        await this.writeConfig(this.config, this.encryptedKey);
+      } else this.lastError = "系统加密服务不可用，API 服务保持关闭。";
+    }
+    try {
+      const raw = JSON.parse(
+        await readBounded(
+          path.join(this.directory, "api-usage.json"),
+          4 * 1024 * 1024,
+        ),
+      );
+      if (raw.version !== 1 || !raw.totals) throw new Error("invalid");
+      for (const key of Object.keys(this.totals))
+        this.totals[key] = safeNumber(raw.totals[key]);
+      this.recent = restoreRecent(raw.recent);
+      for (const item of Array.isArray(raw.cooldowns)
+        ? raw.cooldowns.slice(0, 5000)
+        : [])
+        if (
+          typeof item.key === "string" &&
+          item.key.length < 500 &&
+          Number.isSafeInteger(item.until) &&
+          item.until > Date.now() &&
+          item.until < Date.now() + 86400000
+        )
+          this.cooldowns.set(item.key, item.until);
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        this.lastError = "API 用量记录损坏，原记录已保留；新请求会重新统计。";
+        await fs.rename(
+          path.join(this.directory, "api-usage.json"),
+          path.join(
+            this.directory,
+            "api-usage-damaged-" + Date.now() + ".json",
+          ),
+        );
+      }
+    }
+    if (this.config.autoStart)
+      try {
+        await this.start();
+      } catch (error) {
+        this.lastError = error.message;
+        this.onChange();
+      }
+  }
+  getKey() {
+    if (!this.secret)
+      throw new Error("系统加密服务不可用，请先解锁系统密钥环。");
+    return this.secret;
+  }
+  async writeConfig(config, keyEncrypted = this.encryptedKey) {
+    await atomicWrite(
+      path.join(this.directory, "api-gateway.json"),
+      JSON.stringify({ version: 1, config, keyEncrypted }, null, 2),
+    );
+  }
+  async saveConfig(value) {
+    if (this.server || this.active.size)
+      throw new Error("请先停止 API 服务，再修改配置。");
+    const config = validateApiConfig(value);
+    for (const account of config.accounts)
+      if (
+        !this.accounts().some(
+          (row) =>
+            row.provider === account.provider &&
+            row.id === account.id &&
+            row.available,
+        )
+      )
+        throw new Error("所选账号已移除或尚无官方网页登录授权。");
+    this.getKey();
+    await this.writeConfig(config);
+    this.config = config;
+    this.modelCache.clear();
+    this.sessions.clear();
+    this.lastError = "";
+    this.onChange();
+    return this.snapshot();
+  }
+  async rotateKey() {
+    if (this.active.size)
+      throw new Error("请等待当前 API 请求结束后轮换密钥。");
+    if (!this.vault.available())
+      throw new Error("系统加密服务不可用，密钥保持不变。");
+    const secret = "sk-wbs-" + randomBytes(32).toString("base64url"),
+      encrypted = this.vault.encrypt(secret).toString("base64");
+    await this.writeConfig(this.config, encrypted);
+    this.secret = secret;
+    this.encryptedKey = encrypted;
+    this.sessions.clear();
+    this.onChange();
+    return this.snapshot();
+  }
+  accounts() {
+    return realms.flatMap((provider) =>
+      (this.stores.get(provider)?.records ?? []).map((record) => ({
+        provider,
+        id: record.profile.id,
+        nickname: record.profile.nickname,
+        available: !!(record.apiEncrypted || !record.profile.protectedToken),
+        remaining: record.profile.quota?.remaining ?? null,
+        cooldownUntil: Math.max(
+          0,
+          ...[...this.cooldowns]
+            .filter(([key]) =>
+              key.startsWith(ref({ provider, id: record.profile.id }) + "|"),
+            )
+            .map(([, until]) => until),
+        ),
+      })),
+    );
+  }
+  snapshot() {
+    const port = this.server?.address()?.port ?? this.config.port;
+    return structuredClone({
+      running: !!this.server?.listening && !this.draining,
+      baseUrl: "http://127.0.0.1:" + port + "/v1",
+      activeRequests: this.active.size,
+      hasKey: !!this.secret,
+      config: this.config,
+      accounts: this.accounts(),
+      totals: this.totals,
+      recent: this.recent,
+      lastError: this.lastError,
+      models: [...this.modelCache.values()].flatMap((cache) => cache.models),
+    });
+  }
+  candidates(provider, model = "") {
+    return this.config.accounts.filter(
+      (account) =>
+        account.provider === provider &&
+        this.accounts().some(
+          (row) =>
+            row.provider === provider && row.id === account.id && row.available,
+        ) &&
+        (!model || !this.leases.has(ref(account))) &&
+        (this.cooldowns.get(ref(account) + "|" + model) || 0) <= Date.now(),
+    );
+  }
+  pick(prepared) {
+    let candidates = this.candidates(prepared.provider, prepared.payload.model);
+    if (!candidates.length)
+      throw new ApiError(
+        503,
+        "no_available_accounts",
+        "没有可用的所选账号，请检查授权、冷却状态及在途请求。",
+      );
+    const first = prepared.payload.messages.find(
+      (message) => message.role === "user",
+    );
+    const session = createHmac("sha256", this.getKey())
+      .update(
+        prepared.provider +
+          ":" +
+          (prepared.session ??
+            JSON.stringify([
+              prepared.payload.messages.filter(
+                (message) => message.role === "system",
+              ),
+              first,
+            ])),
+      )
+      .digest("hex");
+    const prior = this.sessions.get(session),
+      sticky =
+        prior?.until > Date.now() &&
+        candidates.find((account) => ref(account) === prior.account);
+    let selected = sticky;
+    if (!selected) {
+      if (this.config.strategy === "expiring")
+        candidates.sort((a, b) => {
+          const quota = (account) =>
+            this.stores
+              .get(account.provider)
+              ?.records.find((row) => row.profile.id === account.id)?.profile
+              .quota;
+          const expiry = (account) => {
+            const value = quota(account);
+            return value?.remaining > 0 &&
+              value.expiresAt > Date.now() &&
+              Date.now() - value.fetchedAt < 21600000
+              ? value.expiresAt
+              : Infinity;
+          };
+          return expiry(a) - expiry(b);
+        });
+      const cursor = this.cursors.get(prepared.provider) || 0;
+      selected =
+        this.config.strategy === "round_robin"
+          ? candidates[cursor % candidates.length]
+          : this.config.strategy === "sequential"
+            ? candidates.find(
+                (account) =>
+                  ref(account) ===
+                  this.cursors.get("selected:" + prepared.provider),
+              ) || candidates[0]
+            : candidates[0];
+      this.cursors.set(prepared.provider, cursor + 1);
+      this.cursors.set("selected:" + prepared.provider, ref(selected));
+    }
+    if (this.sessions.size >= 1000)
+      this.sessions.delete(this.sessions.keys().next().value);
+    const conversationId = sticky ? prior.conversationId : randomUUID();
+    this.sessions.set(session, {
+      account: ref(selected),
+      conversationId,
+      until: Date.now() + 3600000,
+    });
+    return { ...selected, conversationId };
+  }
+  async credential(account, operation) {
+    const store = this.stores.get(account.provider);
+    let doc;
+    try {
+      doc = store.apiDocument(account.id);
+    } catch {
+      throw new ApiError(
+        401,
+        "credential_required",
+        "无法读取所选账号授权，请在应用内重新登录。",
+      );
+    }
+    const renew = async () => {
+      const key = ref(account);
+      if (this.renewals.has(key)) return this.renewals.get(key);
+      const pending = store.exclusive(async () => {
+        let first = true;
+        return store.authorized(account.id, (document) => {
+          if (first) {
+            first = false;
+            throw new ApiError(401, "upstream_auth_expired", "授权已失效。");
+          }
+          return document;
+        });
+      });
+      this.renewals.set(key, pending);
+      try {
+        return await pending;
+      } catch {
+        throw new ApiError(
+          401,
+          "upstream_auth_expired",
+          "官方授权续期未完成，请在应用内重新登录。",
+        );
+      } finally {
+        this.renewals.delete(key);
+      }
+    };
+    let renewed = false;
+    if (doc.tokenExpiresAt && doc.tokenExpiresAt < Date.now() + 60000) {
+      doc = await renew();
+      renewed = true;
+    }
+    try {
+      return await operation(doc);
+    } catch (error) {
+      if (error.kind !== "auth" || renewed) throw error;
+      return operation(await renew());
+    }
+  }
+  async models() {
+    const result = [];
+    for (const provider of realms) {
+      if (
+        !this.config.accounts.some((account) => account.provider === provider)
+      )
+        continue;
+      let cache = this.modelCache.get(provider);
+      if (!cache || cache.until < Date.now()) {
+        if (!this.modelPromises.has(provider)) {
+          const account = this.candidates(provider)[0];
+          if (!account)
+            throw new ApiError(
+              503,
+              "no_available_accounts",
+              "该地区没有可用于查询模型的账号。",
+            );
+          const pending = this.credential(account, (doc) =>
+            fetchApiModels(doc, this.request, AbortSignal.timeout(20000)),
+          )
+            .then((models) => {
+              const cache = {
+                until: Date.now() + 600000,
+                models: models.map((model) => ({
+                  ...model,
+                  id:
+                    (provider === "workbuddy-global" ? "global:" : "") +
+                    model.id,
+                  provider,
+                })),
+              };
+              this.modelCache.set(provider, cache);
+              return cache;
+            })
+            .finally(() => this.modelPromises.delete(provider));
+          this.modelPromises.set(provider, pending);
+        }
+        cache = await this.modelPromises.get(provider);
+      }
+      result.push(...cache.models);
+    }
+    if (!result.length)
+      throw new ApiError(
+        503,
+        "no_selected_accounts",
+        "请先选择用于 API 的 WorkBuddy 账号。",
+      );
+    return { object: "list", data: result };
+  }
+  async start() {
+    if (this.server) return this.snapshot();
+    this.getKey();
+    if (
+      !this.config.accounts.length ||
+      !this.accounts().some(
+        (row) =>
+          row.available &&
+          this.config.accounts.some((account) => ref(account) === ref(row)),
+      )
+    )
+      throw new Error("请先选择至少一个已授权的 WorkBuddy 账号。");
+    this.draining = false;
+    this.server = http.createServer((req, res) => {
+      void this.handle(req, res);
+    });
+    this.server.requestTimeout = 20000;
+    this.server.headersTimeout = 10000;
+    this.server.keepAliveTimeout = 5000;
+    this.server.maxConnections = 64;
+    try {
+      await new Promise((resolve, reject) => {
+        const server = this.server;
+        const failure = (error) => {
+          server.off("listening", resolve);
+          reject(error);
+        };
+        server.once("error", failure);
+        server.once("listening", () => {
+          server.off("error", failure);
+          resolve();
+        });
+        server.listen(this.listenPort ?? this.config.port, "127.0.0.1");
+      });
+    } catch (error) {
+      this.server = null;
+      this.lastError =
+        error.code === "EADDRINUSE"
+          ? "API 端口已被占用，请停止占用程序或更换端口。"
+          : "API 服务启动失败，请检查本机网络权限。";
+      this.onChange();
+      throw new Error(this.lastError);
+    }
+    this.server.on("error", () => {
+      this.lastError = "API 监听发生错误，请停止后重新启动。";
+      this.onChange();
+    });
+    this.lastError = "";
+    this.onChange();
+    return this.snapshot();
+  }
+  beginShutdown() {
+    this.draining = true;
+    this.server?.close();
+    this.server?.closeIdleConnections();
+    this.onChange();
+  }
+  async stop() {
+    const server = this.server;
+    if (!server) {
+      await this.writeTail;
+      return this.snapshot();
+    }
+    this.draining = true;
+    for (const controller of this.active.values()) controller.abort();
+    await new Promise((resolve) => {
+      server.close(() => resolve());
+      server.closeIdleConnections();
+      const timer = setTimeout(() => {
+        server.closeAllConnections();
+        resolve();
+      }, 2500);
+      timer.unref();
+      server.once("close", () => clearTimeout(timer));
+    });
+    this.server = null;
+    await Promise.allSettled(
+      [...this.active.values()].map((controller) => controller.done),
+    );
+    await this.writeTail;
+    this.onChange();
+    return this.snapshot();
+  }
+  authorize(req) {
+    const expected = createHash("sha256").update(this.getKey()).digest(),
+      provided = createHash("sha256")
+        .update(
+          typeof req.headers.authorization === "string"
+            ? req.headers.authorization.replace(/^Bearer /, "")
+            : "",
+        )
+        .digest();
+    const count = req.rawHeaders.filter(
+      (value, index) =>
+        index % 2 === 0 && value.toLowerCase() === "authorization",
+    ).length;
+    return (
+      count === 1 &&
+      req.headers.authorization?.startsWith("Bearer ") &&
+      timingSafeEqual(expected, provided)
+    );
+  }
+  json(res, status, value) {
+    if (res.destroyed || res.writableEnded) return;
+    res.writeHead(status, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    });
+    res.end(JSON.stringify(value));
+  }
+  async body(req) {
+    const limit = 8 * 1024 * 1024;
+    if (Number(req.headers["content-length"]) > limit) {
+      req.resume();
+      throw new ApiError(413, "request_too_large", "请求体最大为 8 MB。");
+    }
+    if (
+      !req.headers["content-type"]?.toLowerCase().startsWith("application/json")
+    )
+      throw new ApiError(
+        400,
+        "invalid_content_type",
+        "请发送 application/json 请求。",
+      );
+    return new Promise((resolve, reject) => {
+      let size = 0;
+      const chunks = [];
+      const cleanup = () => {
+        req.off("data", data);
+        req.off("end", end);
+        req.off("error", error);
+      };
+      const error = () => {
+        cleanup();
+        reject(new ApiError(400, "invalid_body", "请求体未完整接收。"));
+      };
+      const data = (chunk) => {
+        size += chunk.length;
+        if (size > limit) {
+          cleanup();
+          req.resume();
+          reject(new ApiError(413, "request_too_large", "请求体最大为 8 MB。"));
+        } else chunks.push(chunk);
+      };
+      const end = () => {
+        cleanup();
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+        } catch {
+          reject(new ApiError(400, "invalid_json", "请求体不是有效 JSON。"));
+        }
+      };
+      req.on("data", data);
+      req.once("end", end);
+      req.once("error", error);
+    });
+  }
+  async handle(req, res) {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const port = this.server?.address()?.port;
+      if (
+        !["127.0.0.1:" + port, "localhost:" + port].includes(
+          req.headers.host,
+        ) ||
+        req.headers.origin ||
+        req.headers["sec-fetch-site"] === "cross-site"
+      )
+        throw new ApiError(
+          403,
+          "local_clients_only",
+          "API 仅供已授权的本机工具调用。",
+        );
+      if (this.draining)
+        throw new ApiError(503, "service_stopping", "API 服务正在停止。");
+      if (!this.authorize(req))
+        throw new ApiError(401, "invalid_api_key", "API Key 无效或缺失。");
+      const now = Date.now();
+      if (!this.rateWindow || now - this.rateWindow.at >= 60000)
+        this.rateWindow = { at: now, count: 0 };
+      if (++this.rateWindow.count > this.config.requestsPerMinute)
+        throw new ApiError(
+          429,
+          "local_rate_limit",
+          "已达到本机 API 每分钟请求上限。",
+          60,
+        );
+      const pathname = new URL(req.url, "http://127.0.0.1").pathname;
+      if (req.method === "GET" && pathname === "/healthz")
+        return this.json(res, 200, {
+          status: "ok",
+          service: "workbuddy-switch-api",
+        });
+      if (req.method === "GET" && pathname === "/v1/models")
+        return this.json(res, 200, await this.models());
+      if (req.method !== "POST" || pathname !== "/v1/chat/completions")
+        throw new ApiError(
+          404,
+          "not_found",
+          "API 路径不存在，仅支持 models 和 chat/completions。",
+        );
+      const prepared = prepareApiRequest(
+        await this.body(req),
+        this.config.maxOutputTokens,
+      );
+      if (this.active.size >= this.config.maxConcurrency)
+        throw new ApiError(
+          429,
+          "concurrency_limit",
+          "API 并发请求已达到上限。",
+          1,
+        );
+      await this.chat(prepared, req, res);
+    } catch (error) {
+      const safe =
+        error instanceof ApiError
+          ? error
+          : new ApiError(
+              502,
+              "gateway_error",
+              "本机 API 请求未完成，请在应用内检查服务状态。",
+            );
+      if (safe.retryAfter)
+        res.setHeader("Retry-After", String(safe.retryAfter));
+      this.json(res, safe.status, {
+        error: {
+          message: safe.message,
+          type: "api_error",
+          param: null,
+          code: safe.code,
+        },
+      });
+    } finally {
+      if (!req.complete) req.resume();
+    }
+  }
+  async chat(prepared, _req, res) {
+    const account = this.pick(prepared),
+      requestId = "chatcmpl-" + randomUUID(),
+      started = Date.now(),
+      controller = new AbortController();
+    let finished;
+    controller.done = new Promise((resolve) => (finished = resolve));
+    this.leases.add(ref(account));
+    this.active.set(requestId, controller);
+    this.onChange();
+    const timer = setTimeout(() => controller.abort(), 180000);
+    timer.unref();
+    const closed = () => {
+      if (!res.writableEnded) controller.abort();
+    };
+    res.on("close", closed);
+    const entry = {
+      requestId,
+      at: started,
+      model: prepared.model,
+      provider: account.provider,
+      accountId: account.id,
+      status: "error",
+      statusCode: 502,
+      durationMs: 0,
+      inputTokens: null,
+      outputTokens: null,
+      errorCode: "",
+    };
+    let usage;
+    try {
+      const response = await this.credential(account, (doc) =>
+        openApiChat(
+          doc,
+          prepared.payload,
+          account.conversationId,
+          this.request,
+          controller.signal,
+        ),
+      );
+      const frames = [];
+      for await (const frame of apiChatFrames(
+        response,
+        prepared.model,
+        requestId,
+      )) {
+        if (controller.signal.aborted)
+          throw new ApiError(
+            499,
+            "request_cancelled",
+            "请求已停止，已产生的消耗以官方计费为准。",
+          );
+        if (frame.usage) usage = frame.usage;
+        if (prepared.stream) {
+          if (!res.headersSent)
+            res.writeHead(200, {
+              "Content-Type": "text/event-stream; charset=utf-8",
+              "Cache-Control": "no-cache, no-transform",
+              "X-Accel-Buffering": "no",
+              "X-Request-Id": requestId,
+            });
+          if (frame.choices.length || prepared.includeUsage) {
+            const value = prepared.includeUsage
+              ? frame
+              : Object.fromEntries(
+                  Object.entries(frame).filter(([key]) => key !== "usage"),
+                );
+            if (!res.write("data: " + JSON.stringify(value) + "\n\n"))
+              await new Promise((resolve, reject) => {
+                const done = () => {
+                  res.off("drain", drain);
+                  res.off("close", close);
+                  controller.signal.removeEventListener("abort", close);
+                };
+                const drain = () => {
+                  done();
+                  resolve();
+                };
+                const close = () => {
+                  done();
+                  reject(
+                    new ApiError(499, "request_cancelled", "请求连接已结束。"),
+                  );
+                };
+                res.once("drain", drain);
+                res.once("close", close);
+                controller.signal.addEventListener("abort", close, {
+                  once: true,
+                });
+              });
+          }
+        } else frames.push(frame);
+      }
+      if (prepared.stream) res.end("data: [DONE]\n\n");
+      else {
+        res.setHeader("X-Request-Id", requestId);
+        this.json(
+          res,
+          200,
+          aggregateApiFrames(frames, prepared.model, requestId),
+        );
+      }
+      entry.status = "ok";
+      entry.statusCode = 200;
+    } catch (error) {
+      const safe = controller.signal.aborted
+        ? new ApiError(
+            499,
+            "request_cancelled",
+            "请求已停止，消耗以官方计费为准。",
+          )
+        : error instanceof ApiError
+          ? error
+          : new ApiError(
+              502,
+              "upstream_transport_error",
+              "对话连接中断，结果和消耗尚未确认，不会自动重发。",
+            );
+      entry.status = controller.signal.aborted ? "cancelled" : "error";
+      entry.statusCode = safe.status;
+      entry.errorCode = safe.code;
+      if ([402, 429, 404].includes(safe.status))
+        this.cooldowns.set(
+          ref(account) + "|" + prepared.payload.model,
+          Date.now() + (safe.retryAfter || 60) * 1000,
+        );
+      this.lastError = safe.message;
+      if (res.headersSent) {
+        if (!res.destroyed)
+          res.end(
+            "data: " +
+              JSON.stringify({
+                error: {
+                  message: safe.message,
+                  type: "api_error",
+                  code: safe.code,
+                },
+              }) +
+              "\n\n",
+          );
+      } else {
+        if (safe.retryAfter)
+          res.setHeader("Retry-After", String(safe.retryAfter));
+        this.json(res, safe.status, {
+          error: {
+            message: safe.message,
+            type: "api_error",
+            param: null,
+            code: safe.code,
+          },
+        });
+      }
+    } finally {
+      clearTimeout(timer);
+      res.off("close", closed);
+      this.leases.delete(ref(account));
+      this.active.delete(requestId);
+      entry.durationMs = Date.now() - started;
+      entry.inputTokens = usage?.prompt_tokens ?? null;
+      entry.outputTokens = usage?.completion_tokens ?? null;
+      this.totals.requests++;
+      this.totals[entry.status === "ok" ? "succeeded" : "failed"]++;
+      this.totals.inputTokens += entry.inputTokens ?? 0;
+      this.totals.outputTokens += entry.outputTokens ?? 0;
+      if (entry.inputTokens === null || entry.outputTokens === null)
+        this.totals.unknownUsage++;
+      this.recent.unshift(entry);
+      this.recent = this.recent.slice(0, 100);
+      for (const [key, until] of this.cooldowns)
+        if (until < Date.now()) this.cooldowns.delete(key);
+      const saved = JSON.stringify(
+        {
+          version: 1,
+          totals: this.totals,
+          recent: this.recent,
+          cooldowns: [...this.cooldowns]
+            .slice(-5000)
+            .map(([key, until]) => ({ key, until })),
+        },
+        null,
+        2,
+      );
+      this.writeTail = this.writeTail
+        .then(() =>
+          atomicWrite(path.join(this.directory, "api-usage.json"), saved),
+        )
+        .catch(() => {
+          this.lastError =
+            "API 请求结果已保留在内存，但本地用量记录保存失败，请检查磁盘。";
+          this.onChange();
+        });
+      this.onChange();
+      finished();
+    }
+  }
+  async testChat(model = "fast-model") {
+    if (!this.snapshot().running) throw new Error("请先启动 API 服务。");
+    if (typeof model !== "string" || model.length > 180)
+      throw new Error("测试模型无效。");
+    return new Promise((resolve, reject) => {
+      const data = JSON.stringify({
+        model,
+        max_tokens: Math.min(64, this.config.maxOutputTokens),
+        messages: [{ role: "user", content: "请只回复 OK。" }],
+      });
+      const req = http.request(
+        this.snapshot().baseUrl + "/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer " + this.getKey(),
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(data),
+          },
+        },
+        (res) => {
+          let text = "";
+          res.setEncoding("utf8");
+          res.on("data", (chunk) => {
+            text += chunk;
+            if (text.length > 2 * 1024 * 1024) req.destroy();
+          });
+          res.on("end", () => {
+            try {
+              const value = JSON.parse(text);
+              if (res.statusCode !== 200)
+                reject(new Error(value.error?.message || "API 测试失败。"));
+              else
+                resolve({
+                  model,
+                  message:
+                    value.choices?.[0]?.message?.content?.slice(0, 240) ||
+                    "已收到完整模型响应。",
+                });
+            } catch {
+              reject(new Error("API 测试返回格式无效。"));
+            }
+          });
+        },
+      );
+      req.setTimeout(185000, () => req.destroy());
+      req.on("error", () => reject(new Error("无法连接本机 API 测试服务。")));
+      req.end(data);
+    });
+  }
+}
