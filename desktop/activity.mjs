@@ -5,6 +5,7 @@ import { RewardError } from "./rewards.mjs";
 import { sendDialogue, reportDialogue } from "./dialogue.mjs";
 
 const desktopOrigin = "https://copilot.tencent.com";
+const activityProtocolVersion = "5.8.3";
 const expertNames = {
   Expert_lighthouse: "腾讯轻量云",
   WorkBuddy_Valorant: "无畏契约拼豆专家",
@@ -114,7 +115,8 @@ async function activityRequest(
         "X-Domain": new URL(host).hostname,
         "X-Product": "SaaS",
         "X-Client-Platform": web ? "web" : "desktop",
-        "User-Agent": "WorkBuddy-Switch",
+        "User-Agent": web ? "WorkBuddy-Switch" : `WorkBuddy/${activityProtocolVersion} WorkBuddy-Switch`,
+        "X-Request-ID": randomUUID(),
         Origin: origin,
         Referer: `${origin}/profile/growth-center`,
       },
@@ -232,7 +234,9 @@ function fingerprint(document) {
     product: "SaaS",
     ideName: "WorkBuddy",
     ideType: "WorkBuddy",
+    ideVersion: activityProtocolVersion,
     extName: "workbuddy-desktop",
+    extVersion: activityProtocolVersion,
     timezone: "Asia/Shanghai",
     os: process.platform,
     arch: process.arch,
