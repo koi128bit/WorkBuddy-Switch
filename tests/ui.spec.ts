@@ -226,6 +226,18 @@ test("API page keeps completed growth task history out of the connection workflo
     0,
   );
 });
+test("saved completed task details stay collapsed when returning to account management", async ({ page }) => {
+  await page.getByRole("button", { name: "一键做任务", exact: true }).click();
+  await page.getByRole("button", { name: /确认并执行/ }).click();
+  const panel = page.getByRole("region", { name: "任务执行进度" });
+  await expect(panel).toContainText("执行结束");
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "API", exact: true }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "账号", exact: true }).click();
+  await expect(panel.getByRole("button", { name: /一键任务/ })).toHaveAttribute("aria-expanded", "false");
+  await expect(panel.locator(".task-run-results")).toHaveCount(0);
+  await panel.getByRole("button", { name: /一键任务/ }).click();
+  await expect(panel.locator(".task-run-results")).toBeVisible();
+});
 test("API test conversation can be stopped while its upstream request is still pending", async ({
   page,
 }) => {
