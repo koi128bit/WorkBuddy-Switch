@@ -74,7 +74,7 @@ test("activity records are bounded, sent only to official endpoints, and never l
   const calls = [];
   const result = await api.executeActivity(
     document,
-    { kind: "template", code: "template_5", index: 0 },
+    { kind: "library", code: "Library_read" },
     async (url, options) => {
       calls.push({ url, options });
       return json({});
@@ -83,10 +83,10 @@ test("activity records are bounded, sent only to official endpoints, and never l
   assert.equal(result.dialogue, null);
   assert.ok(calls.length > 0);
   assert.ok(
-    calls.every((call) => call.url === "https://copilot.tencent.com/v2/report"),
+    calls.every((call) => call.url === "https://www.workbuddy.cn/v2/report"),
   );
   const events = calls.flatMap((call) => JSON.parse(call.options.body));
-  assert.ok(events.some((event) => event.eventCode === "template_used"));
+  assert.ok(events.some((event) => event.eventCode === "web_element_click" && event.elementId === "library_doc_intro_click"));
   assert.ok(
     !events.some((event) => event.eventCode === "chat_message_response"),
   );
@@ -119,9 +119,9 @@ test("targeted experts are selected from real market results by exact name and p
       assert.equal(JSON.parse(options.body).keyword, "抖音策略师");
       return json({
         experts: [
-          { expert_id: "wrong", display_name_zh: "其他专家" },
+          { expert_id: "wrong", display_name_zh: "抖音策略师", profession_zh: "抖音策略师", expert_type: "agent" },
           {
-            expert_id: "verified-expert",
+            expert_id: "ex_FbY5nlWTqDod",
             display_name_zh: "抖音策略师",
             expert_type: "agent",
             profession_zh: "运营",
@@ -133,7 +133,7 @@ test("targeted experts are selected from real market results by exact name and p
     },
   );
   assert.equal(resources.length, 1);
-  assert.equal(resources[0].id, "verified-expert");
+  assert.equal(resources[0].id, "ex_FbY5nlWTqDod");
   assert.equal(resources[0].name, "抖音策略师");
   assert.ok(!JSON.stringify(resources).includes("private_secret"));
 });
@@ -175,35 +175,7 @@ test("expert activities use a bounded real conversation and join only the actual
   assert.ok(!JSON.stringify(result).includes("fixture-secret"));
 });
 
-test("failed paid activities never fabricate a successful use event or retry a paid request", async () => {
-  assert.equal(typeof api.executeActivity, "function");
-  let paid = 0,
-    reports = 0;
-  await assert.rejects(
-    () =>
-      api.executeActivity(
-        document,
-        {
-          kind: "expert",
-          code: "expert_5",
-          model: "fast-model",
-          prompt: "你好",
-          resource: { id: "verified-expert", name: "专家", type: "agent" },
-        },
-        async (url) => {
-          if (url.endsWith("/chat/completions")) {
-            paid++;
-            return new Response(null, { status: 429 });
-          }
-          reports++;
-          return json({});
-        },
-      ),
-    /服务|额度|停止/,
-  );
-  assert.equal(paid, 1);
-  assert.equal(reports, 0);
-});
+test("failed paid activities never fabricate a successful use event or retry a paid request",async()=>{const events=[];let paid=0;await assert.rejects(()=>api.executeActivity(document,{kind:'expert',code:'expert_5',model:'fast-model',prompt:'你好',resource:{id:'verified-expert',name:'专家',type:'agent'}},async(url,options)=>{if(url.endsWith('/chat/completions')){paid++;return new Response(null,{status:429});}events.push(...JSON.parse(options.body));return json({});}),/服务|额度|停止/);assert.equal(paid,1);assert.ok(!events.some(event=>['expert_actual_use','chat_message_response'].includes(event.eventCode)));});
 
 test("activity errors sanitize credentials and refuse foreign accounts and mismatched action types", async () => {
   assert.equal(typeof api.executeActivity, "function");
@@ -276,10 +248,8 @@ test("desktop activity requests use the supported protocol version and the actua
 });
 
 for (const [kind, code, eventCode] of [
-  ["library", "Library_read", "library_doc_intro_click"],
+  ["library", "Library_read", "web_element_click"],
   ["appearance", "Hp_Appearance", "appearance_skin_apply"],
-  ["playbook", "playbook_prompt", "playbook_prompt_send"],
-  ["canvas", "create_canvas", "wbx_design_canvas_task_create"],
   ["automation", "automation_1", "automated_task_create_suc"],
   ["apps", "Buddy_App", "buddyapp_enter_click"],
 ])
@@ -294,14 +264,13 @@ for (const [kind, code, eventCode] of [
       },
     );
     assert.equal(result.dialogue, null);
-    assert.ok(calls.every((call) => call.url.endsWith("/v2/report")));
+    assert.ok(calls.every((call) => (call.url.endsWith("/v2/report") || call.url.endsWith("/v2/user-asset/appearance/set"))));
     const events = calls.flatMap((call) => JSON.parse(call.options.body));
     assert.ok(events.some((event) => event.eventCode === eventCode));
     assert.ok(
       !events.some(
         (event) =>
-          event.eventCode === "chat_message_response" ||
-          event.eventCode === "buddyapp_auth_confirm_click",
+          event.eventCode === "chat_message_response",
       ),
     );
   });

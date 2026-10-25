@@ -1172,7 +1172,7 @@ test("full task scope runs activities and real experts, waits for delayed scorin
                 expert_id:
                   body.expert_type === "team"
                     ? "team-verified"
-                    : "douyin-verified",
+                    : "ex_FbY5nlWTqDod",
                 display_name_zh:
                   body.expert_type === "team" ? "专家团" : "抖音策略师",
                 expert_type: body.expert_type === "team" ? "team" : "agent",
@@ -1203,7 +1203,7 @@ test("full task scope runs activities and real experts, waits for delayed scorin
     if (url.endsWith("/v2/report")) {
       for (const event of JSON.parse(options.body)) {
         const code =
-          event.eventCode === "library_doc_intro_click"
+          event.eventCode === "web_element_click" && event.elementId === "library_doc_intro_click"
             ? "Library_read"
             : event.eventCode === "template_used"
               ? "template_5"
@@ -1260,7 +1260,7 @@ test("full task scope runs activities and real experts, waits for delayed scorin
     ).length,
     0,
   );
-  assert.equal(plan.maxCalls, 3);
+  assert.equal(plan.maxCalls, 5);
   assert.ok(plan.accounts[0].tasks.some((row) => row.code === "Library_read"));
   assert.ok(
     plan.accounts[0].tasks.some(
@@ -1270,8 +1270,8 @@ test("full task scope runs activities and real experts, waits for delayed scorin
   const result = await f.store.runTasks(["a"], plan.id);
   for (const row of additional)
     assert.equal(row.accept_status, "claimed", row.task_code);
-  assert.equal(result.dialogueAttempts, 3);
-  assert.equal(result.summary.dialogues, 3);
+  assert.equal(result.dialogueAttempts, 4);
+  assert.equal(result.summary.dialogues, 4);
   assert.ok(result.summary.activities >= 3);
   assert.ok(
     result.results.some(
