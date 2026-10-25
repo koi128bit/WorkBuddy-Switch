@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
+import { createServer } from "node:net";
 
 const directory = await fs.mkdtemp(path.join(os.tmpdir(), "wb-desktop-smoke-"));
 const authFile = path.join(directory, "fixture-auth.info");
@@ -150,7 +151,7 @@ try {
   const apiInitial = await page.evaluate(() => window.workbuddy.apiStatus());
   assert.equal(apiInitial.running, false);
   assert.equal(apiInitial.hasKey, true);
-  assert.equal(JSON.stringify(apiInitial).includes('sk-wbs-'), false);
+  assert.equal(JSON.stringify(apiInitial).includes("sk-wbs-"), false);
   assert.equal(initial.current.id, "isolated-fixture");
   assert.equal(initial.accounts.length, 0);
   assert.equal(initial.taskRun.status, "interrupted");
@@ -258,6 +259,44 @@ try {
   await page.evaluate(() => window.workbuddy.capture());
   const after = await page.evaluate(() => window.workbuddy.snapshot());
   assert.equal(after.accounts.length, 1);
+  const probe = createServer();
+  await new Promise((resolve) => probe.listen(0, "127.0.0.1", resolve));
+  const apiPort = probe.address().port;
+  await new Promise((resolve) => probe.close(resolve));
+  await page.evaluate(async (port) => {
+    const state = await window.workbuddy.apiStatus();
+    await window.workbuddy.apiSave({
+      ...state.config,
+      port,
+      accounts: [{ provider: "workbuddy", id: "isolated-fixture" }],
+    });
+  }, apiPort);
+  const listening = await page.evaluate(() => window.workbuddy.apiStart());
+  assert.equal(listening.running, true);
+  assert.equal((await fetch(listening.baseUrl + "/models")).status, 401);
+  assert.equal(
+    (
+      await fs.readFile(path.join(directory, "api-gateway.json"), "utf8")
+    ).includes("sk-wbs-"),
+    false,
+  );
+  assert.equal(
+    await popup.evaluate(async () => {
+      try {
+        await window.workbuddy.apiCopy("key");
+        return false;
+      } catch {
+        return true;
+      }
+    }),
+    true,
+    "tray IPC cannot copy a gateway credential",
+  );
+  await page.evaluate(() => window.workbuddy.apiStop());
+  assert.equal(
+    (await page.evaluate(() => window.workbuddy.apiStatus())).running,
+    false,
+  );
   const taskPlan = await page.evaluate(() =>
     window.workbuddy.prepareTasks(["isolated-fixture"], {
       includeAI: false,

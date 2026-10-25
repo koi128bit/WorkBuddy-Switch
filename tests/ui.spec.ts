@@ -2,44 +2,128 @@ import { test, expect } from "@playwright/test";
 import { fixtureState, fixtureSessions, fixtureUsage } from "./fixtures";
 import type { TaskRun } from "../src/types";
 
-test('local API page saves explicit account scope, controls the listener and never renders credentials',async({page})=>{
-  await page.evaluate(async()=>{
-    const snapshot=await window.workbuddy.snapshot();
-    const value={running:false,baseUrl:'http://127.0.0.1:8317/v1',activeRequests:0,hasKey:true,lastError:'',models:[] as {id:string}[],recent:[],totals:{requests:0,succeeded:0,failed:0,inputTokens:0,outputTokens:0,unknownUsage:0},config:{port:8317,autoStart:false,accounts:[] as {provider:string;id:string}[],strategy:'round_robin',maxConcurrency:2,maxOutputTokens:4096,requestsPerMinute:60},accounts:snapshot.accounts.map(account=>({provider:'workbuddy',id:account.id,nickname:account.nickname,available:true,remaining:account.quota?.remaining??null,cooldownUntil:0}))};
-    Object.assign(window.workbuddy,{
-      apiStatus:async()=>structuredClone(value),
-      apiSave:async(config:typeof value.config)=>{value.config=config;value.baseUrl='http://127.0.0.1:'+config.port+'/v1';return structuredClone(value);},
-      apiStart:async()=>{value.running=true;return structuredClone(value);},
-      apiStop:async()=>{value.running=false;return structuredClone(value);},
-      apiCopy:async(kind:string)=>{(window as unknown as {apiCopied:string}).apiCopied=kind;},
-      apiRotate:async()=>structuredClone(value),
-      apiModels:async()=>({object:'list',data:[{id:'fast-model'},{id:'global:fast-model'}]}),
-      apiTest:async(model:string)=>({model,message:'OK'}),
+test("local API page saves explicit account scope, controls the listener and never renders credentials", async ({
+  page,
+}) => {
+  await page.evaluate(async () => {
+    const snapshot = await window.workbuddy.snapshot();
+    const value = {
+      running: false,
+      baseUrl: "http://127.0.0.1:8317/v1",
+      activeRequests: 0,
+      hasKey: true,
+      lastError: "",
+      models: [] as { id: string }[],
+      recent: [],
+      totals: {
+        requests: 0,
+        succeeded: 0,
+        failed: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        unknownUsage: 0,
+      },
+      config: {
+        port: 8317,
+        autoStart: false,
+        accounts: [] as { provider: string; id: string }[],
+        strategy: "round_robin",
+        maxConcurrency: 2,
+        maxOutputTokens: 4096,
+        requestsPerMinute: 60,
+      },
+      accounts: snapshot.accounts.map((account) => ({
+        provider: "workbuddy",
+        id: account.id,
+        nickname: account.nickname,
+        available: true,
+        remaining: account.quota?.remaining ?? null,
+        cooldownUntil: 0,
+      })),
+    };
+    Object.assign(window.workbuddy, {
+      apiStatus: async () => structuredClone(value),
+      apiSave: async (config: typeof value.config) => {
+        value.config = config;
+        value.baseUrl = "http://127.0.0.1:" + config.port + "/v1";
+        return structuredClone(value);
+      },
+      apiStart: async () => {
+        value.running = true;
+        return structuredClone(value);
+      },
+      apiStop: async () => {
+        value.running = false;
+        return structuredClone(value);
+      },
+      apiCopy: async (kind: string) => {
+        (window as unknown as { apiCopied: string }).apiCopied = kind;
+      },
+      apiRotate: async () => structuredClone(value),
+      apiModels: async () => ({
+        object: "list",
+        data: [{ id: "fast-model" }, { id: "global:fast-model" }],
+      }),
+      apiTest: async (model: string) => ({ model, message: "OK" }),
     });
   });
-  await page.getByRole('button',{name:'API',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'本机 API 服务',exact:true})).toBeVisible();
-  await page.getByRole('checkbox',{name:'用于 API：日常开发',exact:true}).check();
-  await page.getByLabel('监听端口',{exact:true}).fill('8319');
-  await page.getByLabel('账号调度',{exact:true}).selectOption('expiring');
-  await page.getByRole('button',{name:'保存 API 设置',exact:true}).click();
-  await page.getByRole('button',{name:'启动服务',exact:true}).click();
-  await expect(page.getByText('运行中',{exact:true})).toBeVisible();
-  await expect(page.getByLabel('监听端口',{exact:true})).toBeDisabled();
-  await expect(page.getByText('http://127.0.0.1:8319/v1',{exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'复制 API Key',exact:true}).click();
-  expect(await page.evaluate(()=>(window as unknown as {apiCopied:string}).apiCopied)).toBe('key');
-  expect(await page.locator('body').innerText()).not.toContain('sk-wbs-');
-  await page.getByRole('button',{name:'获取模型',exact:true}).click();
-  await expect(page.getByRole('option',{name:'global:fast-model',exact:true})).toHaveCount(1);
-  await page.getByRole('button',{name:'测试对话',exact:true}).click();
-  await expect(page.getByText('OK',{exact:true})).toBeVisible();
-  await page.screenshot({path:'.github/assets/api.png',animations:'disabled'});
-  await page.setViewportSize({width:940,height:720});
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.screenshot({path:'outputs/screenshots/v1.7-api-compact.png',animations:'disabled'});
-  await page.getByRole('button',{name:'停止服务',exact:true}).click();
-  await expect(page.getByText('已停止',{exact:true})).toBeVisible();
+  await page.getByRole("button", { name: "API", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "本机 API 服务", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("checkbox", { name: "用于 API：日常开发", exact: true })
+    .check();
+  await page.getByLabel("监听端口", { exact: true }).fill("8319");
+  await page.getByLabel("账号调度", { exact: true }).selectOption("expiring");
+  await page
+    .getByRole("button", { name: "保存 API 设置", exact: true })
+    .click();
+  await page.getByRole("button", { name: "启动服务", exact: true }).click();
+  await expect(page.getByText("运行中", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("监听端口", { exact: true })).toBeDisabled();
+  await expect(
+    page.getByText("http://127.0.0.1:8319/v1", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "复制 API Key", exact: true }).click();
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { apiCopied: string }).apiCopied,
+    ),
+  ).toBe("key");
+  expect(await page.locator("body").innerText()).not.toContain("sk-wbs-");
+  await page.getByRole("button", { name: "获取模型", exact: true }).click();
+  await expect(
+    page.getByRole("option", { name: "global:fast-model", exact: true }),
+  ).toHaveCount(1);
+  await page.getByRole("button", { name: "测试对话", exact: true }).click();
+  await expect(page.getByText("OK", { exact: true })).toBeVisible();
+  await page
+    .getByRole("heading", { name: "API", exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: ".github/assets/api.png",
+    animations: "disabled",
+  });
+  await page.setViewportSize({ width: 940, height: 720 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "outputs/screenshots/v1.7-api-compact.png",
+    animations: "disabled",
+  });
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = "dark";
+  });
+  await page.screenshot({
+    path: "outputs/screenshots/v1.7-api-dark.png",
+    animations: "disabled",
+  });
+  await page.getByRole("button", { name: "停止服务", exact: true }).click();
+  await expect(page.getByText("已停止", { exact: true })).toBeVisible();
 });
 
 test("extended task confirmation separates compatibility records from paid actions and shows each manual reason", async ({

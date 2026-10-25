@@ -317,6 +317,22 @@ export interface BackupFile {
   createdAt: number;
 }
 export interface Bridge {
+  apiStatus(): Promise<ApiStatus>;
+  apiSave(config: ApiConfig): Promise<ApiStatus>;
+  apiStart(): Promise<ApiStatus>;
+  apiStop(): Promise<ApiStatus>;
+  apiRotate(): Promise<ApiStatus>;
+  apiCopy(kind: "key" | "baseUrl" | "curl"): Promise<void>;
+  apiModels(): Promise<{
+    object: string;
+    data: {
+      id: string;
+      name?: string;
+      context_window?: number;
+      max_output_tokens?: number;
+    }[];
+  }>;
+  apiTest(model: string): Promise<{ model: string; message: string }>;
   prepareTasks(ids: string[] | null, options: TaskOptions): Promise<TaskPlan>;
   runTasks(ids?: string[] | null, planId?: string | null): Promise<TaskRun>;
   cancelTasks(id: string): Promise<boolean>;
@@ -370,7 +386,7 @@ export interface Bridge {
   ): Promise<ClaimResult>;
   departTravel(id: string, locationId: string): Promise<void>;
   openPage(
-    page: "accounts" | "overview" | "sessions" | "usage" | "settings",
+    page: "accounts" | "overview" | "sessions" | "usage" | "settings" | "api",
   ): Promise<void>;
   traySwitch(id: string): Promise<boolean>;
   quit(): Promise<void>;
@@ -398,6 +414,53 @@ export interface Bridge {
   pollLogin(id: string, provider?: Provider): Promise<{ done: boolean }>;
   openLogin(id: string, provider?: Provider): Promise<void>;
   cancelLogin(id: string, provider?: Provider): Promise<void>;
+}
+export interface ApiConfig {
+  port: number;
+  autoStart: boolean;
+  accounts: { provider: WorkBuddyProvider; id: string }[];
+  strategy: "round_robin" | "sequential" | "expiring";
+  maxConcurrency: number;
+  maxOutputTokens: number;
+  requestsPerMinute: number;
+}
+export interface ApiStatus {
+  running: boolean;
+  baseUrl: string;
+  activeRequests: number;
+  hasKey: boolean;
+  config: ApiConfig;
+  accounts: {
+    provider: WorkBuddyProvider;
+    id: string;
+    nickname: string;
+    available: boolean;
+    remaining: number | null;
+    cooldownUntil: number;
+  }[];
+  totals: {
+    requests: number;
+    succeeded: number;
+    failed: number;
+    inputTokens: number;
+    outputTokens: number;
+    unknownUsage: number;
+  };
+  recent: {
+    requestId: string;
+    at: number;
+    model: string;
+    provider: WorkBuddyProvider;
+    accountId: string;
+    status: "ok" | "error" | "cancelled";
+    statusCode: number;
+    durationMs: number;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    errorCode: string;
+  }[];
+  lastError: string;
+  models: { id: string; name?: string }[];
 }
 declare global {
   interface Window {

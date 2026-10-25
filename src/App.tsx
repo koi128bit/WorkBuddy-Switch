@@ -44,6 +44,7 @@ import {
   Wifi,
   X,
   Zap,
+  Cable,
 } from "lucide-react";
 import type {
   Account,
@@ -80,13 +81,15 @@ import { apiFor, providerNames, isWorkBuddy } from "./providers";
 import { LoginModal } from "./LoginModal";
 import { TaskRunPanel } from "./TaskRunPanel";
 import { TaskPlanDialog, defaultTaskOptions } from "./TaskPlanDialog";
+import { ApiPage } from "./ApiPage";
 
-type Page = "overview" | "accounts" | "sessions" | "usage" | "settings";
+type Page = "overview" | "accounts" | "sessions" | "usage" | "settings" | "api";
 const nav = [
   { id: "accounts", label: "账号", icon: Users },
   { id: "overview", label: "积分", icon: Gift },
   { id: "sessions", label: "对话", icon: MessageSquare },
   { id: "usage", label: "用量", icon: BarChart3 },
+  { id: "api", label: "API", icon: Cable },
   { id: "settings", label: "设置", icon: Settings2 },
 ] as const;
 const emptyUsage: Usage = {
@@ -512,7 +515,9 @@ export function App() {
                       ? `${sessions.filter((item) => !item.deleted).length} 条本地对话`
                       : page === "usage"
                         ? "本地 Token 记录"
-                        : "偏好与自动任务"}
+                        : page === "api"
+                          ? "OpenAI 兼容接口"
+                          : "偏好与自动任务"}
               </span>
             </div>
             <div className="page-actions">
@@ -682,6 +687,9 @@ export function App() {
               customEnd={customEnd}
               setCustomEnd={setCustomEnd}
             />
+          )}
+          {isWorkBuddy(provider) && page === "api" && (
+            <ApiPage privacy={privacy} />
           )}
           {page === "settings" && (
             <SettingsPage

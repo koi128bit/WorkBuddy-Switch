@@ -13,6 +13,7 @@ const {
   net,
   session,
   Notification,
+  clipboard,
   screen,
 } = require("electron");
 const path = require("node:path");
@@ -33,7 +34,7 @@ let mainWindow,
   refreshTimer,
   automationTimer,
   tickBusy = false;
-let quitGate;
+let quitGate, apiGateway;
 const noticeKeys = new Map();
 const workbuddyStores = new Map();
 let clientDefinitions = {};
@@ -117,6 +118,7 @@ else {
     });
 }
 app.on("before-quit", (event) => {
+  if (!apiGateway?.draining) apiGateway?.beginShutdown();
   if (quitGate && !quitGate.request(event)) return;
   editorOAuth?.close();
   quitting = true;
@@ -145,7 +147,11 @@ function showWindow() {
   }
 }
 function openPage(page) {
-  if (!["accounts", "overview", "sessions", "usage", "settings"].includes(page))
+  if (
+    !["accounts", "overview", "sessions", "usage", "settings", "api"].includes(
+      page,
+    )
+  )
     throw new Error("页面无效。");
   showWindow();
   const navigate = () => mainWindow.webContents.send("wb:navigate", page);
@@ -293,9 +299,13 @@ function trusted(event) {
       : `workbuddy-switch://app/index.html${suffix}`)
   );
 }
-function handle(name, action) {
+function handle(name, action, mainOnly = false) {
   ipcMain.handle(`wb:${name}`, async (event, ...args) => {
-    if (!trusted(event)) return { ok: false, error: "操作来源无效。" };
+    if (
+      !trusted(event) ||
+      (mainOnly && event.sender !== mainWindow?.webContents)
+    )
+      return { ok: false, error: "操作来源无效。" };
     try {
       return { ok: true, value: await action(...args) };
     } catch (error) {
@@ -340,7 +350,7 @@ function query(value) {
 async function start() {
   const { QuitGate } = await import("./installation.mjs");
   quitGate = new QuitGate({
-    isBusy: () => Boolean(store?.busy || tickBusy),
+    isBusy: () => Boolean(store?.busy || tickBusy || apiGateway?.active.size),
     onWait: () => store?.log("正在完成当前操作，完成后退出。", "info"),
     onQuit: () => app.quit(),
   });
@@ -423,6 +433,39 @@ async function start() {
   });
   await globalStore.init();
   workbuddyStores.set("workbuddy-global", globalStore);
+  const { ApiGateway } = await import("./api-gateway.mjs");
+  apiGateway = new ApiGateway({
+    directory: app.getPath("userData"),
+    vault,
+    stores: workbuddyStores,
+    request: (url, options) => net.fetch(url, options),
+    onChange: changed,
+  });
+  try {
+    await apiGateway.init();
+  } catch {
+    apiGateway.lastError =
+      "API 初始化未完成，请检查系统加密服务及应用数据目录。";
+  }
+  const apiHandle = (name, action) => handle(name, action, true);
+  apiHandle("api-status", () => apiGateway.snapshot());
+  apiHandle("api-save", (value) => apiGateway.saveConfig(value));
+  apiHandle("api-start", () => apiGateway.start());
+  apiHandle("api-stop", () => apiGateway.stop());
+  apiHandle("api-rotate", () => apiGateway.rotateKey());
+  apiHandle("api-models", () => apiGateway.models());
+  apiHandle("api-test", (model) => apiGateway.testChat(string(model, 180)));
+  apiHandle("api-copy", (kind) => {
+    const base = apiGateway.snapshot().baseUrl;
+    const values = {
+      key: () => apiGateway.getKey(),
+      baseUrl: () => base,
+      curl: () =>
+        `curl '${base}/chat/completions' -H "Authorization: Bearer $WORKBUDDY_API_KEY" -H 'Content-Type: application/json' -d '{"model":"fast-model","messages":[{"role":"user","content":"你好"}],"max_tokens":256}'`,
+    };
+    if (!Object.hasOwn(values, kind)) throw new Error("复制内容无效。");
+    if (!testMode) clipboard.writeText(values[kind]());
+  });
   const editorControllers = Object.fromEntries(
     Object.keys(editorDefinitions).map((provider) => [
       provider,

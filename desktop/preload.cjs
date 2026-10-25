@@ -7,6 +7,14 @@ const call =
     return result.value;
   };
 contextBridge.exposeInMainWorld("workbuddy", {
+  apiStatus: call("api-status"),
+  apiSave: call("api-save"),
+  apiStart: call("api-start"),
+  apiStop: call("api-stop"),
+  apiRotate: call("api-rotate"),
+  apiCopy: call("api-copy"),
+  apiModels: call("api-models"),
+  apiTest: call("api-test"),
   snapshot: call("snapshot"),
   workbuddyScope: call("workbuddy-scope"),
   refreshEditor: call("editor-refresh"),
