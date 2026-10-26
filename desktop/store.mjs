@@ -318,8 +318,66 @@ export class Store {
       this.log("已移除保存的账号。");
     });
   }
-  switchAccount(id) {
+  autoReplacement(currentId) {
+    const now = Date.now();
+    const fresh = (profile) =>
+      !profile.quotaError &&
+      Number.isFinite(profile.quota?.remaining) &&
+      profile.quota.fetchedAt <= now &&
+      now - profile.quota.fetchedAt < 300000;
+    const current = this.records.find(
+      (row) => row.profile.id === currentId,
+    )?.profile;
+    if (!current || !fresh(current) || current.quota.remaining > 0) return null;
+    return (
+      this.records
+        .filter(
+          (row) =>
+            row.profile.id !== currentId &&
+            fresh(row.profile) &&
+            row.profile.quota.remaining > 0 &&
+            (row.apiEncrypted || !row.profile.protectedToken),
+        )
+        .sort(
+          (a, b) =>
+            Number(b.profile.favorite) - Number(a.profile.favorite) ||
+            b.profile.quota.remaining - a.profile.quota.remaining,
+        )[0] ?? null
+    );
+  }
+  async maybeAutoSwitch(allow = this.canAutoSwitch ?? (() => true)) {
+    if (
+      !this.settings.autoSwitchOnZero ||
+      this.busy ||
+      this.refreshPromise ||
+      this.tasks.current?.status === "running" ||
+      this.autoSwitchRetryAt > Date.now() ||
+      !allow()
+    )
+      return null;
+    const current = await this.active();
+    const next = this.autoReplacement(current?.id);
+    if (!next) return null;
+    try {
+      return await this.switchAccount(next.profile.id, {
+        automatic: true,
+        allow,
+      });
+    } catch (error) {
+      this.autoSwitchRetryAt = Date.now() + 300000;
+      throw error;
+    }
+  }
+  switchAccount(id, { automatic = false, allow = () => true } = {}) {
     return this.exclusive(async () => {
+      const previous = await this.active();
+      if (
+        automatic &&
+        (!this.settings.autoSwitchOnZero ||
+          !allow() ||
+          this.autoReplacement(previous?.id)?.profile.id !== id)
+      )
+        return null;
       const record = this.records.find((r) => r.profile.id === id);
       const target = record?.apiEncrypted
         ? parseAuth(
@@ -327,7 +385,6 @@ export class Store {
           )
         : this.document(id);
       if (target.id !== id) throw new Error("目标凭据身份不一致，已停止切换。");
-      const previous = await this.active();
       if (previous?.id === id) {
         await this.controller.launch();
         return;
@@ -364,7 +421,12 @@ export class Store {
           ),
         );
         if (this.settings.restartAfterSwitch) await this.controller.launch();
-        this.log("账号已切换，登录信息写入完成。");
+        this.log(
+          automatic
+            ? "当前账号积分已耗尽，已自动切换到有积分的账号。"
+            : "账号已切换，登录信息写入完成。",
+        );
+        return id;
       } catch (error) {
         if (wrote) {
           try {
@@ -415,6 +477,7 @@ export class Store {
       this.refreshPromise = null;
       this.onChange();
     }
+    await this.maybeAutoSwitch();
   }
   apiDocument(id) {
     const record = this.records.find((r) => r.profile.id === id);

@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import http from "node:http";
-import { ApiGateway, apiDefaults, validateApiConfig } from "../desktop/api-gateway.mjs";
+import {
+  ApiGateway,
+  apiDefaults,
+  validateApiConfig,
+} from "../desktop/api-gateway.mjs";
 import { fixture, stream } from "./helpers/api-fixture.mjs";
 
 test("API configuration rejects remote binds, unknown options, invalid accounts and unbounded limits", () => {
@@ -66,9 +70,7 @@ test("models are discovered from the selected official region and never include 
   );
   assert.equal(result.data[0].context_window, 128000);
   assert.ok(
-    f.calls.some(
-      (call) => call.url === "https://copilot.tencent.com/v3/config",
-    ),
+    f.calls.some((call) => call.url === "https://www.workbuddy.cn/v3/config"),
   );
   assert.ok(
     f.calls.some((call) => call.url === "https://www.workbuddy.ai/v3/config"),
@@ -189,7 +191,7 @@ test("invalid bodies, excessive outputs and unsupported request fields never rea
   for (const body of [
     { messages: [] },
     { messages: [{ role: "root", content: "bad" }] },
-    { max_tokens: 999999 },
+    { max_tokens: -1 },
     { n: 2 },
     { api_key: "wrong-secret" },
     {

@@ -11,12 +11,12 @@ import {
 import { atomicWrite, readBounded } from "./files.mjs";
 import {
   ApiError,
-  prepareApiRequest,
   openApiChat,
   fetchApiModels,
   apiChatFrames,
   aggregateApiFrames,
 } from "./api-upstream.mjs";
+import { prepareProtocolRequest, ProtocolStream } from "./api-protocols.mjs";
 
 export const apiDefaults = Object.freeze({
   port: 8317,
@@ -125,6 +125,7 @@ export class ApiGateway {
   active = new Map();
   leases = new Set();
   cooldowns = new Map();
+  depleted = new Map();
   sessions = new Map();
   cursors = new Map();
   modelCache = new Map();
@@ -320,25 +321,57 @@ export class ApiGateway {
       models: [...this.modelCache.values()].flatMap((cache) => cache.models),
     });
   }
-  candidates(provider, model = "") {
+  candidates(provider, model = "", excluded = new Set()) {
+    const now = Date.now();
     return this.config.accounts.filter(
       (account) =>
         account.provider === provider &&
+        !excluded.has(ref(account)) &&
         this.accounts().some(
           (row) =>
             row.provider === provider && row.id === account.id && row.available,
         ) &&
         (!model || !this.leases.has(ref(account))) &&
+        (!model || this.creditAvailable(account, now)) &&
         (this.cooldowns.get(ref(account) + "|" + model) || 0) <= Date.now(),
     );
   }
-  pick(prepared) {
-    let candidates = this.candidates(prepared.provider, prepared.payload.model);
+  creditAvailable(account, now = Date.now()) {
+    const profile = this.stores
+      .get(account.provider)
+      ?.records.find((row) => row.profile.id === account.id)?.profile;
+    const quota = profile?.quota;
+    const denial = this.depleted.get(ref(account));
+    // A successful balance refresh after a refusal can restore a topped-up account.
+    if (
+      denial &&
+      !(
+        quota?.remaining > 0 &&
+        !profile.quotaError &&
+        quota.fetchedAt > denial.at
+      ) &&
+      denial.until > now
+    )
+      return false;
+    return !(
+      Number.isFinite(quota?.remaining) &&
+      quota.remaining <= 0 &&
+      !profile.quotaError &&
+      quota.fetchedAt <= now &&
+      now - quota.fetchedAt < 300000
+    );
+  }
+  pick(prepared, excluded) {
+    let candidates = this.candidates(
+      prepared.provider,
+      prepared.payload.model,
+      excluded,
+    );
     if (!candidates.length)
       throw new ApiError(
         503,
         "no_available_accounts",
-        "没有可用的所选账号，请检查授权、冷却状态及在途请求。",
+        "没有可用的所选账号，请检查积分余额、授权、冷却状态及在途请求。",
       );
     const first = prepared.payload.messages.find(
       (message) => message.role === "user",
@@ -453,7 +486,7 @@ export class ApiGateway {
       return operation(await renew());
     }
   }
-  async models() {
+  async models(force = false) {
     const result = [];
     for (const provider of realms) {
       if (
@@ -461,7 +494,7 @@ export class ApiGateway {
       )
         continue;
       let cache = this.modelCache.get(provider);
-      if (!cache || cache.until < Date.now()) {
+      if (force || !cache || cache.until < Date.now()) {
         if (!this.modelPromises.has(provider)) {
           const account = this.candidates(provider)[0];
           if (!account)
@@ -482,6 +515,14 @@ export class ApiGateway {
                     (provider === "workbuddy-global" ? "global:" : "") +
                     model.id,
                   provider,
+                  ...(model.max_output_tokens
+                    ? {
+                        max_output_tokens: Math.min(
+                          model.max_output_tokens,
+                          this.config.maxOutputTokens,
+                        ),
+                      }
+                    : {}),
                 })),
               };
               this.modelCache.set(provider, cache);
@@ -586,23 +627,53 @@ export class ApiGateway {
     return this.snapshot();
   }
   authorize(req) {
+    const bearer =
+      typeof req.headers.authorization === "string" &&
+      /^Bearer /i.test(req.headers.authorization)
+        ? req.headers.authorization.slice(7)
+        : "";
+    const apiKey =
+      typeof req.headers["x-api-key"] === "string"
+        ? req.headers["x-api-key"]
+        : "";
     const expected = createHash("sha256").update(this.getKey()).digest(),
       provided = createHash("sha256")
-        .update(
-          typeof req.headers.authorization === "string"
-            ? req.headers.authorization.replace(/^Bearer /, "")
-            : "",
-        )
+        .update(bearer || apiKey)
         .digest();
     const count = req.rawHeaders.filter(
       (value, index) =>
-        index % 2 === 0 && value.toLowerCase() === "authorization",
+        index % 2 === 0 &&
+        ["authorization", "x-api-key"].includes(value.toLowerCase()),
     ).length;
     return (
-      count === 1 &&
-      req.headers.authorization?.startsWith("Bearer ") &&
+      count >= 1 &&
+      count <= 2 &&
+      req.rawHeaders.filter(
+        (v, i) => i % 2 === 0 && v.toLowerCase() === "authorization",
+      ).length <= 1 &&
+      req.rawHeaders.filter(
+        (v, i) => i % 2 === 0 && v.toLowerCase() === "x-api-key",
+      ).length <= 1 &&
+      (!req.headers.authorization || !!bearer) &&
+      (!(bearer && apiKey) || bearer === apiKey) &&
       timingSafeEqual(expected, provided)
     );
+  }
+  errorBody(error, protocol) {
+    return {
+      ...(protocol === "messages" ? { type: "error" } : {}),
+      error: {
+        message: error.message,
+        type:
+          protocol === "messages" && error.status === 401
+            ? "authentication_error"
+            : error.status === 400
+              ? "invalid_request_error"
+              : "api_error",
+        param: null,
+        code: error.code,
+      },
+    };
   }
   json(res, status, value) {
     if (res.destroyed || res.writableEnded) return;
@@ -663,7 +734,14 @@ export class ApiGateway {
   async handle(req, res) {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cache-Control", "no-store");
+    let protocol = "chat";
     try {
+      const url = new URL(req.url, "http://127.0.0.1");
+      const pathname = url.pathname
+        .replace(/^\/v1(?=\/|$)/, "")
+        .replace(/\/$/, "");
+      if (pathname === "/responses") protocol = "responses";
+      if (pathname === "/messages") protocol = "messages";
       const port = this.server?.address()?.port;
       if (
         !["127.0.0.1:" + port, "localhost:" + port].includes(
@@ -691,22 +769,29 @@ export class ApiGateway {
           "已达到本机 API 每分钟请求上限。",
           60,
         );
-      const pathname = new URL(req.url, "http://127.0.0.1").pathname;
       if (req.method === "GET" && pathname === "/healthz")
         return this.json(res, 200, {
           status: "ok",
           service: "workbuddy-switch-api",
         });
-      if (req.method === "GET" && pathname === "/v1/models")
-        return this.json(res, 200, await this.models());
-      if (req.method !== "POST" || pathname !== "/v1/chat/completions")
+      if (req.method === "GET" && pathname === "/models")
+        return this.json(
+          res,
+          200,
+          await this.models(url.searchParams.get("refresh") === "1"),
+        );
+      if (
+        req.method !== "POST" ||
+        !["/chat/completions", "/responses", "/messages"].includes(pathname)
+      )
         throw new ApiError(
           404,
           "not_found",
-          "API 路径不存在，仅支持 models 和 chat/completions。",
+          "API 路径不存在，支持 /v1/models、/v1/chat/completions、/v1/responses 和 /v1/messages。",
         );
-      const prepared = prepareApiRequest(
+      const prepared = prepareProtocolRequest(
         await this.body(req),
+        protocol,
         this.config.maxOutputTokens,
       );
       if (this.active.size >= this.config.maxConcurrency)
@@ -728,21 +813,14 @@ export class ApiGateway {
             );
       if (safe.retryAfter)
         res.setHeader("Retry-After", String(safe.retryAfter));
-      this.json(res, safe.status, {
-        error: {
-          message: safe.message,
-          type: "api_error",
-          param: null,
-          code: safe.code,
-        },
-      });
+      this.json(res, safe.status, this.errorBody(safe, protocol));
     } finally {
       if (!req.complete) req.resume();
     }
   }
   async chat(prepared, _req, res) {
-    const account = this.pick(prepared),
-      requestId = "chatcmpl-" + randomUUID(),
+    let account = this.pick(prepared);
+    const requestId = "chatcmpl-" + randomUUID(),
       started = Date.now(),
       controller = new AbortController();
     let finished;
@@ -769,77 +847,125 @@ export class ApiGateway {
       outputTokens: null,
       errorCode: "",
     };
-    let usage;
+    let usage,
+      outputStarted = false;
+    const attempted = new Set();
+    const adapter =
+      prepared.protocol !== "chat"
+        ? new ProtocolStream(prepared.protocol, prepared.model)
+        : null;
+    const write = async (text) => {
+      if (controller.signal.aborted || res.destroyed)
+        throw new ApiError(499, "request_cancelled", "请求连接已结束。");
+      if (res.write(text)) return;
+      await new Promise((resolve, reject) => {
+        const cleanup = () => {
+          res.off("drain", drain);
+          res.off("close", close);
+          controller.signal.removeEventListener("abort", close);
+        };
+        const drain = () => {
+          cleanup();
+          resolve();
+        };
+        const close = () => {
+          cleanup();
+          reject(new ApiError(499, "request_cancelled", "请求连接已结束。"));
+        };
+        res.once("drain", drain);
+        res.once("close", close);
+        controller.signal.addEventListener("abort", close, { once: true });
+        if (controller.signal.aborted || res.destroyed) close();
+      });
+    };
     try {
-      const response = await this.credential(account, (doc) =>
-        openApiChat(
-          doc,
-          prepared.payload,
-          account.conversationId,
-          this.request,
-          controller.signal,
-        ),
-      );
       const frames = [];
-      for await (const frame of apiChatFrames(
-        response,
-        prepared.model,
-        requestId,
-      )) {
-        if (controller.signal.aborted)
-          throw new ApiError(
-            499,
-            "request_cancelled",
-            "请求已停止，已产生的消耗以官方计费为准。",
+      for (;;) {
+        try {
+          const response = await this.credential(account, (doc) =>
+            openApiChat(
+              doc,
+              prepared.payload,
+              account.conversationId,
+              this.request,
+              controller.signal,
+            ),
           );
-        if (frame.usage) usage = frame.usage;
-        if (prepared.stream) {
-          if (!res.headersSent)
-            res.writeHead(200, {
-              "Content-Type": "text/event-stream; charset=utf-8",
-              "Cache-Control": "no-cache, no-transform",
-              "X-Accel-Buffering": "no",
-              "X-Request-Id": requestId,
-            });
-          if (frame.choices.length || prepared.includeUsage) {
-            const value = prepared.includeUsage
-              ? frame
-              : Object.fromEntries(
-                  Object.entries(frame).filter(([key]) => key !== "usage"),
-                );
-            if (!res.write("data: " + JSON.stringify(value) + "\n\n"))
-              await new Promise((resolve, reject) => {
-                const done = () => {
-                  res.off("drain", drain);
-                  res.off("close", close);
-                  controller.signal.removeEventListener("abort", close);
-                };
-                const drain = () => {
-                  done();
-                  resolve();
-                };
-                const close = () => {
-                  done();
-                  reject(
-                    new ApiError(499, "request_cancelled", "请求连接已结束。"),
-                  );
-                };
-                res.once("drain", drain);
-                res.once("close", close);
-                controller.signal.addEventListener("abort", close, {
-                  once: true,
+          for await (const frame of apiChatFrames(
+            response,
+            prepared.model,
+            requestId,
+          )) {
+            outputStarted = true;
+            if (controller.signal.aborted)
+              throw new ApiError(
+                499,
+                "request_cancelled",
+                "请求已停止，已产生的消耗以官方计费为准。",
+              );
+            if (frame.usage) usage = frame.usage;
+            const events = adapter?.push(frame);
+            if (prepared.stream) {
+              if (!res.headersSent)
+                res.writeHead(200, {
+                  "Content-Type": "text/event-stream; charset=utf-8",
+                  "Cache-Control": "no-cache, no-transform",
+                  "X-Accel-Buffering": "no",
+                  "X-Request-Id": requestId,
                 });
-              });
+              if (adapter) {
+                for (const event of events) await write(event);
+              } else if (frame.choices.length || prepared.includeUsage) {
+                const value = prepared.includeUsage
+                  ? frame
+                  : Object.fromEntries(
+                      Object.entries(frame).filter(([key]) => key !== "usage"),
+                    );
+                await write("data: " + JSON.stringify(value) + "\n\n");
+              }
+            } else if (!adapter) frames.push(frame);
           }
-        } else frames.push(frame);
+          break;
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 402) {
+            this.depleted.set(ref(account), {
+              at: Date.now(),
+              until: Date.now() + 300000,
+            });
+            // Only a definite refusal before any output is safe to replay.
+            if (
+              !outputStarted &&
+              !res.headersSent &&
+              !controller.signal.aborted
+            ) {
+              attempted.add(ref(account));
+              let next;
+              try {
+                next = this.pick(prepared, attempted);
+              } catch {
+                throw error;
+              }
+              this.leases.delete(ref(account));
+              account = next;
+              this.leases.add(ref(account));
+              entry.accountId = account.id;
+              continue;
+            }
+          }
+          throw error;
+        }
       }
-      if (prepared.stream) res.end("data: [DONE]\n\n");
-      else {
+      if (prepared.stream) {
+        if (adapter) for (const event of adapter.finish()) await write(event);
+        res.end(adapter ? undefined : "data: [DONE]\n\n");
+      } else {
         res.setHeader("X-Request-Id", requestId);
         this.json(
           res,
           200,
-          aggregateApiFrames(frames, prepared.model, requestId),
+          adapter
+            ? adapter.result()
+            : aggregateApiFrames(frames, prepared.model, requestId),
         );
       }
       entry.status = "ok";
@@ -870,27 +996,16 @@ export class ApiGateway {
       if (res.headersSent) {
         if (!res.destroyed)
           res.end(
-            "data: " +
-              JSON.stringify({
-                error: {
-                  message: safe.message,
-                  type: "api_error",
-                  code: safe.code,
-                },
-              }) +
-              "\n\n",
+            adapter
+              ? adapter.error(safe)
+              : "data: " +
+                  JSON.stringify(this.errorBody(safe, prepared.protocol)) +
+                  "\n\n",
           );
       } else {
         if (safe.retryAfter)
           res.setHeader("Retry-After", String(safe.retryAfter));
-        this.json(res, safe.status, {
-          error: {
-            message: safe.message,
-            type: "api_error",
-            param: null,
-            code: safe.code,
-          },
-        });
+        this.json(res, safe.status, this.errorBody(safe, prepared.protocol));
       }
     } finally {
       clearTimeout(timer);

@@ -12,6 +12,7 @@ export function fixtureState(): Snapshot {
     autoCapture: false,
     refreshSeconds: 300,
     restartAfterSwitch: true,
+    autoSwitchOnZero: false,
     expiryWarningDays: 7,
     lowBalanceThreshold: 20,
     notifications: true,

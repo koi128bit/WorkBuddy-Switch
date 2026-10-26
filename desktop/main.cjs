@@ -477,6 +477,14 @@ async function start() {
     request: (url, options) => net.fetch(url, options),
     onChange: changed,
   });
+  for (const [provider, target] of workbuddyStores)
+    target.canAutoSwitch = () =>
+      store.settings.activeProvider === provider &&
+      !quitGate?.pending &&
+      !apiGateway.active.size &&
+      ![...workbuddyStores.values()].some(
+        (other) => other !== target && other.busy,
+      );
   try {
     await apiGateway.init();
   } catch {
@@ -489,7 +497,7 @@ async function start() {
   apiHandle("api-start", () => apiGateway.start());
   apiHandle("api-stop", () => apiGateway.stop());
   apiHandle("api-rotate", () => apiGateway.rotateKey());
-  apiHandle("api-models", () => apiGateway.models());
+  apiHandle("api-models", () => apiGateway.models(true));
   apiHandle("api-test", (model) => apiGateway.testChat(string(model, 180)));
   apiHandle("api-copy", (kind) => {
     const base = apiGateway.snapshot().baseUrl;
@@ -1191,13 +1199,18 @@ function updateTray() {
 }
 function scheduleRefresh() {
   clearInterval(refreshTimer);
-  if (!store.settings.refreshSeconds) return;
+  const interval = store.settings.autoSwitchOnZero
+    ? Math.min(store.settings.refreshSeconds || 60, 60)
+    : store.settings.refreshSeconds;
+  if (!interval) return;
   refreshTimer = setInterval(async () => {
-    if (store.busy || tickBusy || quitGate?.pending || !store.records.length)
-      return;
+    if (store.busy || tickBusy || quitGate?.pending) return;
     tickBusy = true;
     try {
-      await store.refreshQuotas();
+      for (const [provider] of workbuddyStores) {
+        const target = scopedWorkBuddy(provider);
+        if (target.records.length && !target.busy) await target.refreshQuotas();
+      }
       notifyBalances();
       updateTray();
     } catch (e) {
@@ -1206,7 +1219,7 @@ function scheduleRefresh() {
       tickBusy = false;
       quitGate?.changed();
     }
-  }, store.settings.refreshSeconds * 1000);
+  }, interval * 1000);
 }
 function scheduleAutomation() {
   clearInterval(automationTimer);

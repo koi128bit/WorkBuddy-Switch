@@ -21,8 +21,8 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
     [error, setError] = useState(""),
     [message, setMessage] = useState(""),
     [rotate, setRotate] = useState(false);
-  const [models, setModels] = useState<{ id: string }[]>([]),
-    [model, setModel] = useState("fast-model"),
+  const [models, setModels] = useState<{ id: string; name?: string }[]>([]),
+    [model, setModel] = useState("auto"),
     [reply, setReply] = useState("");
   useEffect(() => {
     let alive = true,
@@ -182,7 +182,7 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
           </div>
         </div>
         <p className="quiet-note">
-          OpenAI 兼容 · 仅监听 127.0.0.1 ·
+          OpenAI / Anthropic 兼容 · 仅监听 127.0.0.1 ·
           随应用退出停止。调用会消耗所选账号积分，实际计费由官方确定。
         </p>
       </section>
@@ -404,10 +404,12 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
         <section className="settings-card api-config">
           <SectionHeader
             title="接入与验证"
-            detail="支持 Chat Completions、流式回复、工具调用及图像输入；模型能力以官方为准。"
+            detail="支持 Chat Completions、Responses 和 Anthropic Messages，包含流式回复、工具调用与图片输入。"
           />
           <ol className="api-steps">
-            <li>在客户端选择 OpenAI 兼容服务。</li>
+            <li>
+              OpenCode 选择 OpenAI Compatible（@ai-sdk/openai-compatible）。
+            </li>
             <li>填入上方 Base URL，粘贴复制的 API Key。</li>
             <li>
               获取模型后选择模型；国际版使用 <code>global:</code> 前缀。
@@ -423,7 +425,9 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
               >
                 {(models.length ? models : [{ id: model }]).map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.id}
+                    {item.name && item.name !== item.id
+                      ? `${item.name} · ${item.id}`
+                      : item.id}
                   </option>
                 ))}
               </select>
@@ -437,8 +441,12 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
                   (value) => {
                     setModels(value.data);
                     if (!value.data.some((item) => item.id === model))
-                      setModel(value.data[0]?.id || "fast-model");
-                    setMessage("已读取 " + value.data.length + " 个模型。");
+                      setModel(value.data[0]?.id || "auto");
+                    setMessage(
+                      "已重新查询官方目录，读取 " +
+                        value.data.length +
+                        " 个当前可用模型。",
+                    );
                   },
                 )
               }
@@ -474,15 +482,31 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
               先将复制的 API Key 配置为 <code>WORKBUDDY_API_KEY</code>{" "}
               环境变量。
             </p>
-            <pre>{`curl '${status.baseUrl}/chat/completions' \\\n  -H "Authorization: Bearer $WORKBUDDY_API_KEY" \\\n  -H 'Content-Type: application/json' \\\n  -d '{"model":"fast-model","messages":[{"role":"user","content":"你好"}],"max_tokens":256}'`}</pre>
+            <pre>{`curl '${status.baseUrl}/chat/completions' \\\n  -H "Authorization: Bearer $WORKBUDDY_API_KEY" \\\n  -H 'Content-Type: application/json' \\\n  -d '{"model":"auto","messages":[{"role":"user","content":"你好"}],"max_tokens":256}'`}</pre>
             <Button disabled={!!busy} onClick={() => copy("curl")}>
               复制示例
             </Button>
           </details>
           <p className="quiet-note">
-            当前仅提供 /v1/models 和
-            /v1/chat/completions。上游拒绝通道、余额不足或限流时会返回明确错误；流中断后不会自动重发付费请求。
+            模型来源于当前地区的官方目录；获取模型会强制刷新，不发送对话。积分为零的账号会自动跳过，明确积分不足时切换同地区已选账号。输出
+            Token 按本机上限截取；流中断后不会自动重发。
           </p>
+          <details className="api-example">
+            <summary>其他接口格式的地址</summary>
+            <p>
+              Responses：使用相同 Base URL，请求 <code>/responses</code>，设置{" "}
+              <code>store:false</code> 并发送完整历史。
+            </p>
+            <p>
+              Anthropic Messages：Base URL 填{" "}
+              <code>{status.baseUrl.replace(/\/v1$/, "")}</code>，客户端会请求{" "}
+              <code>/v1/messages</code>；同一密钥支持 Bearer 与 x-api-key。
+            </p>
+            <p>
+              工具由调用客户端执行。暂不支持服务端托管工具、后台任务和
+              previous_response_id；模型能力与官方账号权限一致。
+            </p>
+          </details>
         </section>
       </div>
       <section className="settings-card api-history">

@@ -42,11 +42,21 @@ const fields = new Set([
   "conversation_id",
   "user",
   "n",
+  "metadata",
+  "store",
+  "service_tier",
+  "prompt_cache_key",
+  "prompt_cache_retention",
+  "safety_identifier",
+  "logprobs",
+  "top_logprobs",
 ]);
 export function prepareApiRequest(raw, limit) {
   if (!record(raw)) fail("请求须为 JSON 对象。");
   if (Object.keys(raw).some((key) => !fields.has(key)))
-    fail("请求含暂不支持的字段，请使用 Chat Completions 参数。");
+    fail("请求含不支持的参数；请使用对应接口的请求格式。");
+  if (raw.logprobs || raw.top_logprobs)
+    fail("上游暂不提供 logprobs，请关闭此选项。");
   const global =
     typeof raw.model === "string" && raw.model.startsWith("global:");
   const model = global ? raw.model.slice(7) : raw.model;
@@ -166,14 +176,13 @@ export function prepareApiRequest(raw, limit) {
   )
     fail("conversation_id 无效。");
   const max = raw.max_tokens ?? raw.max_completion_tokens ?? limit;
-  if (!Number.isSafeInteger(max) || max < 1 || max > limit)
-    fail("max_tokens 超出本机 API 配置上限（" + limit + "）。");
+  if (!Number.isSafeInteger(max) || max < 1) fail("max_tokens 应为正整数。");
   const payload = {
     model,
     messages,
     stream: true,
     stream_options: { include_usage: true },
-    max_tokens: max,
+    max_tokens: Math.min(max, limit),
     agent: "cli",
   };
   for (const [key, low, high] of [
@@ -300,7 +309,9 @@ function endpoint(document) {
       "credential_required",
       "请先在应用内完成官方网页登录授权。",
     );
-  return origin === "https://www.workbuddy.ai"
+  return ["https://www.workbuddy.cn", "https://www.workbuddy.ai"].includes(
+    origin,
+  )
     ? origin
     : "https://copilot.tencent.com";
 }
@@ -355,7 +366,10 @@ function businessError(status, body, retryHeader) {
       "upstream_auth_expired",
       "官方授权已失效，请在应用内重新登录。",
     );
-  if (status === 402)
+  if (
+    status === 402 ||
+    ["14001", "14002", "14012", "14013", "14014", "14018"].includes(code)
+  )
     return new ApiError(
       402,
       "insufficient_credits",
@@ -446,9 +460,9 @@ export async function fetchApiModels(document, request, signal) {
       const catalog = data.data?.models;
       if (!Array.isArray(catalog))
         throw new ApiError(502, "invalid_model_list", "模型目录格式无法识别。");
-      const allowed = route.startsWith("/console")
-        ? data.data?.agents?.find((agent) => agent.name === "cli")?.models
-        : null;
+      const allowed =
+        data.data?.agents?.find((agent) => agent.name === "cli")?.models ??
+        data.data?.availableModels;
       const seen = new Set();
       const models = catalog
         .filter((model) => {
@@ -456,11 +470,24 @@ export async function fetchApiModels(document, request, signal) {
             identifier(model?.id) &&
             !model.disabled &&
             !seen.has(model.id) &&
-            (!allowed || allowed.includes(model.id)) &&
+            (!Array.isArray(allowed) ||
+              allowed.some(
+                (value) =>
+                  (typeof value === "string" ? value : value?.id) === model.id,
+              )) &&
             !/^(nes-|completion-|codewise-)/.test(model.id) &&
             (!Number.isFinite(model.maxOutputTokens) ||
               model.maxOutputTokens > 256) &&
-            !model.tags?.includes("text-to-image");
+            !model.tags?.some((tag) =>
+              [
+                "text-to-image",
+                "text-to-video",
+                "image-to-video",
+                "image-generation",
+                "video-generation",
+              ].includes(tag),
+            ) &&
+            !/(?:^|[-_])(?:video|image)(?:$|[-_])/.test(model.id);
           if (eligible) seen.add(model.id);
           return eligible;
         })

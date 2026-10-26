@@ -17,6 +17,7 @@ export interface Settings {
   autoCapture: boolean;
   refreshSeconds: number;
   restartAfterSwitch: boolean;
+  autoSwitchOnZero: boolean;
   expiryWarningDays: number;
   lowBalanceThreshold: number;
   notifications: boolean;
