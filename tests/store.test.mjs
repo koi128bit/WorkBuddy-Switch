@@ -81,6 +81,40 @@ async function fixture(t) {
     },
   };
 }
+test("desktop zero-credit switching is opt-in, requires fresh successful balances and respects in-flight work", async (t) => {
+  const f = await fixture(t);
+  await f.store.capture(parseAuth(auth("a")));
+  await f.store.capture(parseAuth(auth("b")));
+  await fs.writeFile(f.store.paths.auth, auth("a"));
+  const a = f.store.records.find(r=>r.profile.id==="a").profile;
+  const b = f.store.records.find(r=>r.profile.id==="b").profile;
+  a.quota = { remaining:0, fetchedAt:Date.now() };
+  b.quota = { remaining:100, fetchedAt:Date.now() };
+  assert.equal(await f.store.maybeAutoSwitch(), null);
+  f.store.settings.autoSwitchOnZero = true;
+  assert.equal(await f.store.maybeAutoSwitch(()=>false), null);
+  a.quotaError = "query failed";
+  assert.equal(await f.store.maybeAutoSwitch(), null);
+  a.quotaError = null;
+  a.quota.fetchedAt -= 3600000;
+  assert.equal(await f.store.maybeAutoSwitch(), null);
+  a.quota.fetchedAt = Date.now();
+  assert.equal(await f.store.maybeAutoSwitch(), "b");
+  assert.equal((await f.store.active()).id,"b");
+});
+test("desktop automatic switching never selects exhausted, unknown or failed quota candidates", async t => {
+  const f=await fixture(t);
+  await f.store.capture(parseAuth(auth("a")));
+  await f.store.capture(parseAuth(auth("b")));
+  await fs.writeFile(f.store.paths.auth,auth("a"));
+  f.store.settings.autoSwitchOnZero=true;
+  f.store.records.find(r=>r.profile.id==="a").profile.quota={remaining:0,fetchedAt:Date.now()};
+  for(const quota of [null,{remaining:0,fetchedAt:Date.now()},{remaining:10,fetchedAt:Date.now()-3600000}]){
+    f.store.records.find(r=>r.profile.id==="b").profile.quota=quota;
+    assert.equal(await f.store.maybeAutoSwitch(),null);
+  }
+  assert.equal((await f.store.active()).id,"a");
+});
 test("capture persists encryption and public snapshot has no access token", async (t) => {
   const f = await fixture(t);
   await fs.writeFile(f.store.paths.auth, auth("a"));
