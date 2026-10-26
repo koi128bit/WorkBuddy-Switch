@@ -41,7 +41,6 @@ textarea {
 }
 button:focus-visible,
 input:focus-visible,
-select:focus-visible,
 textarea:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
@@ -468,6 +467,19 @@ select {
   min-height: 30px;
   padding: 4px 25px 4px 9px;
   font-size: 12px;
+}
+/* Windows paints the native select popup on the system light panel, so options
+   without their own colors show light text on a light list. Style both the
+   panel and the text, and keep the closed control free of a focus ring. */
+select option,
+select optgroup {
+  background-color: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+select:focus,
+select:focus-visible {
+  outline: none;
 }
 input[type="checkbox"] {
   width: 15px;
@@ -2091,7 +2103,7 @@ body:has(.tray-panel) {
 }
 .provider-switcher select {
   width: 100%;
-  padding: 6px 8px;
+  padding: 6px 26px 6px 9px;
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--line);
