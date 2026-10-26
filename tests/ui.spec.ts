@@ -7,6 +7,12 @@ import {
 } from "./fixtures";
 import type { TaskRun } from "../src/types";
 
+declare global {
+  interface Window {
+    workbuddyFixture: Window["workbuddy"];
+  }
+}
+
 test("glass appearance can be disabled without changing dark mode or losing settings", async ({
   page,
 }) => {
@@ -154,8 +160,8 @@ test("overview handles absent usage, quotas and API state without manufactured c
       account.quota = null;
       account.quotaError = null;
     });
-    window.workbuddy.snapshot = async () => structuredClone(state);
-    window.workbuddy.usage = async () => ({
+    window.workbuddyFixture.snapshot = async () => structuredClone(state);
+    window.workbuddyFixture.usage = async () => ({
       total: {
         input: 0,
         output: 0,
@@ -174,7 +180,7 @@ test("overview handles absent usage, quotas and API state without manufactured c
       scannedFiles: 0,
       warnings: [],
     });
-    window.workbuddy.apiStatus = async () => {
+    window.workbuddyFixture.apiStatus = async () => {
       throw new Error("unavailable");
     };
     await window.workbuddy.saveSettings(state.settings);
@@ -313,7 +319,7 @@ test("API test conversation can be stopped while its upstream request is still p
       ],
     };
     let finish: (value: { model: string; message: string }) => void = () => {};
-    Object.assign(window.workbuddy, {
+    Object.assign(window.workbuddyFixture, {
       apiStatus: async () => structuredClone(value),
       apiTest: () =>
         new Promise((resolve) => {
@@ -375,7 +381,7 @@ test("local API page saves explicit account scope, controls the listener and nev
         cooldownUntil: 0,
       })),
     };
-    Object.assign(window.workbuddy, {
+    Object.assign(window.workbuddyFixture, {
       apiStatus: async () => structuredClone(value),
       apiSave: async (config: typeof value.config) => {
         value.config = config;
@@ -464,8 +470,8 @@ test("extended task confirmation separates compatibility records from paid actio
   page,
 }) => {
   await page.evaluate(() => {
-    const previous = window.workbuddy.prepareTasks;
-    window.workbuddy.prepareTasks = async (ids, options) => {
+    const previous = window.workbuddyFixture.prepareTasks;
+    window.workbuddyFixture.prepareTasks = async (ids, options) => {
       const plan = await previous(ids, options);
       return {
         ...plan,
@@ -1044,7 +1050,19 @@ test.beforeEach(async ({ page }) => {
           return () => listeners.delete(callback);
         },
       };
-      Object.defineProperty(window, "workbuddy", { value: bridge });
+      // Keep native-style immutable API functions stable while tests configure
+      // the simulated main-process handlers behind them.
+      const nativeBridge = Object.freeze(
+        Object.fromEntries(
+          Object.keys(bridge).map((name) => [
+            name,
+            (...args: unknown[]) =>
+              Reflect.apply(bridge[name as keyof typeof bridge], bridge, args),
+          ]),
+        ),
+      );
+      Object.defineProperty(window, "workbuddy", { value: nativeBridge });
+      Object.defineProperty(window, "workbuddyFixture", { value: bridge });
     },
     {
       snapshot: fixtureState(),
@@ -1147,7 +1165,7 @@ test("preserving a newer domestic login unblocks switching while keeping recover
   page,
 }) => {
   await page.evaluate(async () => {
-    const bridge = window.workbuddy,
+    const bridge = window.workbuddyFixture,
       state = await bridge.snapshot();
     state.settings.activeProvider = "trae-cn";
     state.editors!["trae-cn"].recoveryPending = true;
@@ -1337,9 +1355,9 @@ test("backup export requires matching passphrases of at least eight characters",
 test("browser authorization works with a frozen bridge without switching the current client identity", async ({
   page,
 }) => {
-  await page.evaluate(() => {
-    Object.freeze(window.workbuddy);
-  });
+  expect(await page.evaluate(() => Object.isFrozen(window.workbuddy))).toBe(
+    true,
+  );
   await page
     .getByRole("navigation", { name: "主导航" })
     .getByRole("button", { name: "账号" })
@@ -1472,7 +1490,7 @@ test("native popup layout shows the original icon, credits and reward actions", 
     animations: "disabled",
   });
   await page.evaluate(async () => {
-    const bridge = window.workbuddy;
+    const bridge = window.workbuddyFixture;
     const snapshot = await bridge.snapshot();
     snapshot.accounts = Array.from({ length: 12 }, (_, index) => ({
       ...snapshot.accounts[index % 3],

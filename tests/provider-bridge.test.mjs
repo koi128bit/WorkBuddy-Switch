@@ -9,8 +9,8 @@ afterEach(() => {
   else delete globalThis.window;
 });
 
-function expose(methods, frozen = true) {
-  const bridge = frozen ? Object.freeze(methods) : methods;
+function expose(methods) {
+  const bridge = Object.freeze(methods);
   globalThis.window = { workbuddy: bridge };
   return bridge;
 }
@@ -120,11 +120,20 @@ test("cached provider bridges remain bound to the source that created them", asy
   assert.equal(await oldGlobal.startLogin(), "old:workbuddy-global");
 });
 
-test("updates to a mutable development bridge remain observable", async () => {
-  const source = expose({ startLogin: async () => "old" }, false);
+test("non-enumerable native methods remain callable through the provider adapter", async () => {
+  const snapshot = { accounts: [] };
+  expose(
+    Object.defineProperties(
+      {},
+      {
+        startLogin: { value: async (provider) => `login:${provider}` },
+        snapshot: { value: async () => snapshot },
+      },
+    ),
+  );
   const bridge = apiFor("workbuddy");
-  source.startLogin = async (provider) => `updated:${provider}`;
-  assert.equal(await bridge.startLogin(), "updated:workbuddy");
+  assert.equal(await bridge.startLogin(), "login:workbuddy");
+  assert.equal(await bridge.snapshot(), snapshot);
 });
 
 test("missing preload bridges are handled until the bridge becomes available", async () => {
