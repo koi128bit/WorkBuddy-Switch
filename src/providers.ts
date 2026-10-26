@@ -69,8 +69,11 @@ export function apiFor(provider: Provider): Bridge {
   }
   if (!native) return native;
   if (cache.has(provider)) return cache.get(provider)!;
-  const bridge = new Proxy(native, {
-    get(target, key: keyof Bridge) {
+  const target = native;
+  // Electron freezes the native bridge. A separate target allows scoped wrappers
+  // without violating the native properties' non-writable descriptors.
+  const bridge = new Proxy({ ...target }, {
+    get(_facade, key: keyof Bridge) {
       if (loginMethods.has(key))
         return (...args: unknown[]) =>
           (target[key] as (...values: unknown[]) => unknown)(...args, provider);
