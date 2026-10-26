@@ -735,9 +735,19 @@ test.beforeEach(async ({ page }) => {
       const changed = () => listeners.forEach((callback) => callback());
       let finishTasks: ((run: TaskRun) => void) | undefined;
       let planCounter = 0;
+      const unconfiguredApi = async () => {
+        throw new Error("API test handler has not been configured");
+      };
       const bridge = {
         snapshot: async () => structuredClone(snapshot),
         apiStatus: async () => structuredClone(apiStatus),
+        apiSave: unconfiguredApi,
+        apiStart: unconfiguredApi,
+        apiStop: unconfiguredApi,
+        apiRotate: unconfiguredApi,
+        apiCopy: unconfiguredApi,
+        apiModels: unconfiguredApi,
+        apiTest: unconfiguredApi,
         prepareTasks: async (
           ids: string[],
           options: { includeAI: boolean; maxCalls: number; prompt: string },
