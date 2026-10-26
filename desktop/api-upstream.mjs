@@ -46,6 +46,7 @@ const fields = new Set([
   "store",
   "service_tier",
   "prompt_cache_key",
+  "promptCacheKey",
   "prompt_cache_retention",
   "safety_identifier",
   "logprobs",
@@ -220,8 +221,8 @@ export function prepareApiRequest(raw, limit) {
     payload.stop = raw.stop;
   }
   if (raw.tools !== undefined) {
-    if (!Array.isArray(raw.tools) || raw.tools.length > 32)
-      fail("tools 最多包含 32 个函数。");
+    if (!Array.isArray(raw.tools) || raw.tools.length > 128)
+      fail("tools 最多包含 128 个函数。");
     payload.tools = raw.tools.map((tool) => {
       if (
         tool?.type !== "function" ||
