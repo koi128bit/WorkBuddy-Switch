@@ -70,18 +70,34 @@ test("activity catalog covers current desktop, template, library, team, and targ
 });
 
 test("planning reserves missing or zero targets without making those tasks executable", () => {
-  for(const progress of [{current:null,target:null},{current:0,target:0}]){
-    const input={...task("Expert_team_use_3"),...progress,status:"not_accepted"};
-    const plan=api.planningCandidate(input);
-    assert.equal(plan.deferred,true);
-    assert.equal(plan.candidate.target,3);
+  for (const progress of [
+    { current: null, target: null },
+    { current: 0, target: 0 },
+  ]) {
+    const input = {
+      ...task("Expert_team_use_3"),
+      ...progress,
+      status: "not_accepted",
+    };
+    const plan = api.planningCandidate(input);
+    assert.equal(plan.deferred, true);
+    assert.equal(plan.candidate.target, 3);
     assert.ok(api.activitySpec(plan.candidate));
-    assert.equal(api.activitySpec(input),null);
-    assert.match(api.pendingReason(input),/已适配|官方/);
+    assert.equal(api.activitySpec(input), null);
+    assert.match(api.pendingReason(input), /已适配|官方/);
   }
 });
-test("new task previews use the official auto model instead of an obsolete quick-model alias",()=>{
-  assert.equal(api.activitySpec(task("RichMeow_Chat")).model,"auto");
+test("new task previews use the official auto model instead of an obsolete quick-model alias", () => {
+  assert.equal(api.activitySpec(task("RichMeow_Chat")).model, "auto");
+});
+test("skill tasks use the current installed-asset list and preserve official namespace metadata", async()=>{
+  const resources=await api.loadActivityResources(document,api.activitySpec(task("skill_1")),async(url,options)=>{
+    assert.equal(new URL(url).pathname,"/v2/user-asset/skill/get-list");
+    assert.equal(options.method,"GET");
+    return json({items:[{asset_id:"frontend-design",name:"frontend-design",source:"builtin",version:"1.2.0"}],total:1});
+  });
+  assert.equal(resources[0].id,"frontend-design");
+  assert.equal(resources[0].isOfficial,true);
 });
 
 test("activity records are bounded, sent only to official endpoints, and never locally mark tasks complete", async () => {
