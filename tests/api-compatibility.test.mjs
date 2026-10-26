@@ -21,6 +21,12 @@ test("legacy CN auth markers still use the current WorkBuddy product origin and 
   assert.equal(f.calls[0].url, "https://www.workbuddy.cn/v2/chat/completions");
   assert.equal(f.calls[0].options.headers["X-Domain"], "www.workbuddy.cn");
 });
+test("upstream refusals retain a safe business code without leaking private response bodies",async t=>{
+  const f=await fixture(t,async()=>Response.json({code:11199,message:"private-token-a private-client-prompt"},{status:400}));
+  const r=await f.send();const d=await r.json();
+  assert.equal(r.status,400);assert.match(d.error.message,/11199/);
+  assert.ok(!JSON.stringify(d).includes("private-token"));assert.ok(!JSON.stringify(d).includes("private-client-prompt"));
+});
 
 test("Responses parallel function history groups calls before their results", () => {
   const p = prepareProtocolRequest(
@@ -304,7 +310,10 @@ test("current account catalog excludes historical and media models and explicit 
     ["new-1", "global:new-1"],
   );
   assert.equal(r.data[0].max_output_tokens, 4096);
-  assert.equal(f.calls[0].url, "https://www.workbuddy.cn/v2/enterprises/personal/models");
+  assert.equal(
+    f.calls[0].url,
+    "https://www.workbuddy.cn/v2/enterprises/personal/models",
+  );
   version++;
   assert.equal((await f.gateway.models()).data[0].id, "new-1");
   assert.equal((await f.gateway.models(true)).data[0].id, "new-2");
