@@ -36,6 +36,37 @@ test("upstream refusals retain a safe business code without leaking private resp
   assert.ok(!JSON.stringify(d).includes("private-client-prompt"));
 });
 
+for (const [protocol, route, body] of [
+  ["chat", "/chat/completions", { messages: [{ role: "user", content: "hi" }] }],
+  ["responses", "/responses", { input: "hi", store: false }],
+  ["messages", "/messages", { messages: [{ role: "user", content: "hi" }], max_tokens: 64 }],
+]) {
+  test(`GLM-5.1 ${protocol} works without a client-specific reasoning default`, async (t) => {
+    const f = await fixture(t, async (_url, options) => {
+      const payload = JSON.parse(options.body);
+      return payload.reasoning_effort === "medium"
+        ? stream()
+        : Response.json({ code: 11150, message: "the reasoning effort value is not supported" }, { status: 400 });
+    });
+    const r = await post(f, "/v1" + route, { model: "glm-5.1", ...body });
+    assert.equal(r.status, 200);
+    assert.equal(JSON.parse(f.calls[0].options.body).reasoning_effort, "medium");
+  });
+}
+
+test("required GLM-5.1 defaults preserve explicit effort and do not enable reasoning on other models", () => {
+  const base = { messages: [{ role: "user", content: "hi" }] };
+  assert.equal(prepareProtocolRequest({ ...base, model: "glm-5.1", reasoning_effort: "high" }, "chat", 64).payload.reasoning_effort, "high");
+  for (const model of ["auto", "glm-5.3", "deepseek-v4.1-flash"])
+    assert.equal(prepareProtocolRequest({ ...base, model }, "chat", 64).payload.reasoning_effort, undefined);
+});
+
+test("GLM-5.1 refuses explicit thinking-off requests before any paid call", () => {
+  const base = { model: "glm-5.1", messages: [{ role: "user", content: "hi" }] };
+  for (const options of [{ reasoning_effort: "none" }, { thinking: { type: "disabled" } }])
+    assert.throws(() => prepareProtocolRequest({ ...base, ...options }, "chat", 64), /GLM-5\.1.*思考/);
+});
+
 test("Responses parallel function history groups calls before their results", () => {
   const p = prepareProtocolRequest(
     {
