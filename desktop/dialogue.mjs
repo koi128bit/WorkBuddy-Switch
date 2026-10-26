@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { apiOrigin } from "./quota.mjs";
+import { workBuddyOrigin } from "./quota.mjs";
 import { requestReward, RewardError } from "./rewards.mjs";
 const proofs = new WeakMap();
-const allowedModels = new Set(["fast-model", "glm-5.2"]);
+const allowedModels = new Set(["auto", "fast-model", "glm-5.2"]);
 export function dialogueSpec(task, now = Date.now()) {
   if (
     task.claimed ||
@@ -18,8 +18,8 @@ export function dialogueSpec(task, now = Date.now()) {
     return null;
   let model, modelName;
   if (task.code === "chat_5") {
-    model = "fast-model";
-    modelName = "快速模式";
+    model = "auto";
+    modelName = "官方自动模式";
   } else if (task.code === "Model_chat_GLM5.2") {
     model = "glm-5.2";
     modelName = "GLM-5.2";
@@ -32,8 +32,8 @@ export function dialogueSpec(task, now = Date.now()) {
       }).format(now),
     );
     if (hour >= 8 && hour < 23) return null;
-    model = "fast-model";
-    modelName = "快速模式";
+    model = "auto";
+    modelName = "官方自动模式";
   } else return null;
   return {
     model,
@@ -42,7 +42,7 @@ export function dialogueSpec(task, now = Date.now()) {
   };
 }
 function domesticOrigin(document) {
-  const origin = apiOrigin(document);
+  const origin = workBuddyOrigin(document);
   if (!new URL(origin).hostname.endsWith(".cn"))
     throw new RewardError("对话任务目前仅支持 WorkBuddy 国内版。", "input");
   if (!document.token)
@@ -82,38 +82,33 @@ export async function sendDialogue(
     startedAt = Date.now();
   let response;
   try {
-    response = await request(
-      (origin === "https://www.workbuddy.cn"
-        ? origin
-        : "https://copilot.tencent.com") + "/v2/chat/completions",
-      {
-        method: "POST",
-        redirect: "error",
-        signal: AbortSignal.timeout(60000),
-        headers: {
-          Authorization: `Bearer ${document.token}`,
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-          "User-Agent": "WorkBuddy-Switch",
-          "X-User-Id": document.id,
-          "X-Domain": new URL(origin).hostname,
-          "X-Product": "SaaS",
-          "X-Agent-Intent": "craft",
-          "X-Agent-Type": "main",
-          "X-Conversation-ID": conversationId,
-          "X-Request-ID": randomUUID(),
-          ...(expertId ? { "X-Expert-Id": expertId } : {}),
-        },
-        body: JSON.stringify({
-          model,
-          agent: "cli",
-          messages: [{ role: "user", content: prompt }],
-          stream: true,
-          stream_options: { include_usage: true },
-          max_tokens: 64,
-        }),
+    response = await request(origin + "/v2/chat/completions", {
+      method: "POST",
+      redirect: "error",
+      signal: AbortSignal.timeout(60000),
+      headers: {
+        Authorization: `Bearer ${document.token}`,
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+        "User-Agent": "WorkBuddy-Switch",
+        "X-User-Id": document.id,
+        "X-Domain": new URL(origin).hostname,
+        "X-Product": "SaaS",
+        "X-Agent-Intent": "craft",
+        "X-Agent-Type": "main",
+        "X-Conversation-ID": conversationId,
+        "X-Request-ID": randomUUID(),
+        ...(expertId ? { "X-Expert-Id": expertId } : {}),
       },
-    );
+      body: JSON.stringify({
+        model,
+        agent: "cli",
+        messages: [{ role: "user", content: prompt }],
+        stream: true,
+        stream_options: { include_usage: true },
+        max_tokens: 64,
+      }),
+    });
   } catch {
     throw new RewardError(
       "对话请求中断，消耗与结果尚未确认，已停止继续调用。",
@@ -285,7 +280,8 @@ export async function reportDialogue(
           rootRequestId: result.requestId,
           userId: document.id,
           requestModelId: result.model,
-          requestModelName: result.model === "glm-5.2" ? "GLM-5.2" : "快速模式",
+          requestModelName:
+            result.model === "glm-5.2" ? "GLM-5.2" : "官方自动模式",
           inputLength: result.inputLength,
           mode: "craft",
           agentName: "workbuddy-switch",

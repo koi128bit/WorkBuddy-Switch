@@ -1,6 +1,6 @@
 import os from "node:os";
 import { createHash, randomUUID } from "node:crypto";
-import { apiOrigin } from "./quota.mjs";
+import { workBuddyOrigin } from "./quota.mjs";
 import { RewardError } from "./rewards.mjs";
 import { sendDialogue, reportDialogue } from "./dialogue.mjs";
 import { setTimeout as delay } from "node:timers/promises";
@@ -71,11 +71,11 @@ export function activitySpec(task) {
     compatibility,
     requiresResource: ["expert", "team", "skill"].includes(entry[0]),
     remaining: Math.min(40, task.target - task.current),
-    model: entry[2] ? "fast-model" : null,
+    model: entry[2] ? "auto" : null,
     modelName: entry[2]
       ? compatibility
-        ? "快速模式 · 活动上报"
-        : "快速模式"
+        ? "官方自动模式 · 活动上报"
+        : "官方自动模式"
       : "兼容活动上报",
     ...(expertNames[task.code]
       ? {
@@ -94,7 +94,9 @@ export function activitySpec(task) {
 // must never be used as evidence of completion or eligibility.
 export function planningCandidate(task) {
   const deferred =
-    !Number.isSafeInteger(task.current) || !Number.isSafeInteger(task.target);
+    !Number.isSafeInteger(task.current) ||
+    !Number.isSafeInteger(task.target) ||
+    task.target <= 0;
   const known =
     Object.hasOwn(kinds, task.code) ||
     ["chat_5", "black_cat", "Model_chat_GLM5.2"].includes(task.code);
@@ -110,9 +112,10 @@ export function planningCandidate(task) {
       ...(deferred && known
         ? {
             current: Number.isSafeInteger(task.current) ? task.current : 0,
-            target: Number.isSafeInteger(task.target)
-              ? task.target
-              : (task.current ?? 0) + bound,
+            target:
+              Number.isSafeInteger(task.target) && task.target > 0
+                ? task.target
+                : (task.current ?? 0) + bound,
           }
         : {}),
     },
@@ -135,14 +138,16 @@ export function pendingReason(task) {
   if (
     (Object.hasOwn(kinds, task.code) ||
       ["chat_5", "Model_chat_GLM5.2"].includes(task.code)) &&
-    (!Number.isSafeInteger(task.current) || !Number.isSafeInteger(task.target))
+    (!Number.isSafeInteger(task.current) ||
+      !Number.isSafeInteger(task.target) ||
+      task.target <= 0)
   )
     return "该任务已适配，正在等待官方返回可执行进度；接取及前置任务解锁后会继续回读，不会把未知进度当作已完成。";
   return "此任务暂无已验证的自动执行方式，请按成长中心指引在官方客户端完成。";
 }
 
 function domestic(document) {
-  const origin = apiOrigin(document);
+  const origin = workBuddyOrigin(document);
   if (!new URL(origin).hostname.endsWith(".cn"))
     throw new RewardError("活动任务目前仅支持国内版账号。", "input");
   if (!document.token)
@@ -159,10 +164,7 @@ async function activityRequest(
   method = "POST",
 ) {
   const origin = domestic(document);
-  const host =
-    web || origin === "https://www.workbuddy.cn"
-      ? "https://www.workbuddy.cn"
-      : "https://copilot.tencent.com";
+  const host = origin;
   let response;
   try {
     response = await request(host + endpoint, {
@@ -180,6 +182,9 @@ async function activityRequest(
           ? browserAgent()
           : "WorkBuddy/" + activityProtocolVersion + " WorkBuddy-Switch",
         "X-Request-ID": randomUUID(),
+        ...(endpoint.startsWith("/v2/user-asset/skill/")
+          ? { "X-Submitted-From": "web" }
+          : {}),
         ...(web
           ? {
               "X-Client-Platform": "web",
@@ -292,7 +297,7 @@ export async function loadActivityResources(document, spec, request = fetch) {
   if (spec.kind === "skill") {
     const data = await activityRequest(
         document,
-        "/v2/user-asset/skill",
+        "/v2/user-asset/skill/get-list?page_no=1&page_size=100",
         null,
         request,
         false,
@@ -302,15 +307,28 @@ export async function loadActivityResources(document, spec, request = fetch) {
     if (!Array.isArray(rows))
       throw new RewardError("已安装技能列表返回格式无效。", "format");
     return rows.slice(0, 100).flatMap((raw) => {
-      const id = raw?.skill_id || raw?.id,
-        name = clean(raw?.name || raw?.display_name);
-      return resourceId(id) && name
+      const id = raw?.skill_id || raw?.asset_id || raw?.id,
+        name = clean(
+          raw?.name ||
+            raw?.display_name_zh ||
+            raw?.display_name ||
+            raw?.display_name_en,
+        );
+      return resourceId(id) &&
+        name &&
+        raw.enabled !== 0 &&
+        raw.enabled !== false &&
+        raw.disabled !== true
         ? [
             {
               id,
               name,
               type: "skill",
-              isOfficial: raw.is_official === true || raw.isOfficial === true,
+              isOfficial:
+                raw.is_official === true ||
+                raw.isOfficial === true ||
+                raw.source === "builtin" ||
+                raw.namespace === "official",
               version: clean(raw.skill_version || raw.version, 40) || undefined,
               fileCount:
                 Number.isSafeInteger(raw.file_count) &&
@@ -452,7 +470,7 @@ function activityEvents(action, result = null) {
           name: "活动任务体验",
           source: "manually",
           scheduleType: "once",
-          modelId: "fast-model",
+          modelId: "auto",
           modelIsThinking: true,
           connectorCount: 0,
           skills: "",
@@ -526,7 +544,7 @@ function conversationEvents(result, action) {
     parentConversationId: result.conversationId,
     traceId: result.requestId,
     requestModelId: result.model,
-    requestModelName: result.model === "glm-5.2" ? "GLM-5.2" : "fast-model",
+    requestModelName: result.model === "glm-5.2" ? "GLM-5.2" : "auto",
     mode: "craft",
     agentType: "main",
     agentName: "cli",
@@ -700,7 +718,7 @@ export async function executeActivity(
   const dialogue = await sendDialogue(
     document,
     {
-      model: action.model || "fast-model",
+      model: action.model || "auto",
       prompt: action.prompt,
       ...(["expert", "team"].includes(action.kind)
         ? { expertId: action.resource.id }

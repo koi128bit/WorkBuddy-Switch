@@ -332,6 +332,7 @@ export interface Bridge {
     data: {
       id: string;
       name?: string;
+      catalog_source?: string;
       context_window?: number;
       max_output_tokens?: number;
     }[];

@@ -108,7 +108,7 @@ export async function fixture(t, request) {
     request: async (url, options) => {
       calls.push({ url, options });
       if (request) return request(url, options);
-      if (url.endsWith("/v3/config"))
+      if (url.endsWith("/v2/enterprises/personal/models"))
         return Response.json({
           code: 0,
           data: {

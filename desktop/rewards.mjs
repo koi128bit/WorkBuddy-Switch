@@ -1,4 +1,4 @@
-import { apiOrigin, timestamp } from "./quota.mjs";
+import { workBuddyOrigin, timestamp } from "./quota.mjs";
 
 const prefix = "/activity/growth/buddy/travel";
 const success = (code) => [0, 200, "0", "200"].includes(code);
@@ -68,7 +68,7 @@ export async function requestReward(document, endpoint, method, body, request) {
       "签到和旅行活动目前仅支持国内版 WorkBuddy 账号。",
       "missing",
     );
-  const origin = apiOrigin(document);
+  const origin = workBuddyOrigin(document);
   const headers = {
     Authorization: `Bearer ${document.token}`,
     Accept: "application/json",

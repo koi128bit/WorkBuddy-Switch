@@ -90,14 +90,28 @@ test("planning reserves missing or zero targets without making those tasks execu
 test("new task previews use the official auto model instead of an obsolete quick-model alias", () => {
   assert.equal(api.activitySpec(task("RichMeow_Chat")).model, "auto");
 });
-test("skill tasks use the current installed-asset list and preserve official namespace metadata", async()=>{
-  const resources=await api.loadActivityResources(document,api.activitySpec(task("skill_1")),async(url,options)=>{
-    assert.equal(new URL(url).pathname,"/v2/user-asset/skill/get-list");
-    assert.equal(options.method,"GET");
-    return json({items:[{asset_id:"frontend-design",name:"frontend-design",source:"builtin",version:"1.2.0"}],total:1});
-  });
-  assert.equal(resources[0].id,"frontend-design");
-  assert.equal(resources[0].isOfficial,true);
+test("skill tasks use the current installed-asset list and preserve official namespace metadata", async () => {
+  const resources = await api.loadActivityResources(
+    document,
+    api.activitySpec(task("skill_1")),
+    async (url, options) => {
+      assert.equal(new URL(url).pathname, "/v2/user-asset/skill/get-list");
+      assert.equal(options.method, "GET");
+      return json({
+        items: [
+          {
+            asset_id: "frontend-design",
+            name: "frontend-design",
+            source: "builtin",
+            version: "1.2.0",
+          },
+        ],
+        total: 1,
+      });
+    },
+  );
+  assert.equal(resources[0].id, "frontend-design");
+  assert.equal(resources[0].isOfficial, true);
 });
 
 test("activity records are bounded, sent only to official endpoints, and never locally mark tasks complete", async () => {
@@ -379,7 +393,7 @@ test("resource normalization refuses unrelated or unsafe experts and reads only 
     document,
     api.activitySpec(task("skill_1")),
     async (url, options) => {
-      assert.ok(url.endsWith("/v2/user-asset/skill"));
+      assert.equal(new URL(url).pathname, "/v2/user-asset/skill/get-list");
       assert.equal(options.method, "GET");
       return json({
         skills: [

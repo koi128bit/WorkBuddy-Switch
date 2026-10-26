@@ -61,8 +61,8 @@ test("dialogue plans support only known real chat actions and honor official pro
   const day = Date.parse("2026-10-25T04:00:00Z"),
     night = Date.parse("2026-10-25T16:00:00Z");
   assert.deepEqual(api.dialogueSpec(task("chat_5", 2, 5), day), {
-    model: "fast-model",
-    modelName: "快速模式",
+    model: "auto",
+    modelName: "官方自动模式",
     remaining: 3,
   });
   assert.equal(
@@ -142,7 +142,7 @@ test("paid requests reject unconfirmed streams, errors, foreign accounts and arb
       ),
     (error) => !error.message.includes("fixture-secret"),
   );
-  for (const model of ["auto", "https://evil.test", ""])
+  for (const model of ["unknown-model", "https://evil.test", ""])
     await assert.rejects(
       () =>
         api.sendDialogue(document, { model, prompt: "你好" }, () => {

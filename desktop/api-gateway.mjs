@@ -297,6 +297,8 @@ export class ApiGateway {
         remaining: record.profile.quota?.remaining ?? null,
         cooldownUntil: Math.max(
           0,
+          this.depleted.get(ref({ provider, id: record.profile.id }))?.until ??
+            0,
           ...[...this.cooldowns]
             .filter(([key]) =>
               key.startsWith(ref({ provider, id: record.profile.id }) + "|"),
@@ -970,6 +972,7 @@ export class ApiGateway {
       }
       entry.status = "ok";
       entry.statusCode = 200;
+      this.lastError = "";
     } catch (error) {
       const safe = controller.signal.aborted
         ? new ApiError(
@@ -1050,7 +1053,7 @@ export class ApiGateway {
       finished();
     }
   }
-  async testChat(model = "fast-model") {
+  async testChat(model = "auto") {
     if (!this.snapshot().running) throw new Error("请先启动 API 服务。");
     if (typeof model !== "string" || model.length > 180)
       throw new Error("测试模型无效。");

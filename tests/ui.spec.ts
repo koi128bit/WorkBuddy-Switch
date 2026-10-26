@@ -402,7 +402,18 @@ test("local API page saves explicit account scope, controls the listener and nev
       apiRotate: async () => structuredClone(value),
       apiModels: async () => ({
         object: "list",
-        data: [{ id: "fast-model" }, { id: "global:fast-model" }],
+        data: [
+          {
+            id: "glm-5.3",
+            name: "GLM-5.3",
+            catalog_source: "/v2/enterprises/personal/models",
+          },
+          {
+            id: "deepseek-v4.1-flash",
+            name: "DeepSeek V4.1 Flash",
+            catalog_source: "/v2/enterprises/personal/models",
+          },
+        ],
       }),
       apiTest: async (model: string) => ({ model, message: "OK" }),
     });
@@ -434,7 +445,10 @@ test("local API page saves explicit account scope, controls the listener and nev
   expect(await page.locator("body").innerText()).not.toContain("sk-wbs-");
   await page.getByRole("button", { name: "获取模型", exact: true }).click();
   await expect(
-    page.getByRole("option", { name: "global:fast-model", exact: true }),
+    page.getByRole("option", {
+      name: "DeepSeek V4.1 Flash · deepseek-v4.1-flash",
+      exact: true,
+    }),
   ).toHaveCount(1);
   await page.getByRole("button", { name: "测试对话", exact: true }).click();
   await expect(page.getByText("OK", { exact: true })).toBeVisible();

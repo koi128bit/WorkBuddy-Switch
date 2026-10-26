@@ -121,6 +121,15 @@ export function apiOrigin(document) {
     : "https://www.codebuddy.cn";
 }
 
+// Old shared login files retain CodeBuddy domains. Keep their auth metadata
+// intact while routing WorkBuddy product features to the current product host.
+export function workBuddyOrigin(document) {
+  const origin = apiOrigin(document);
+  return origin === "https://www.workbuddy.ai"
+    ? origin
+    : "https://www.workbuddy.cn";
+}
+
 export async function fetchQuota(document, request = fetch) {
   if (!document.token)
     throw new Error(

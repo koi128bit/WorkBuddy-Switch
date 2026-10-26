@@ -443,9 +443,15 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
                     if (!value.data.some((item) => item.id === model))
                       setModel(value.data[0]?.id || "auto");
                     setMessage(
-                      "已重新查询官方目录，读取 " +
+                      (value.data.every(
+                        (item) =>
+                          item.catalog_source ===
+                          "/v2/enterprises/personal/models",
+                      )
+                        ? "已同步官方个人模型目录，读取 "
+                        : "已读取官方兼容目录，读取 ") +
                         value.data.length +
-                        " 个当前可用模型。",
+                        " 个模型；实际可用性以账号权限为准。",
                     );
                   },
                 )
@@ -454,6 +460,10 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
               获取模型
             </Button>
           </div>
+          <p className="quiet-note">
+            当前模型 ID：<code>{model}</code>。在 Agent 配置中使用此
+            ID，避免把界面显示名称当作模型标识。
+          </p>
           <p className="quiet-note">
             获取模型不发送对话。测试对话会发送一句短消息，输出最多 64
             Token，按官方计费。

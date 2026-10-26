@@ -421,14 +421,17 @@ export class ProtocolStream {
           id: item.id,
           role: "assistant",
           status: state,
-          content: [
-            {
-              type: "output_text",
-              text: item.text,
-              annotations: [],
-              logprobs: [],
-            },
-          ],
+          content:
+            status === "in_progress"
+              ? []
+              : [
+                  {
+                    type: "output_text",
+                    text: item.text,
+                    annotations: [],
+                    logprobs: [],
+                  },
+                ],
         };
   }
   startItem(item) {

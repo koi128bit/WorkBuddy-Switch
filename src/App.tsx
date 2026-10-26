@@ -1732,7 +1732,7 @@ function SettingsPage({
                 />
                 <Toggle
                   label="积分为 0 自动切换账号"
-                  description="每 30–60 秒检查当前所选地区的 WorkBuddy 账号，积分耗尽后正常退出客户端并切换到有积分的账号。会重启客户端，请先结束正在进行的对话；API 在途请求结束后才会切换。"
+                  description="每 30–60 秒检查当前所选地区的 WorkBuddy 账号，积分耗尽后正常退出并切换到有积分的账号，是否重启沿用切换设置。请先结束正在进行的对话；API 在途请求结束后才会切换。"
                   checked={settings.autoSwitchOnZero}
                   onChange={(v) => change("autoSwitchOnZero", v)}
                   disabled={disabled}

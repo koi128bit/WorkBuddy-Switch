@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { apiOrigin } from "./quota.mjs";
+import { workBuddyOrigin } from "./quota.mjs";
 
 export class ApiError extends Error {
   constructor(status, code, message, retryAfter = 0) {
@@ -303,28 +303,28 @@ export function prepareApiRequest(raw, limit) {
   };
 }
 function endpoint(document) {
-  const origin = apiOrigin(document);
+  const origin = workBuddyOrigin(document);
   if (!document.token)
     throw new ApiError(
       401,
       "credential_required",
       "请先在应用内完成官方网页登录授权。",
     );
-  return ["https://www.workbuddy.cn", "https://www.workbuddy.ai"].includes(
-    origin,
-  )
-    ? origin
-    : "https://copilot.tencent.com";
+  return origin;
 }
 function headers(document, conversationId) {
   return {
     Authorization: "Bearer " + document.token,
     "Content-Type": "application/json",
     Accept: "text/event-stream",
-    "User-Agent": "WorkBuddy-Switch/1.7 WorkBuddy/5.8.3",
+    "User-Agent": "WorkBuddy/5.8.3 WorkBuddy-Switch",
     "X-User-Id": document.id,
-    "X-Domain": new URL(apiOrigin(document)).hostname,
+    "X-Domain": new URL(workBuddyOrigin(document)).hostname,
     "X-Product": "SaaS",
+    "X-IDE-Type": "WorkBuddy",
+    "X-IDE-Name": "WorkBuddy",
+    "X-IDE-Version": "5.8.3",
+    "X-Requested-With": "XMLHttpRequest",
     "X-Agent-Intent": "craft",
     "X-Agent-Type": "main",
     "X-Conversation-ID": conversationId,
@@ -352,7 +352,7 @@ function businessError(status, body, retryHeader) {
   let code;
   try {
     const value = JSON.parse(body);
-    code = String(value.code ?? value.error?.code ?? "");
+    code = String(value.error?.code ?? value.code ?? "");
   } catch {}
   const retry = Math.min(3600, Math.max(1, Number(retryHeader) || 60));
   if (code === "11128" || status === 403)
@@ -377,14 +377,33 @@ function businessError(status, body, retryHeader) {
       "官方账号积分不足。",
       retry,
     );
-  if (status === 429 || code === "6004")
+  if (
+    status === 429 ||
+    [
+      "14003",
+      "6000",
+      "6001",
+      "6002",
+      "6003",
+      "6004",
+      "6005",
+      "6006",
+      "6007",
+      "6008",
+      "rate_limit_exceeded",
+      "insufficient_quota",
+    ].includes(code)
+  )
     return new ApiError(
       429,
       "upstream_rate_limit",
       "上游模型使用量或请求频率已达到限制。",
       retry,
     );
-  if (status === 404 || ["11102", "11158"].includes(code))
+  if (
+    status === 404 ||
+    ["11102", "11158", "model_not_found", "unsupported_model"].includes(code)
+  )
     return new ApiError(
       404,
       "model_not_available",
@@ -394,7 +413,10 @@ function businessError(status, body, retryHeader) {
   return new ApiError(
     status >= 400 && status < 500 ? 400 : 502,
     "upstream_error",
-    "官方服务未完成本次请求，请检查模型、输入和服务状态。",
+    "官方服务未完成本次请求（HTTP " +
+      status +
+      (/^\d{1,8}$/.test(code) ? "，官方代码 " + code : "") +
+      "），请检查模型、输入和服务状态。",
   );
 }
 export async function openApiChat(
@@ -440,7 +462,12 @@ export async function fetchApiModels(document, request, signal) {
       },
     };
   let failure;
-  for (const route of ["/v3/config", "/console/enterprises/personal/models"]) {
+  for (const route of [
+    "/v2/enterprises/personal/models",
+    "/console/enterprises/personal/config/models",
+    "/console/enterprises/personal/models",
+    "/v3/config",
+  ]) {
     try {
       const response = await request(origin + route, options),
         raw = await boundedText(response, 2 * 1024 * 1024);
@@ -461,15 +488,18 @@ export async function fetchApiModels(document, request, signal) {
       const catalog = data.data?.models;
       if (!Array.isArray(catalog))
         throw new ApiError(502, "invalid_model_list", "模型目录格式无法识别。");
+      const agents = data.data?.agents ?? data.data?.agent;
       const allowed =
-        data.data?.agents?.find((agent) => agent.name === "cli")?.models ??
-        data.data?.availableModels;
+        (Array.isArray(agents)
+          ? agents.find((agent) => agent.name === "cli")?.models
+          : agents?.models) ?? data.data?.availableModels;
       const seen = new Set();
       const models = catalog
         .filter((model) => {
           const eligible =
             identifier(model?.id) &&
             !model.disabled &&
+            model.enabled !== false &&
             !seen.has(model.id) &&
             (!Array.isArray(allowed) ||
               allowed.some(
@@ -498,6 +528,7 @@ export async function fetchApiModels(document, request, signal) {
             object: "model",
             created: 0,
             owned_by: "workbuddy",
+            catalog_source: route,
             ...(typeof model.name === "string"
               ? { name: model.name.slice(0, 160) }
               : {}),
@@ -520,7 +551,11 @@ export async function fetchApiModels(document, request, signal) {
       return models;
     } catch (error) {
       failure = error;
-      if ([401, 403, 429].includes(error.status)) throw error;
+      if (
+        [401, 429].includes(error.status) ||
+        (error.status === 403 && route === "/v3/config")
+      )
+        throw error;
     }
   }
   throw failure instanceof ApiError
