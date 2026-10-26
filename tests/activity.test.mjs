@@ -80,6 +80,9 @@ test("planning reserves missing or zero targets without making those tasks execu
     assert.match(api.pendingReason(input),/已适配|官方/);
   }
 });
+test("new task previews use the official auto model instead of an obsolete quick-model alias",()=>{
+  assert.equal(api.activitySpec(task("RichMeow_Chat")).model,"auto");
+});
 
 test("activity records are bounded, sent only to official endpoints, and never locally mark tasks complete", async () => {
   assert.equal(typeof api.executeActivity, "function");
