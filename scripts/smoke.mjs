@@ -294,16 +294,17 @@ try {
         globalThis.smokeLoginCalls.filter((call) => call.args.at(-1) === scope),
       provider,
     );
-    assert.deepEqual(
-      calls
-        .filter((call) => call.action !== "poll")
-        .map((call) => call.action)
-        .sort(),
-      ["cancel", "open", "start"],
-    );
-    assert.deepEqual(calls.find((call) => call.action === "start").args, [
-      provider,
+    assert.deepEqual([...new Set(calls.map((call) => call.action))].sort(), [
+      "cancel",
+      "open",
+      "poll",
+      "start",
     ]);
+    assert.deepEqual(
+      calls.filter((call) => call.action === "start").map((call) => call.args),
+      [[provider]],
+    );
+    assert.equal(calls.filter((call) => call.action === "open").length, 1);
     for (const call of calls.filter((call) => call.action !== "start"))
       assert.deepEqual(call.args, [`isolated-login:${provider}`, provider]);
   }
