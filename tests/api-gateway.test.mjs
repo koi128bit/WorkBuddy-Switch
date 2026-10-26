@@ -70,10 +70,10 @@ test("models are discovered from the selected official region and never include 
   );
   assert.equal(result.data[0].context_window, 128000);
   assert.ok(
-    f.calls.some((call) => call.url === "https://www.workbuddy.cn/v3/config"),
+    f.calls.some((call) => call.url === "https://www.workbuddy.cn/v2/enterprises/personal/models"),
   );
   assert.ok(
-    f.calls.some((call) => call.url === "https://www.workbuddy.ai/v3/config"),
+    f.calls.some((call) => call.url === "https://www.workbuddy.ai/v2/enterprises/personal/models"),
   );
   await fetch(f.status.baseUrl + "/models", { headers: f.headers });
   assert.equal(f.calls.length, 2, "model discovery is cached");

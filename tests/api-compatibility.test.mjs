@@ -8,13 +8,18 @@ import {
   ProtocolStream,
 } from "../desktop/api-protocols.mjs";
 
-test("legacy CN auth markers still use the current WorkBuddy product origin and domain", async t => {
-  const f=await fixture(t);
-  const store=f.stores.get("workbuddy"), original=store.apiDocument.bind(store);
-  store.apiDocument=id=>{const doc=original(id);doc.root.auth.domain="www.codebuddy.cn";return doc;};
-  assert.equal((await f.send()).status,200);
-  assert.equal(f.calls[0].url,"https://www.workbuddy.cn/v2/chat/completions");
-  assert.equal(f.calls[0].options.headers["X-Domain"],"www.workbuddy.cn");
+test("legacy CN auth markers still use the current WorkBuddy product origin and domain", async (t) => {
+  const f = await fixture(t);
+  const store = f.stores.get("workbuddy"),
+    original = store.apiDocument.bind(store);
+  store.apiDocument = (id) => {
+    const doc = original(id);
+    doc.root.auth.domain = "www.codebuddy.cn";
+    return doc;
+  };
+  assert.equal((await f.send()).status, 200);
+  assert.equal(f.calls[0].url, "https://www.workbuddy.cn/v2/chat/completions");
+  assert.equal(f.calls[0].options.headers["X-Domain"], "www.workbuddy.cn");
 });
 
 test("Responses parallel function history groups calls before their results", () => {
@@ -279,7 +284,7 @@ test("current account catalog excludes historical and media models and explicit 
   const f = await fixture(t, async (url) =>
     Response.json({
       code: 0,
-      data: url.endsWith("/v3/config")
+      data: url.endsWith("/v2/enterprises/personal/models")
         ? {
             agents: [
               { name: "cli", models: ["new-" + version, "video-model"] },
@@ -299,7 +304,7 @@ test("current account catalog excludes historical and media models and explicit 
     ["new-1", "global:new-1"],
   );
   assert.equal(r.data[0].max_output_tokens, 4096);
-  assert.equal(f.calls[0].url, "https://www.workbuddy.cn/v3/config");
+  assert.equal(f.calls[0].url, "https://www.workbuddy.cn/v2/enterprises/personal/models");
   version++;
   assert.equal((await f.gateway.models()).data[0].id, "new-1");
   assert.equal((await f.gateway.models(true)).data[0].id, "new-2");
