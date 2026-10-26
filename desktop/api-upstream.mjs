@@ -293,6 +293,18 @@ export function prepareApiRequest(raw, limit) {
       fail("thinking 无效。");
     payload.thinking = raw.thinking;
   }
+  // The official GLM-5.1 route requires an explicit reasoning level; omission
+  // returns 400/11150. Keep other models and explicit client levels unchanged.
+  if (model === "glm-5.1") {
+    if (
+      payload.reasoning_effort === "none" ||
+      payload.thinking?.type === "disabled"
+    )
+      fail(
+        "GLM-5.1 需要开启思考，不能设置 none 或 disabled；省略档位时使用 medium。",
+      );
+    payload.reasoning_effort ??= "medium";
+  }
   return {
     provider: global ? "workbuddy-global" : "workbuddy",
     model: raw.model,
