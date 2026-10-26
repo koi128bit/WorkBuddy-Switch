@@ -62,37 +62,47 @@ const loginMethods = new Set([
 ]);
 const cache = new Map<Provider, Bridge>();
 let native: Bridge;
+type Methods = Record<string, (...args: unknown[]) => unknown>;
+// contextBridge exposes its API as own data properties that cannot be
+// redefined (writable: false, configurable: false). A Proxy get trap that
+// returns a wrapper for such a property breaks the ES proxy invariant, which
+// throws before the call reaches the main process, so copy the surface into a
+// plain object and override the provider-specific methods there.
+function copyMethods(target: Bridge): Methods {
+  const methods: Methods = {};
+  for (const key of Object.getOwnPropertyNames(target)) {
+    const descriptor = Object.getOwnPropertyDescriptor(target, key);
+    if (descriptor && "value" in descriptor) methods[key] = descriptor.value;
+  }
+  return methods;
+}
+function scoped(target: Bridge, provider: Provider): Bridge {
+  const methods = copyMethods(target);
+  for (const key of loginMethods) {
+    const login = methods[key];
+    if (typeof login !== "function") continue;
+    methods[key] = (...args: unknown[]) => login(...args, provider);
+  }
+  if (provider === "workbuddy-global") {
+    for (const key of globalMethods)
+      methods[key] = (...args: unknown[]) =>
+        target.workbuddyScope(provider, key, args);
+    for (const key of cnMethods)
+      methods[key] = async () => {
+        throw new Error("该功能仅支持 WorkBuddy 国内版。");
+      };
+  }
+  return methods as unknown as Bridge;
+}
 export function apiFor(provider: Provider): Bridge {
   if (native !== window.workbuddy) {
     native = window.workbuddy;
     cache.clear();
   }
   if (!native) return native;
-  if (cache.has(provider)) return cache.get(provider)!;
-  const target = native;
-  // Electron freezes the native bridge. A separate target allows scoped wrappers
-  // without violating the native properties' non-writable descriptors.
-  const bridge = new Proxy(
-    { ...target },
-    {
-      get(_facade, key: keyof Bridge) {
-        if (loginMethods.has(key))
-          return (...args: unknown[]) =>
-            (target[key] as (...values: unknown[]) => unknown)(
-              ...args,
-              provider,
-            );
-        if (provider === "workbuddy-global" && globalMethods.has(key))
-          return (...args: unknown[]) =>
-            target.workbuddyScope(provider, key, args);
-        if (provider === "workbuddy-global" && cnMethods.has(key))
-          return async () => {
-            throw new Error("该功能仅支持 WorkBuddy 国内版。");
-          };
-        return target[key];
-      },
-    },
-  );
+  const cached = cache.get(provider);
+  if (cached) return cached;
+  const bridge = scoped(native, provider);
   cache.set(provider, bridge);
   return bridge;
 }
