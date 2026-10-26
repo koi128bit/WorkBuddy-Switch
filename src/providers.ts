@@ -72,21 +72,27 @@ export function apiFor(provider: Provider): Bridge {
   const target = native;
   // Electron freezes the native bridge. A separate target allows scoped wrappers
   // without violating the native properties' non-writable descriptors.
-  const bridge = new Proxy({ ...target }, {
-    get(_facade, key: keyof Bridge) {
-      if (loginMethods.has(key))
-        return (...args: unknown[]) =>
-          (target[key] as (...values: unknown[]) => unknown)(...args, provider);
-      if (provider === "workbuddy-global" && globalMethods.has(key))
-        return (...args: unknown[]) =>
-          target.workbuddyScope(provider, key, args);
-      if (provider === "workbuddy-global" && cnMethods.has(key))
-        return async () => {
-          throw new Error("该功能仅支持 WorkBuddy 国内版。");
-        };
-      return target[key];
+  const bridge = new Proxy(
+    { ...target },
+    {
+      get(_facade, key: keyof Bridge) {
+        if (loginMethods.has(key))
+          return (...args: unknown[]) =>
+            (target[key] as (...values: unknown[]) => unknown)(
+              ...args,
+              provider,
+            );
+        if (provider === "workbuddy-global" && globalMethods.has(key))
+          return (...args: unknown[]) =>
+            target.workbuddyScope(provider, key, args);
+        if (provider === "workbuddy-global" && cnMethods.has(key))
+          return async () => {
+            throw new Error("该功能仅支持 WorkBuddy 国内版。");
+          };
+        return target[key];
+      },
     },
-  });
+  );
   cache.set(provider, bridge);
   return bridge;
 }
