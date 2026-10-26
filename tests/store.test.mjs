@@ -1157,185 +1157,206 @@ for (const failure of ["report", "progress"])
     );
   });
 
-for (const deferred of [false,true]) test("full task scope runs activities and real experts, waits for delayed scoring, and continues tasks unlocked by a claim" + (deferred ? " with missing progress and unconfirmed acceptance" : ""), async (t) => {
-  const f = await fixture(t);
-  await f.store.capture(parseAuth(auth("a")));
-  const base = growthServer(f.store),
-    original = f.store.request,
-    calls = [];
-  f.store.tasks.pause = async () => {};
-  const additional = [
-    {
-      task_code: "Library_read",
-      title: "体验资料库",
-      accept_status: "not_accepted",
-      progress: { current: 0, target: 1 },
-    },
-    {
-      task_code: "template_5",
-      title: "使用模板",
-      accept_status: "not_accepted",
-      progress: { current: 0, target: 2 },
-    },
-    {
-      task_code: "expert_use_douyinyin",
-      title: "抖音策略师",
-      accept_status: "not_accepted",
-      progress: { current: 0, target: 1 },
-    },
-    {
-      task_code: "Expert_team_use_3",
-      title: "专家团",
-      accept_status: "not_accepted",
-      locked: true,
-      progress: { current: 0, target: 1 },
-    },
-    {
-      task_code: "RichMeow_Chat",
-      title: "桌面端对话",
-      accept_status: "not_accepted",
-      progress: { current: 0, target: 1 },
-    },
-  ];
-  if(deferred){
-    const team=additional.find(row=>row.task_code === "Expert_team_use_3");
-    delete team.progress;
-    team.locked=false;
-  }
-  base.tasks("a").push(...additional);
-  const queued = [];
-  let sequence = 0;
-  f.store.request = async (url, options) => {
-    calls.push({ url, options });
-    if (url.endsWith("/market/expert/list")) {
-      const body = JSON.parse(options.body);
-      return new Response(
-        JSON.stringify({
-          code: 0,
-          data: {
-            experts: [
-              {
-                expert_id:
-                  body.expert_type === "team"
-                    ? "team-verified"
-                    : "ex_FbY5nlWTqDod",
-                display_name_zh:
-                  body.expert_type === "team" ? "专家团" : "抖音策略师",
-                expert_type: body.expert_type === "team" ? "team" : "agent",
-                version: "1.0.0",
+for (const deferred of [false, true])
+  test(
+    "full task scope runs activities and real experts, waits for delayed scoring, and continues tasks unlocked by a claim" +
+      (deferred ? " with missing progress and unconfirmed acceptance" : ""),
+    async (t) => {
+      const f = await fixture(t);
+      await f.store.capture(parseAuth(auth("a")));
+      const base = growthServer(f.store),
+        original = f.store.request,
+        calls = [];
+      f.store.tasks.pause = async () => {};
+      const additional = [
+        {
+          task_code: "Library_read",
+          title: "体验资料库",
+          accept_status: "not_accepted",
+          progress: { current: 0, target: 1 },
+        },
+        {
+          task_code: "template_5",
+          title: "使用模板",
+          accept_status: "not_accepted",
+          progress: { current: 0, target: 2 },
+        },
+        {
+          task_code: "expert_use_douyinyin",
+          title: "抖音策略师",
+          accept_status: "not_accepted",
+          progress: { current: 0, target: 1 },
+        },
+        {
+          task_code: "Expert_team_use_3",
+          title: "专家团",
+          accept_status: "not_accepted",
+          locked: true,
+          progress: { current: 0, target: 1 },
+        },
+        {
+          task_code: "RichMeow_Chat",
+          title: "桌面端对话",
+          accept_status: "not_accepted",
+          progress: { current: 0, target: 1 },
+        },
+      ];
+      if (deferred) {
+        const team = additional.find(
+          (row) => row.task_code === "Expert_team_use_3",
+        );
+        delete team.progress;
+        team.locked = false;
+      }
+      base.tasks("a").push(...additional);
+      const queued = [];
+      let sequence = 0;
+      f.store.request = async (url, options) => {
+        calls.push({ url, options });
+        if (url.endsWith("/market/expert/list")) {
+          const body = JSON.parse(options.body);
+          return new Response(
+            JSON.stringify({
+              code: 0,
+              data: {
+                experts: [
+                  {
+                    expert_id:
+                      body.expert_type === "team"
+                        ? "team-verified"
+                        : "ex_FbY5nlWTqDod",
+                    display_name_zh:
+                      body.expert_type === "team" ? "专家团" : "抖音策略师",
+                    expert_type: body.expert_type === "team" ? "team" : "agent",
+                    version: "1.0.0",
+                  },
+                ],
               },
-            ],
-          },
-        }),
-      );
-    }
-    if (url.endsWith("/chat/completions")) {
-      sequence++;
-      return new Response(
-        "data: " +
-          JSON.stringify({
-            id: "server-full-" + sequence,
-            choices: [{ delta: { content: "你好" } }],
-          }) +
-          "\n\ndata: " +
-          JSON.stringify({
-            id: "server-full-" + sequence,
-            choices: [{ finish_reason: "stop" }],
-          }) +
-          "\n\ndata: [DONE]\n\n",
-        { headers: { "content-type": "text/event-stream" } },
-      );
-    }
-    if (url.endsWith("/v2/report")) {
-      for (const event of JSON.parse(options.body)) {
-        const code =
-          event.eventCode === "web_element_click" &&
-          event.elementId === "library_doc_intro_click"
-            ? "Library_read"
-            : event.eventCode === "template_used"
-              ? "template_5"
-              : event.eventCode === "expert_actual_use"
-                ? event.expertType === "team"
-                  ? "Expert_team_use_3"
-                  : "expert_use_douyinyin"
-                : event.eventCode === "chat_message_response"
-                  ? "RichMeow_Chat"
-                  : null;
-        if (code) {
-          if (event.eventCode === "expert_actual_use")
-            assert.match(event.requestId, /^server-full-/);
-          queued.push({ code, reads: 2 });
+            }),
+          );
         }
-      }
-      return new Response(JSON.stringify({ code: 0, data: {} }));
-    }
-    if (url.endsWith("/v2/activity/growth/tasks"))
-      for (const item of queued) {
-        if (item.reads > 0 && --item.reads === 0) {
-          const row = base
-            .tasks("a")
-            .find((row) => row.task_code === item.code);
-          if (row.accept_status !== "claimed") {
-            row.progress.current = Math.min(
-              row.progress.target,
-              row.progress.current + 1,
-            );
-            row.accept_status =
-              row.progress.current >= row.progress.target
-                ? "completed"
-                : "in_progress";
+        if (url.endsWith("/chat/completions")) {
+          sequence++;
+          return new Response(
+            "data: " +
+              JSON.stringify({
+                id: "server-full-" + sequence,
+                choices: [{ delta: { content: "你好" } }],
+              }) +
+              "\n\ndata: " +
+              JSON.stringify({
+                id: "server-full-" + sequence,
+                choices: [{ finish_reason: "stop" }],
+              }) +
+              "\n\ndata: [DONE]\n\n",
+            { headers: { "content-type": "text/event-stream" } },
+          );
+        }
+        if (url.endsWith("/v2/report")) {
+          for (const event of JSON.parse(options.body)) {
+            const code =
+              event.eventCode === "web_element_click" &&
+              event.elementId === "library_doc_intro_click"
+                ? "Library_read"
+                : event.eventCode === "template_used"
+                  ? "template_5"
+                  : event.eventCode === "expert_actual_use"
+                    ? event.expertType === "team"
+                      ? "Expert_team_use_3"
+                      : "expert_use_douyinyin"
+                    : event.eventCode === "chat_message_response"
+                      ? "RichMeow_Chat"
+                      : null;
+            if (code) {
+              if (event.eventCode === "expert_actual_use")
+                assert.match(event.requestId, /^server-full-/);
+              queued.push({ code, reads: 2 });
+            }
           }
+          return new Response(JSON.stringify({ code: 0, data: {} }));
         }
-      }
-    if(deferred && url.endsWith("/tasks/accept") && additional.find(row=>row.task_code === "Library_read").accept_status !== "claimed"){
-      const codes=JSON.parse(options.body).task_codes.filter(code=>code !== "Expert_team_use_3");
-      if(!codes.length)return Response.json({code:0,data:{}});
-      options={...options,body:JSON.stringify({task_codes:codes})};
-    }
-    const response = await original(url, options);
-    if(deferred && url.endsWith("/Library_read/claim")) additional.find(row=>row.task_code === "Expert_team_use_3").progress={current:0,target:1};
-    if (url.endsWith("/Library_read/claim"))
-      base
-        .tasks("a")
-        .find((row) => row.task_code === "Expert_team_use_3").locked = false;
-    return response;
-  };
-  const plan = await f.store.prepareTasks(["a"], {
-    includeAI: true,
-    includeActivities: true,
-    maxCalls: 80,
-    prompt: "你好",
-  });
-  assert.equal(
-    calls.filter(
-      (call) =>
-        call.url.endsWith("/report") || call.url.endsWith("/chat/completions"),
-    ).length,
-    0,
+        if (url.endsWith("/v2/activity/growth/tasks"))
+          for (const item of queued) {
+            if (item.reads > 0 && --item.reads === 0) {
+              const row = base
+                .tasks("a")
+                .find((row) => row.task_code === item.code);
+              if (row.accept_status !== "claimed") {
+                row.progress.current = Math.min(
+                  row.progress.target,
+                  row.progress.current + 1,
+                );
+                row.accept_status =
+                  row.progress.current >= row.progress.target
+                    ? "completed"
+                    : "in_progress";
+              }
+            }
+          }
+        if (
+          deferred &&
+          url.endsWith("/tasks/accept") &&
+          additional.find((row) => row.task_code === "Library_read")
+            .accept_status !== "claimed"
+        ) {
+          const codes = JSON.parse(options.body).task_codes.filter(
+            (code) => code !== "Expert_team_use_3",
+          );
+          if (!codes.length) return Response.json({ code: 0, data: {} });
+          options = { ...options, body: JSON.stringify({ task_codes: codes }) };
+        }
+        const response = await original(url, options);
+        if (deferred && url.endsWith("/Library_read/claim"))
+          additional.find(
+            (row) => row.task_code === "Expert_team_use_3",
+          ).progress = { current: 0, target: 1 };
+        if (url.endsWith("/Library_read/claim"))
+          base
+            .tasks("a")
+            .find((row) => row.task_code === "Expert_team_use_3").locked =
+            false;
+        return response;
+      };
+      const plan = await f.store.prepareTasks(["a"], {
+        includeAI: true,
+        includeActivities: true,
+        maxCalls: 80,
+        prompt: "你好",
+      });
+      assert.equal(
+        calls.filter(
+          (call) =>
+            call.url.endsWith("/report") ||
+            call.url.endsWith("/chat/completions"),
+        ).length,
+        0,
+      );
+      assert.equal(plan.maxCalls, 5);
+      assert.ok(
+        plan.accounts[0].tasks.some((row) => row.code === "Library_read"),
+      );
+      assert.ok(
+        plan.accounts[0].tasks.some(
+          (row) => row.code === "Expert_team_use_3" && row.waitingForUnlock,
+        ),
+      );
+      const result = await f.store.runTasks(["a"], plan.id);
+      for (const row of additional)
+        assert.equal(row.accept_status, "claimed", row.task_code);
+      assert.equal(result.dialogueAttempts, 4);
+      assert.equal(result.summary.dialogues, 4);
+      assert.equal(result.summary.activities, 1);
+      assert.equal(
+        result.results.filter(
+          (row) => row.code === "template_5" && row.status === "dialogue",
+        ).length,
+        2,
+      );
+      assert.ok(
+        result.results.some(
+          (row) => row.code === "template_5" && row.status === "claimed",
+        ),
+      );
+      assert.equal(f.store.busy, false);
+    },
   );
-  assert.equal(plan.maxCalls, deferred ? 7 : 5);
-  assert.ok(plan.accounts[0].tasks.some((row) => row.code === "Library_read"));
-  assert.ok(
-    plan.accounts[0].tasks.some(
-      (row) => row.code === "Expert_team_use_3" && row.waitingForUnlock,
-    ),
-  );
-  const result = await f.store.runTasks(["a"], plan.id);
-  for (const row of additional)
-    assert.equal(row.accept_status, "claimed", row.task_code);
-  assert.equal(result.dialogueAttempts, 4);
-  assert.equal(result.summary.dialogues, 4);
-  assert.equal(result.summary.activities, 1);
-  assert.equal(
-    result.results.filter(
-      (row) => row.code === "template_5" && row.status === "dialogue",
-    ).length,
-    2,
-  );
-  assert.ok(
-    result.results.some(
-      (row) => row.code === "template_5" && row.status === "claimed",
-    ),
-  );
-  assert.equal(f.store.busy, false);
-});

@@ -67,6 +67,15 @@ function responsesInput(raw) {
   for (const item of input) {
     if (!object(item)) invalid("input 消息格式无效。");
     if (item.type === "function_call") {
+      const prior = messages.at(-1);
+      if (prior?.role === "assistant" && prior.tool_calls) {
+        prior.tool_calls.push({
+          id: item.call_id,
+          type: "function",
+          function: { name: item.name, arguments: item.arguments },
+        });
+        continue;
+      }
       messages.push({
         role: "assistant",
         content: null,

@@ -203,6 +203,7 @@ export interface TaskPlan {
         version?: string;
       }[];
       waitingForUnlock?: boolean;
+      deferred?: boolean;
       current: number;
       target: number;
     }[];

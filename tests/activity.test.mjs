@@ -120,7 +120,7 @@ test("targeted experts are selected from real market results by exact name and p
     async (url, options) => {
       assert.equal(
         url,
-        "https://copilot.tencent.com/portal/operation-platform/market/expert/list",
+        "https://www.workbuddy.cn/portal/operation-platform/market/expert/list",
       );
       assert.equal(JSON.parse(options.body).keyword, "抖音策略师");
       return json({
@@ -278,7 +278,7 @@ test("desktop activity requests use the supported protocol version and the actua
       return json({});
     },
   );
-  assert.equal(captured.url, "https://copilot.tencent.com/v2/report");
+  assert.equal(captured.url, "https://www.workbuddy.cn/v2/report");
   assert.match(
     captured.options.headers["User-Agent"],
     /^WorkBuddy\/5\.8\.3 WorkBuddy-Switch/,

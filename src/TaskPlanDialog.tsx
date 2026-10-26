@@ -162,7 +162,10 @@ export function TaskPlanDialog({
                 <span>
                   {task.title}
                   <small>
-                    {task.modelName} · 官方进度 {task.current}/{task.target}
+                    {task.modelName} ·{" "}
+                    {task.deferred
+                      ? "等待官方进度，先预留次数上限"
+                      : `官方进度 ${task.current}/${task.target}`}
                     {task.waitingForUnlock ? " · 解锁后自动继续" : ""}
                     {!!task.resources?.length &&
                       ` · ${task.resources.map((resource) => resource.name).join("、")}`}

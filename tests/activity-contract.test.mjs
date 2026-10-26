@@ -189,7 +189,7 @@ test("application activity telemetry never calls an authorization or consent end
     document,
     { kind: "apps", code: "Buddy_App" },
     async (url, options) => {
-      assert.equal(url, "https://copilot.tencent.com/v2/report");
+      assert.equal(url, "https://www.workbuddy.cn/v2/report");
       events.push(...JSON.parse(options.body));
       return json({});
     },

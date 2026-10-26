@@ -5,7 +5,6 @@ import { RewardError } from "./rewards.mjs";
 import { sendDialogue, reportDialogue } from "./dialogue.mjs";
 import { setTimeout as delay } from "node:timers/promises";
 
-const desktopOrigin = "https://copilot.tencent.com";
 const activityProtocolVersion = "5.8.3";
 const expertNames = {
   Expert_lighthouse: "腾讯轻量云",
@@ -90,6 +89,36 @@ export function activitySpec(task) {
   };
 }
 
+// Planning reserves a bounded scope for known tasks whose prerequisites hide
+// progress. Execution still requires fresh official progress; these estimates
+// must never be used as evidence of completion or eligibility.
+export function planningCandidate(task) {
+  const deferred =
+    !Number.isSafeInteger(task.current) || !Number.isSafeInteger(task.target);
+  const known =
+    Object.hasOwn(kinds, task.code) ||
+    ["chat_5", "black_cat", "Model_chat_GLM5.2"].includes(task.code);
+  const bound =
+    { chat_5: 5, expert_5: 5, Expert_team_use_3: 3, template_5: 5 }[
+      task.code
+    ] ?? 1;
+  return {
+    deferred: deferred && known,
+    candidate: {
+      ...task,
+      locked: false,
+      ...(deferred && known
+        ? {
+            current: Number.isSafeInteger(task.current) ? task.current : 0,
+            target: Number.isSafeInteger(task.target)
+              ? task.target
+              : (task.current ?? 0) + bound,
+          }
+        : {}),
+    },
+  };
+}
+
 export function pendingReason(task) {
   if (task.claimed) return "奖励已领取。";
   if (task.locked)
@@ -103,6 +132,12 @@ export function pendingReason(task) {
   if (task.code === "black_cat")
     return "夜间对话任务仅在北京时间 23:00–次日 08:00 执行。";
   if (!task.hasReward) return "该任务没有可领取的奖励。";
+  if (
+    (Object.hasOwn(kinds, task.code) ||
+      ["chat_5", "Model_chat_GLM5.2"].includes(task.code)) &&
+    (!Number.isSafeInteger(task.current) || !Number.isSafeInteger(task.target))
+  )
+    return "该任务已适配，正在等待官方返回可执行进度；接取及前置任务解锁后会继续回读，不会把未知进度当作已完成。";
   return "此任务暂无已验证的自动执行方式，请按成长中心指引在官方客户端完成。";
 }
 
@@ -123,8 +158,11 @@ async function activityRequest(
   web = false,
   method = "POST",
 ) {
-  domestic(document);
-  const host = web ? "https://www.workbuddy.cn" : desktopOrigin;
+  const origin = domestic(document);
+  const host =
+    web || origin === "https://www.workbuddy.cn"
+      ? "https://www.workbuddy.cn"
+      : "https://copilot.tencent.com";
   let response;
   try {
     response = await request(host + endpoint, {

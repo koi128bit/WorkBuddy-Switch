@@ -13,6 +13,7 @@ import {
   loadActivityResources,
   executeActivity,
   pendingReason,
+  planningCandidate,
 } from "./activity.mjs";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -228,7 +229,7 @@ export class TaskRunner {
             perAccountActivities = 40;
           for (const task of tasks) {
             if (task.claimed || task.claimable) continue;
-            const candidate = { ...task, locked: false },
+            const { candidate, deferred } = planningCandidate(task),
               activity = activitySpec(candidate),
               chat = dialogueSpec(candidate, now),
               spec = activity || chat;
@@ -303,7 +304,8 @@ export class TaskRunner {
               target: task.target,
               ...(activity ? { kind: activity.kind } : {}),
               resources: resources.slice(0, count),
-              waitingForUnlock: task.locked,
+              waitingForUnlock: task.locked || deferred,
+              deferred,
             });
             if (paid) {
               budget -= count;
@@ -368,6 +370,15 @@ export class TaskRunner {
       if (!row) break;
       const paid = row.calls > 0,
         index = execution.used.get(row.code) || 0;
+      execution.baselines ??= new Map();
+      if (!execution.baselines.has(row.code))
+        execution.baselines.set(
+          row.code,
+          row.deferred
+            ? tasks.find((task) => task.code === row.code).current
+            : row.current,
+        );
+      const baseline = execution.baselines.get(row.code);
       await this.step(
         accountId,
         (paid ? "真实对话：" : "活动记录：") + row.title,
@@ -387,10 +398,17 @@ export class TaskRunner {
               {
                 kind: row.kind,
                 code: row.code,
-                index: row.current + index,
+                index: baseline + index,
                 model: row.model,
                 prompt: plan.options.prompt,
-                resource: row.resources?.[index],
+                resource:
+                  row.resources?.[
+                    (row.deferred &&
+                    !activitySpec(tasks.find((task) => task.code === row.code))
+                      ?.expertId
+                      ? baseline
+                      : 0) + index
+                  ],
               },
               this.store.request,
               { shouldStop: () => this.stopped(), pause: this.pause },
@@ -613,12 +631,13 @@ export class TaskRunner {
       claimed = new Set(),
       accepted = new Set();
     let acceptFailed = false;
-    for (let round = 0; round < (plan ? 6 : 1) && !this.stopped(); round++) {
+    for (let round = 0; round < (plan ? 30 : 1) && !this.stopped(); round++) {
       const before = JSON.stringify(
         tasks.map((task) => [
           task.code,
           task.status,
           task.current,
+          task.target,
           task.locked,
         ]),
       );
@@ -645,8 +664,14 @@ export class TaskRunner {
           );
           tasks = fresh;
           for (const task of pending) {
-            accepted.add(task.code);
             const updated = fresh.find((item) => item.code === task.code);
+            if (
+              updated &&
+              ["accepted", "in_progress", "completed", "claimed"].includes(
+                updated.status,
+              )
+            )
+              accepted.add(task.code);
             await this.add(
               accountId,
               task.code,
@@ -721,6 +746,7 @@ export class TaskRunner {
             task.code,
             task.status,
             task.current,
+            task.target,
             task.locked,
           ]),
         ) === before

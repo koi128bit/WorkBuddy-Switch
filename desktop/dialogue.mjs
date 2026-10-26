@@ -83,7 +83,9 @@ export async function sendDialogue(
   let response;
   try {
     response = await request(
-      "https://copilot.tencent.com/v2/chat/completions",
+      (origin === "https://www.workbuddy.cn"
+        ? origin
+        : "https://copilot.tencent.com") + "/v2/chat/completions",
       {
         method: "POST",
         redirect: "error",

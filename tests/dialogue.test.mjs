@@ -92,7 +92,7 @@ test("real dialogue sends a bounded official SSE request, reads the whole result
       return completed();
     },
   );
-  assert.equal(calls[0].url, "https://copilot.tencent.com/v2/chat/completions");
+  assert.equal(calls[0].url, "https://www.workbuddy.cn/v2/chat/completions");
   const body = JSON.parse(calls[0].options.body);
   assert.equal(body.max_tokens, 64);
   assert.equal(body.stream, true);

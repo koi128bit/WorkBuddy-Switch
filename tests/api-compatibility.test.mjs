@@ -3,37 +3,117 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fixture, stream } from "./helpers/api-fixture.mjs";
-import { prepareProtocolRequest, ProtocolStream } from "../desktop/api-protocols.mjs";
+import {
+  prepareProtocolRequest,
+  ProtocolStream,
+} from "../desktop/api-protocols.mjs";
 
 test("Responses parallel function history groups calls before their results", () => {
-  const p=prepareProtocolRequest({model:"fast-model",input:[
-    {role:"user",content:"lookup"},
-    {type:"function_call",call_id:"a",name:"lookup",arguments:"{}"},
-    {type:"function_call",call_id:"b",name:"lookup",arguments:"{}"},
-    {type:"function_call_output",call_id:"a",output:"one"},
-    {type:"function_call_output",call_id:"b",output:"two"},
-  ]},"responses",64);
-  assert.equal(p.payload.messages[1].tool_calls.length,2);
-  assert.deepEqual(p.payload.messages.slice(2).map(m=>m.role),["tool","tool"]);
+  const p = prepareProtocolRequest(
+    {
+      model: "fast-model",
+      input: [
+        { role: "user", content: "lookup" },
+        {
+          type: "function_call",
+          call_id: "a",
+          name: "lookup",
+          arguments: "{}",
+        },
+        {
+          type: "function_call",
+          call_id: "b",
+          name: "lookup",
+          arguments: "{}",
+        },
+        { type: "function_call_output", call_id: "a", output: "one" },
+        { type: "function_call_output", call_id: "b", output: "two" },
+      ],
+    },
+    "responses",
+    64,
+  );
+  assert.equal(p.payload.messages[1].tool_calls.length, 2);
+  assert.deepEqual(
+    p.payload.messages.slice(2).map((m) => m.role),
+    ["tool", "tool"],
+  );
 });
 
 test("protocols preserve image and schema inputs and reject stateful or unsafe requests before billing", () => {
-  const p=prepareProtocolRequest({model:"fast-model",messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/png",data:"aGVsbG8="}}]}],max_tokens:64,thinking:{type:"adaptive"},tool_choice:{type:"any",disable_parallel_tool_use:true},output_config:{format:{type:"json_schema",schema:{type:"object"}}}},"messages",64);
-  assert.equal(p.payload.messages[0].content[0].image_url.url,"data:image/png;base64,aGVsbG8=");
-  assert.equal(p.payload.parallel_tool_calls,false);
-  assert.equal(p.payload.thinking.type,"enabled");
-  const base={model:"fast-model",input:"hello"};
-  for(const patch of [{previous_response_id:"resp_old"},{background:true},{input:[null]},{instructions:4},{input:[{role:"user",content:[{type:"input_file",file_id:"file_1"}]}]}])assert.throws(()=>prepareProtocolRequest({...base,...patch},"responses",64),e=>e.status===400);
+  const p = prepareProtocolRequest(
+    {
+      model: "fast-model",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: "image/png",
+                data: "aGVsbG8=",
+              },
+            },
+          ],
+        },
+      ],
+      max_tokens: 64,
+      thinking: { type: "adaptive" },
+      tool_choice: { type: "any", disable_parallel_tool_use: true },
+      output_config: {
+        format: { type: "json_schema", schema: { type: "object" } },
+      },
+    },
+    "messages",
+    64,
+  );
+  assert.equal(
+    p.payload.messages[0].content[0].image_url.url,
+    "data:image/png;base64,aGVsbG8=",
+  );
+  assert.equal(p.payload.parallel_tool_calls, false);
+  assert.equal(p.payload.thinking.type, "enabled");
+  const base = { model: "fast-model", input: "hello" };
+  for (const patch of [
+    { previous_response_id: "resp_old" },
+    { background: true },
+    { input: [null] },
+    { instructions: 4 },
+    {
+      input: [
+        { role: "user", content: [{ type: "input_file", file_id: "file_1" }] },
+      ],
+    },
+  ])
+    assert.throws(
+      () => prepareProtocolRequest({ ...base, ...patch }, "responses", 64),
+      (e) => e.status === 400,
+    );
 });
 
 test("Messages and Responses terminate truncated streams explicitly and never fabricate usage", () => {
-  for(const protocol of ["messages","responses"]){
-    const p=new ProtocolStream(protocol,"fast-model");
-    p.push({choices:[{delta:{content:"partial"},finish_reason:"length"}]});
-    const end=p.finish().join("");
-    if(protocol==="messages"){assert.match(end,/max_tokens/);assert.equal(p.result().usage_known,false);}
-    else {assert.match(end,/response.incomplete/);assert.equal(p.result().usage,null);}
-    assert.match(p.error({code:"upstream_transport_error",message:"connection ended"}),protocol==="messages"?/event: error/:/response.failed/);
+  for (const protocol of ["messages", "responses"]) {
+    const p = new ProtocolStream(protocol, "fast-model");
+    p.push({
+      choices: [{ delta: { content: "partial" }, finish_reason: "length" }],
+    });
+    const end = p.finish().join("");
+    if (protocol === "messages") {
+      assert.match(end, /max_tokens/);
+      assert.equal(p.result().usage_known, false);
+    } else {
+      assert.match(end, /response.incomplete/);
+      assert.equal(p.result().usage, null);
+    }
+    assert.match(
+      p.error({
+        code: "upstream_transport_error",
+        message: "connection ended",
+      }),
+      protocol === "messages" ? /event: error/ : /response.failed/,
+    );
   }
 });
 
@@ -47,15 +127,33 @@ const textRequest = {
   model: "fast-model",
   messages: [{ role: "user", content: "hello" }],
 };
-test("OpenCode's actual Chat shape accepts camel-case cache hint and 48 registered tools", async t => {
-  const f=await fixture(t);
-  const r=await f.send({promptCacheKey:"local-opencode-session",max_tokens:32000,stream:true,stream_options:{include_usage:true},tool_choice:"auto",tools:Array.from({length:48},(_,i)=>({type:"function",function:{name:"tool_"+i,description:"client tool",parameters:{type:"object",properties:{},additionalProperties:false}}}))});
-  assert.equal(r.status,200);
-  assert.match(await r.text(),/\[DONE\]/);
-  const sent=JSON.parse(f.calls[0].options.body);
-  assert.equal(sent.tools.length,48);
-  assert.equal(sent.max_tokens,4096);
-  assert.equal(sent.promptCacheKey,undefined);
+test("OpenCode's actual Chat shape accepts camel-case cache hint and 48 registered tools", async (t) => {
+  const f = await fixture(t);
+  const r = await f.send({
+    promptCacheKey: "local-opencode-session",
+    max_tokens: 32000,
+    stream: true,
+    stream_options: { include_usage: true },
+    tool_choice: "auto",
+    tools: Array.from({ length: 48 }, (_, i) => ({
+      type: "function",
+      function: {
+        name: "tool_" + i,
+        description: "client tool",
+        parameters: {
+          type: "object",
+          properties: {},
+          additionalProperties: false,
+        },
+      },
+    })),
+  });
+  assert.equal(r.status, 200);
+  assert.match(await r.text(), /\[DONE\]/);
+  const sent = JSON.parse(f.calls[0].options.body);
+  assert.equal(sent.tools.length, 48);
+  assert.equal(sent.max_tokens, 4096);
+  assert.equal(sent.promptCacheKey, undefined);
 });
 const toolStream = () =>
   new Response(
