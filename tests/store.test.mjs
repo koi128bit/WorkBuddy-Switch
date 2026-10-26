@@ -1157,7 +1157,7 @@ for (const failure of ["report", "progress"])
     );
   });
 
-test("full task scope runs activities and real experts, waits for delayed scoring, and continues tasks unlocked by a claim", async (t) => {
+for (const deferred of [false,true]) test("full task scope runs activities and real experts, waits for delayed scoring, and continues tasks unlocked by a claim" + (deferred ? " with missing progress and unconfirmed acceptance" : ""), async (t) => {
   const f = await fixture(t);
   await f.store.capture(parseAuth(auth("a")));
   const base = growthServer(f.store),
@@ -1197,6 +1197,11 @@ test("full task scope runs activities and real experts, waits for delayed scorin
       progress: { current: 0, target: 1 },
     },
   ];
+  if(deferred){
+    const team=additional.find(row=>row.task_code === "Expert_team_use_3");
+    delete team.progress;
+    team.locked=false;
+  }
   base.tasks("a").push(...additional);
   const queued = [];
   let sequence = 0;
@@ -1282,7 +1287,13 @@ test("full task scope runs activities and real experts, waits for delayed scorin
           }
         }
       }
+    if(deferred && url.endsWith("/tasks/accept") && additional.find(row=>row.task_code === "Library_read").accept_status !== "claimed"){
+      const codes=JSON.parse(options.body).task_codes.filter(code=>code !== "Expert_team_use_3");
+      if(!codes.length)return Response.json({code:0,data:{}});
+      options={...options,body:JSON.stringify({task_codes:codes})};
+    }
     const response = await original(url, options);
+    if(deferred && url.endsWith("/Library_read/claim")) additional.find(row=>row.task_code === "Expert_team_use_3").progress={current:0,target:1};
     if (url.endsWith("/Library_read/claim"))
       base
         .tasks("a")
@@ -1302,7 +1313,7 @@ test("full task scope runs activities and real experts, waits for delayed scorin
     ).length,
     0,
   );
-  assert.equal(plan.maxCalls, 5);
+  assert.equal(plan.maxCalls, deferred ? 7 : 5);
   assert.ok(plan.accounts[0].tasks.some((row) => row.code === "Library_read"));
   assert.ok(
     plan.accounts[0].tasks.some(
