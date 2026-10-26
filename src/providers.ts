@@ -66,31 +66,50 @@ type Methods = Record<string, (...args: unknown[]) => unknown>;
 // contextBridge exposes its API as own data properties that cannot be
 // redefined (writable: false, configurable: false). A Proxy get trap that
 // returns a wrapper for such a property breaks the ES proxy invariant, which
-// throws before the call reaches the main process, so copy the surface into a
-// plain object and override the provider-specific methods there.
+// throws before the call reaches the main process, so read through a plain
+// object instead. The reads stay live: a bridge method swapped at runtime is
+// still picked up, exactly like the previous Proxy did.
 function copyMethods(target: Bridge): Methods {
   const methods: Methods = {};
-  for (const key of Object.getOwnPropertyNames(target)) {
-    const descriptor = Object.getOwnPropertyDescriptor(target, key);
-    if (descriptor && "value" in descriptor) methods[key] = descriptor.value;
-  }
+  for (const key of Object.getOwnPropertyNames(target))
+    Object.defineProperty(methods, key, {
+      get: () => (target as unknown as Methods)[key],
+      enumerable: true,
+      configurable: true,
+    });
   return methods;
+}
+function override(
+  methods: Methods,
+  key: string,
+  value: (...args: unknown[]) => unknown,
+) {
+  Object.defineProperty(methods, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
 }
 function scoped(target: Bridge, provider: Provider): Bridge {
   const methods = copyMethods(target);
   for (const key of loginMethods) {
-    const login = methods[key];
-    if (typeof login !== "function") continue;
-    methods[key] = (...args: unknown[]) => login(...args, provider);
+    if (typeof methods[key] !== "function") continue;
+    override(methods, key, (...args: unknown[]) =>
+      (target as unknown as Methods)[key](...args, provider),
+    );
   }
   if (provider === "workbuddy-global") {
     for (const key of globalMethods)
-      methods[key] = (...args: unknown[]) =>
-        target.workbuddyScope(provider, key, args);
+      override(
+        methods,
+        key,
+        (...args: unknown[]) => target.workbuddyScope(provider, key, args),
+      );
     for (const key of cnMethods)
-      methods[key] = async () => {
+      override(methods, key, async () => {
         throw new Error("该功能仅支持 WorkBuddy 国内版。");
-      };
+      });
   }
   return methods as unknown as Bridge;
 }

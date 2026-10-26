@@ -92,6 +92,18 @@ test("untouched methods keep their original identity", () => {
   assert.equal(apiFor("workbuddy").snapshot, snapshot);
 });
 
+test("a bridge method replaced after the api was handed out is still used", async () => {
+  // The UI tests swap methods on a plain mock bridge after the app mounted, so
+  // the per-provider api has to read the bridge live instead of copying values.
+  globalThis.window = {
+    workbuddy: { snapshot: async () => ({ accounts: [] }) },
+  };
+  const api = apiFor("workbuddy");
+  assert.deepEqual(await api.snapshot(), { accounts: [] });
+  window.workbuddy.snapshot = async () => ({ accounts: ["later"] });
+  assert.deepEqual(await api.snapshot(), { accounts: ["later"] });
+});
+
 test("a replaced bridge invalidates the cached per-provider api", () => {
   bridge({ snapshot: async () => ({ accounts: [] }) });
   const first = apiFor("workbuddy");
