@@ -1334,9 +1334,12 @@ test("backup export requires matching passphrases of at least eight characters",
   await page.getByLabel("再次输入密码").fill("long-passphrase");
   await expect(submit).toBeEnabled();
 });
-test("browser authorization completes without switching the current client identity", async ({
+test("browser authorization works with a frozen bridge without switching the current client identity", async ({
   page,
 }) => {
+  await page.evaluate(() => {
+    Object.freeze(window.workbuddy);
+  });
   await page
     .getByRole("navigation", { name: "主导航" })
     .getByRole("button", { name: "账号" })

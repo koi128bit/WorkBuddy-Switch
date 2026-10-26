@@ -1,4 +1,4 @@
-import { _electron as electron } from "@playwright/test";
+import { _electron as electron, expect } from "@playwright/test";
 import electronPath from "electron";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -209,6 +209,107 @@ try {
   assert.equal(JSON.stringify(apiInitial).includes("sk-wbs-"), false);
   assert.equal(initial.current.id, "isolated-fixture");
   assert.equal(initial.accounts.length, 0);
+  const bridgeDescriptor = await page.evaluate(() => {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      window.workbuddy,
+      "startLogin",
+    );
+    return {
+      writable: descriptor.writable,
+      configurable: descriptor.configurable,
+    };
+  });
+  assert.deepEqual(bridgeDescriptor, { writable: false, configurable: false });
+  // Stub only the external authorization responses, keeping the real preload,
+  // context isolation and renderer provider adapter in the login path.
+  await desktop.evaluate(({ ipcMain }) => {
+    globalThis.smokeLoginCalls = [];
+    for (const action of ["start", "open", "poll", "cancel"]) {
+      const channel = `wb:login-${action}`;
+      ipcMain.removeHandler(channel);
+      ipcMain.handle(channel, (_event, ...args) => {
+        globalThis.smokeLoginCalls.push({ action, args });
+        const value =
+          action === "start"
+            ? {
+                id: `isolated-login:${args[0]}`,
+                expiresAt: Date.now() + 300000,
+              }
+            : action === "poll"
+              ? { done: false }
+              : undefined;
+        return { ok: true, value };
+      });
+    }
+  });
+  for (const provider of [
+    "workbuddy",
+    "workbuddy-global",
+    "trae-cn",
+    "trae-global",
+    "qoder-cn",
+    "qoder-global",
+  ]) {
+    await page
+      .getByRole("combobox", { name: "切换客户端" })
+      .selectOption(provider);
+    await page
+      .getByRole("button", {
+        name: provider.startsWith("workbuddy") ? "添加账号" : "网页登录",
+        exact: true,
+      })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "网页登录添加账号" });
+    await expect(dialog).toBeVisible();
+    await dialog
+      .getByRole("button", { name: "打开官方登录页", exact: true })
+      .click();
+    await expect(dialog).toContainText("官方授权页面已打开");
+    await expect
+      .poll(() =>
+        desktop.evaluate(
+          (_electron, scope) =>
+            globalThis.smokeLoginCalls.some(
+              (call) => call.action === "poll" && call.args[1] === scope,
+            ),
+          provider,
+        ),
+      )
+      .toBe(true);
+    await dialog.getByRole("button", { name: "取消登录", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect
+      .poll(() =>
+        desktop.evaluate(
+          (_electron, scope) =>
+            globalThis.smokeLoginCalls.some(
+              (call) => call.action === "cancel" && call.args[1] === scope,
+            ),
+          provider,
+        ),
+      )
+      .toBe(true);
+    const calls = await desktop.evaluate(
+      (_electron, scope) =>
+        globalThis.smokeLoginCalls.filter((call) => call.args.at(-1) === scope),
+      provider,
+    );
+    assert.deepEqual(
+      calls
+        .filter((call) => call.action !== "poll")
+        .map((call) => call.action)
+        .sort(),
+      ["cancel", "open", "start"],
+    );
+    assert.deepEqual(calls.find((call) => call.action === "start").args, [
+      provider,
+    ]);
+    for (const call of calls.filter((call) => call.action !== "start"))
+      assert.deepEqual(call.args, [`isolated-login:${provider}`, provider]);
+  }
+  await page
+    .getByRole("combobox", { name: "切换客户端" })
+    .selectOption("workbuddy");
   assert.equal(initial.taskRun.status, "interrupted");
   await page
     .getByRole("region", { name: "任务执行进度" })
@@ -406,7 +507,7 @@ try {
   });
   await page.getByRole("heading", { name: "设置", exact: true }).waitFor();
   console.log(
-    "PASS: native desktop launch, isolated main/popup/editor/task IPC, interrupted-task recovery, system encryption, separate credential vaults, capture, settings and tray navigation",
+    "PASS: native desktop launch, all six login lifecycles through the real frozen preload bridge, isolated main/popup/editor/task IPC, interrupted-task recovery, system encryption, separate credential vaults, capture, settings and tray navigation",
   );
 } finally {
   await desktop?.close();
