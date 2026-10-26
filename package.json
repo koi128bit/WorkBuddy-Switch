@@ -12,6 +12,7 @@
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "icons:mac": "swift scripts/build-icons.swift",
     "build": "tsc --noEmit && vite build && node scripts/licenses.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/test.mjs",

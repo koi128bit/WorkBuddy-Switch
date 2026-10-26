@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 const require = createRequire(import.meta.url);
 let configureIcons;
 try {
@@ -100,4 +101,40 @@ test("empty application icons are rejected instead of silently displaying a tiny
   const { options } = fixture("darwin");
   options.nativeImage.createFromBuffer = () => new Image();
   assert.throws(() => configureIcons(options), /图标/);
+});
+
+test("macOS Retina icon slots match their declared pixel sizes", () => {
+  const pkg = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url)),
+  );
+  assert.equal(pkg.build.mac.icon, "assets/icon.icns");
+  assert.ok(pkg.build.files.includes("assets/icon-mac.png"));
+  const bytes = readFileSync(
+    process.env.WB_TEST_ICNS || new URL("../assets/icon.icns", import.meta.url),
+  );
+  const expected = new Map([
+    ["ic11", 32],
+    ["ic12", 64],
+    ["ic13", 256],
+    ["ic14", 512],
+    ["ic10", 1024],
+  ]);
+  assert.equal(bytes.toString("ascii", 0, 4), "icns");
+  for (let offset = 8; offset < bytes.length; ) {
+    const type = bytes.toString("ascii", offset, offset + 4);
+    const length = bytes.readUInt32BE(offset + 4);
+    assert.ok(length >= 8 && offset + length <= bytes.length);
+    if (expected.has(type)) {
+      assert.equal(bytes.toString("ascii", offset + 9, offset + 12), "PNG");
+      const size = expected.get(type);
+      assert.deepEqual(
+        [bytes.readUInt32BE(offset + 24), bytes.readUInt32BE(offset + 28)],
+        [size, size],
+        `${type} Retina dimensions`,
+      );
+      expected.delete(type);
+    }
+    offset += length;
+  }
+  assert.equal(expected.size, 0, "all Retina slots and the 1024px image exist");
 });

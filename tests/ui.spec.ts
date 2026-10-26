@@ -1472,7 +1472,7 @@ test("travel departure and automation settings are usable and persisted", async 
     animations: "disabled",
   });
 });
-test("native popup layout shows the original icon, credits and reward actions", async ({
+test("native popup layout shows the application icon, credits and reward actions", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 346, height: 424 });
