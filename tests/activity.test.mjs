@@ -69,6 +69,18 @@ test("activity catalog covers current desktop, template, library, team, and targ
   );
 });
 
+test("planning reserves missing or zero targets without making those tasks executable", () => {
+  for(const progress of [{current:null,target:null},{current:0,target:0}]){
+    const input={...task("Expert_team_use_3"),...progress,status:"not_accepted"};
+    const plan=api.planningCandidate(input);
+    assert.equal(plan.deferred,true);
+    assert.equal(plan.candidate.target,3);
+    assert.ok(api.activitySpec(plan.candidate));
+    assert.equal(api.activitySpec(input),null);
+    assert.match(api.pendingReason(input),/已适配|官方/);
+  }
+});
+
 test("activity records are bounded, sent only to official endpoints, and never locally mark tasks complete", async () => {
   assert.equal(typeof api.executeActivity, "function");
   const calls = [];
