@@ -14,6 +14,16 @@ const textRequest = {
   model: "fast-model",
   messages: [{ role: "user", content: "hello" }],
 };
+test("OpenCode's actual Chat shape accepts camel-case cache hint and 48 registered tools", async t => {
+  const f=await fixture(t);
+  const r=await f.send({promptCacheKey:"local-opencode-session",max_tokens:32000,stream:true,stream_options:{include_usage:true},tool_choice:"auto",tools:Array.from({length:48},(_,i)=>({type:"function",function:{name:"tool_"+i,description:"client tool",parameters:{type:"object",properties:{},additionalProperties:false}}}))});
+  assert.equal(r.status,200);
+  assert.match(await r.text(),/\[DONE\]/);
+  const sent=JSON.parse(f.calls[0].options.body);
+  assert.equal(sent.tools.length,48);
+  assert.equal(sent.max_tokens,4096);
+  assert.equal(sent.promptCacheKey,undefined);
+});
 const toolStream = () =>
   new Response(
     [
