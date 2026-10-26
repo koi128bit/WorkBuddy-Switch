@@ -19,6 +19,7 @@ const {
 const path = require("node:path");
 const os = require("node:os");
 const { windowMaterial } = require("./window-material.cjs");
+const { configureIcons } = require("./icons.cjs");
 const fs = require("node:fs/promises");
 const { pathToFileURL } = require("node:url");
 const { execFile } = require("node:child_process");
@@ -35,7 +36,7 @@ let mainWindow,
   refreshTimer,
   automationTimer,
   tickBusy = false;
-let quitGate, apiGateway;
+let quitGate, apiGateway, applicationIcons;
 const noticeKeys = new Map();
 const workbuddyStores = new Map();
 let clientDefinitions = {};
@@ -281,7 +282,9 @@ function createWindow() {
     ...currentMaterial().options,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     trafficLightPosition: { x: 20, y: 22 },
-    icon: path.join(root, "assets/icon.png"),
+    ...(process.platform === "darwin"
+      ? {}
+      : { icon: applicationIcons.application }),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -380,6 +383,7 @@ function query(value) {
   };
 }
 async function start() {
+  applicationIcons = configureIcons({ app, nativeImage, root });
   const { QuitGate } = await import("./installation.mjs");
   quitGate = new QuitGate({
     isBusy: () => Boolean(store?.busy || tickBusy || apiGateway?.active.size),
@@ -1005,8 +1009,7 @@ async function start() {
   scheduleAutomation();
 }
 function createTray() {
-  const image = nativeImage.createFromPath(path.join(root, "assets/icon.png"));
-  tray = new Tray(image.resize({ width: 20, height: 20 }));
+  tray = new Tray(applicationIcons.tray);
   tray.setToolTip("WorkBuddy Switch");
   tray.on("click", showTray);
   tray.on("right-click", () => {

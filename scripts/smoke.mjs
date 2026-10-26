@@ -143,6 +143,33 @@ try {
     nodeIntegration: false,
     contextIsolation: true,
   });
+  const iconSizes = await desktop.evaluate(({ app, nativeImage }) => {
+    const require = process
+      .getBuiltinModule("node:module")
+      .createRequire(process.cwd() + "/package.json");
+    const { configureIcons } = require("./desktop/icons.cjs");
+    const icons = configureIcons({ app, nativeImage, root: process.cwd() });
+    const retina = icons.tray.toPNG({ scaleFactor: 2 });
+    return {
+      application: icons.application.getSize(),
+      dock: icons.dock?.getSize() || null,
+      tray: icons.tray.getSize(),
+      scales: icons.tray.getScaleFactors(),
+      retinaPixels: [retina.readUInt32BE(16), retina.readUInt32BE(20)],
+      independent:
+        !icons.dock ||
+        !icons.dock.getNativeHandle().equals(icons.tray.getNativeHandle()),
+    };
+  });
+  assert.deepEqual(iconSizes.application, { width: 1024, height: 1024 });
+  assert.deepEqual(iconSizes.tray, { width: 20, height: 20 });
+  assert.deepEqual(iconSizes.scales, [1, 2, 3]);
+  assert.deepEqual(iconSizes.retinaPixels, [40, 40]);
+  assert.equal(iconSizes.independent, true);
+  assert.deepEqual(
+    iconSizes.dock,
+    process.platform === "darwin" ? { width: 1024, height: 1024 } : null,
+  );
   if (process.platform === "linux")
     assert.equal(
       await desktop.evaluate(({ safeStorage }) =>
