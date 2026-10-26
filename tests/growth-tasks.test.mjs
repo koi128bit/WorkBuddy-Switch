@@ -77,11 +77,11 @@ test("growth list, acceptance and claims use official web routes and reject unsa
   await api.claimGrowthTask(document, tasks[0].code, request);
   assert.equal(
     calls[0].url,
-    "https://www.codebuddy.cn/v2/activity/growth/tasks",
+    "https://www.workbuddy.cn/v2/activity/growth/tasks",
   );
   assert.equal(
     calls[1].url,
-    "https://www.codebuddy.cn/activity/growth/tasks/accept",
+    "https://www.workbuddy.cn/activity/growth/tasks/accept",
   );
   assert.deepEqual(JSON.parse(calls[1].options.body), {
     task_codes: ["Model_chat_GLM5.2"],

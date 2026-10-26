@@ -39,7 +39,7 @@ test("check-in uses authenticated official status and falls back only on a missi
   assert.equal(calls[0].options.redirect, "error");
   assert.match(
     calls[1].url,
-    /^https:\/\/www.codebuddy.cn\/v2\/billing\/meter\/checkin-status$/,
+    /^https:\/\/www.workbuddy.cn\/v2\/billing\/meter\/checkin-status$/,
   );
   let failedCalls = 0;
   await assert.rejects(

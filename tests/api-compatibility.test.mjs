@@ -8,6 +8,15 @@ import {
   ProtocolStream,
 } from "../desktop/api-protocols.mjs";
 
+test("legacy CN auth markers still use the current WorkBuddy product origin and domain", async t => {
+  const f=await fixture(t);
+  const store=f.stores.get("workbuddy"), original=store.apiDocument.bind(store);
+  store.apiDocument=id=>{const doc=original(id);doc.root.auth.domain="www.codebuddy.cn";return doc;};
+  assert.equal((await f.send()).status,200);
+  assert.equal(f.calls[0].url,"https://www.workbuddy.cn/v2/chat/completions");
+  assert.equal(f.calls[0].options.headers["X-Domain"],"www.workbuddy.cn");
+});
+
 test("Responses parallel function history groups calls before their results", () => {
   const p = prepareProtocolRequest(
     {
