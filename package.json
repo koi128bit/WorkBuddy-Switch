@@ -1,7 +1,7 @@
 {
   "name": "workbuddy-switch",
-  "version": "1.8.1",
-  "description": "Raycast Dark 毛玻璃工作台：WorkBuddy、Trae、Qoder 多账号切换，积分任务、用量图表与本机 OpenAI 兼容 API",
+  "version": "1.9.0",
+  "description": "Raycast Dark 毛玻璃工作台：WorkBuddy、Trae、Qoder 多账号切换，积分任务、用量图表与本机 OpenAI / Anthropic 兼容 API",
   "author": "koi128bit",
   "license": "MIT",
   "private": true,
@@ -29,6 +29,7 @@
     "url": "https://github.com/koi128bit/WorkBuddy-Switch.git"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "1.3.0",
     "@playwright/test": "1.63.0",
     "@types/node": "^22.19.0",
     "@types/react": "^19.2.0",
@@ -36,6 +37,7 @@
     "electron": "44.9.3",
     "electron-builder": "26.15.3",
     "lucide-react": "1.51.0",
+    "openai": "7.43.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "typescript": "7.0.2",
