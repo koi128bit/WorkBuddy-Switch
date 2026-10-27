@@ -17,7 +17,6 @@ test("API configuration rejects remote binds, unknown options, invalid accounts 
     { port: 0 },
     { port: 70000 },
     { maxConcurrency: 100 },
-    { maxOutputTokens: 0 },
     { requestsPerMinute: 0 },
     { strategy: "unknown" },
     { accounts: [{ provider: "trae-cn", id: "a" }] },
@@ -30,6 +29,30 @@ test("API configuration rejects remote binds, unknown options, invalid accounts 
   ])
     assert.throws(() => validateApiConfig({ ...apiDefaults, ...patch }));
   assert.equal(validateApiConfig(apiDefaults).autoStart, false);
+});
+test("legacy output limits are discarded without replacing the API key or selected accounts", async (t) => {
+  const f = await fixture(t);
+  await f.gateway.stop();
+  const file = path.join(f.directory, "api-gateway.json");
+  const old = JSON.parse(await fs.readFile(file, "utf8"));
+  old.config.maxOutputTokens = 4096;
+  await fs.writeFile(file, JSON.stringify(old));
+  const gateway = new ApiGateway({ directory: f.directory, stores: f.stores, vault: f.vault });
+  await gateway.init();
+  t.after(() => gateway.stop());
+  assert.equal(gateway.getKey(), f.gateway.getKey());
+  assert.deepEqual(gateway.config.accounts, old.config.accounts);
+  assert.equal(Object.hasOwn(gateway.snapshot().config, "maxOutputTokens"), false);
+  await gateway.saveConfig(gateway.config);
+  const saved = JSON.parse(await fs.readFile(file, "utf8"));
+  assert.equal(saved.keyEncrypted, old.keyEncrypted);
+  assert.equal(Object.hasOwn(saved.config, "maxOutputTokens"), false);
+});
+
+test("the built-in API test does not inject an output cap", async (t) => {
+  const f = await fixture(t);
+  await f.gateway.testChat();
+  assert.equal(Object.hasOwn(JSON.parse(f.calls[0].options.body), "max_tokens"), false);
 });
 test("gateway binds only loopback, requires a key and rejects browser origins and rebinding hosts", async (t) => {
   const f = await fixture(t);

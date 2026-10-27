@@ -223,6 +223,29 @@ const textRequest = {
   model: "fast-model",
   messages: [{ role: "user", content: "hello" }],
 };
+for (const [protocol, route, body, tokenField] of [
+  ["chat", "/chat/completions", textRequest, "max_tokens"],
+  ["responses", "/responses", { model: "fast-model", input: "hi", store: false }, "max_output_tokens"],
+  ["messages", "/messages", textRequest, "max_tokens"],
+]) {
+  test(`${protocol} forwards large caller output budgets without a local cap`, async (t) => {
+    const f = await fixture(t);
+    const r = await post(f, "/v1" + route, { ...body, [tokenField]: 131072 });
+    assert.equal(r.status, 200);
+    assert.equal(JSON.parse(f.calls[0].options.body).max_tokens, 131072);
+  });
+  test(`${protocol} leaves an omitted output budget to the upstream default`, async (t) => {
+    const f = await fixture(t);
+    const r = await post(f, "/v1" + route, body);
+    assert.equal(r.status, 200);
+    assert.equal(Object.hasOwn(JSON.parse(f.calls[0].options.body), "max_tokens"), false);
+  });
+}
+test("Chat preserves a large max_completion_tokens alias without a local cap", async (t) => {
+  const f = await fixture(t);
+  assert.equal((await f.send({ max_completion_tokens: 131072 })).status, 200);
+  assert.equal(JSON.parse(f.calls[0].options.body).max_tokens, 131072);
+});
 test("OpenCode's actual Chat shape accepts camel-case cache hint and 48 registered tools", async (t) => {
   const f = await fixture(t);
   const r = await f.send({
@@ -248,7 +271,7 @@ test("OpenCode's actual Chat shape accepts camel-case cache hint and 48 register
   assert.match(await r.text(), /\[DONE\]/);
   const sent = JSON.parse(f.calls[0].options.body);
   assert.equal(sent.tools.length, 48);
-  assert.equal(sent.max_tokens, 4096);
+  assert.equal(sent.max_tokens, 32000);
   assert.equal(sent.promptCacheKey, undefined);
 });
 const toolStream = () =>
@@ -287,7 +310,7 @@ const toolStream = () =>
     { headers: { "content-type": "text/event-stream" } },
   );
 
-test("Chat accepts SDK metadata and clamps oversized output budgets without forwarding local-only fields", async (t) => {
+test("Chat accepts SDK metadata and preserves caller output budgets without forwarding local-only fields", async (t) => {
   const f = await fixture(t);
   const r = await post(f, "/chat/completions/", {
     ...textRequest,
@@ -299,7 +322,7 @@ test("Chat accepts SDK metadata and clamps oversized output budgets without forw
   });
   assert.equal(r.status, 200);
   const sent = JSON.parse(f.calls[0].options.body);
-  assert.equal(sent.max_tokens, 4096);
+  assert.equal(sent.max_tokens, 32000);
   assert.equal(sent.metadata, undefined);
   assert.equal(sent.store, undefined);
 });
@@ -372,7 +395,7 @@ test("current account catalog excludes historical and media models and explicit 
               { name: "cli", models: ["new-" + version, "video-model"] },
             ],
             models: [
-              { id: "new-" + version, maxOutputTokens: 32000 },
+              { id: "new-" + version, maxOutputTokens: 131072 },
               { id: "old-model" },
               { id: "video-model", tags: ["text-to-video"] },
             ],
@@ -385,7 +408,7 @@ test("current account catalog excludes historical and media models and explicit 
     r.data.map((m) => m.id),
     ["new-1", "global:new-1"],
   );
-  assert.equal(r.data[0].max_output_tokens, 4096);
+  assert.equal(r.data[0].max_output_tokens, 131072);
   assert.equal(
     f.calls[0].url,
     "https://www.workbuddy.cn/v2/enterprises/personal/models",
