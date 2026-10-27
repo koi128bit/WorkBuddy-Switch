@@ -304,7 +304,6 @@ test("API test conversation can be stopped while its upstream request is still p
         accounts: [{ provider: "workbuddy", id: account.id }],
         strategy: "round_robin",
         maxConcurrency: 2,
-        maxOutputTokens: 4096,
         requestsPerMinute: 60,
       },
       accounts: [
@@ -369,7 +368,6 @@ test("local API page saves explicit account scope, controls the listener and nev
         accounts: [] as { provider: string; id: string }[],
         strategy: "round_robin",
         maxConcurrency: 2,
-        maxOutputTokens: 4096,
         requestsPerMinute: 60,
       },
       accounts: snapshot.accounts.map((account) => ({
@@ -422,7 +420,9 @@ test("local API page saves explicit account scope, controls the listener and nev
   await expect(
     page.getByRole("heading", { name: "本机 API 服务", exact: true }),
   ).toBeVisible();
-  await expect(page.getByLabel("单次输出 Token 上限", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByLabel("单次输出 Token 上限", { exact: true }),
+  ).toHaveCount(0);
   await page
     .getByRole("checkbox", { name: "用于 API：日常开发", exact: true })
     .check();

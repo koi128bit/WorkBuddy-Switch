@@ -24,7 +24,6 @@ export const apiDefaults = Object.freeze({
   accounts: [],
   strategy: "round_robin",
   maxConcurrency: 2,
-  maxOutputTokens: 4096,
   requestsPerMinute: 60,
 });
 const realms = ["workbuddy", "workbuddy-global"];
@@ -48,14 +47,17 @@ export function validateApiConfig(value) {
     !value ||
     typeof value !== "object" ||
     Array.isArray(value) ||
-    Object.keys(value).some((key) => !Object.hasOwn(apiDefaults, key))
+    Object.keys(value).some(
+      (key) => key !== "maxOutputTokens" && !Object.hasOwn(apiDefaults, key),
+    )
   )
     throw new Error("API 设置格式无效。");
   const config = { ...apiDefaults, ...value };
+  // Accept old saved configurations without restoring the removed output cap.
+  delete config.maxOutputTokens;
   for (const [key, min, max] of [
     ["port", 1024, 65535],
     ["maxConcurrency", 1, 8],
-    ["maxOutputTokens", 16, 32768],
     ["requestsPerMinute", 1, 600],
   ])
     if (
@@ -517,14 +519,6 @@ export class ApiGateway {
                     (provider === "workbuddy-global" ? "global:" : "") +
                     model.id,
                   provider,
-                  ...(model.max_output_tokens
-                    ? {
-                        max_output_tokens: Math.min(
-                          model.max_output_tokens,
-                          this.config.maxOutputTokens,
-                        ),
-                      }
-                    : {}),
                 })),
               };
               this.modelCache.set(provider, cache);
@@ -791,11 +785,7 @@ export class ApiGateway {
           "not_found",
           "API 路径不存在，支持 /v1/models、/v1/chat/completions、/v1/responses 和 /v1/messages。",
         );
-      const prepared = prepareProtocolRequest(
-        await this.body(req),
-        protocol,
-        this.config.maxOutputTokens,
-      );
+      const prepared = prepareProtocolRequest(await this.body(req), protocol);
       if (this.active.size >= this.config.maxConcurrency)
         throw new ApiError(
           429,
@@ -1060,7 +1050,6 @@ export class ApiGateway {
     return new Promise((resolve, reject) => {
       const data = JSON.stringify({
         model,
-        max_tokens: Math.min(64, this.config.maxOutputTokens),
         messages: [{ role: "user", content: "请只回复 OK。" }],
       });
       const req = http.request(

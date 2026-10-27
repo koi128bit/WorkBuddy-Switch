@@ -426,7 +426,6 @@ export interface ApiConfig {
   accounts: { provider: WorkBuddyProvider; id: string }[];
   strategy: "round_robin" | "sequential" | "expiring";
   maxConcurrency: number;
-  maxOutputTokens: number;
   requestsPerMinute: number;
 }
 export interface ApiStatus {

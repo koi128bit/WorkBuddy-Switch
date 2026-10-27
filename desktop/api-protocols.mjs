@@ -285,7 +285,7 @@ function messagesInput(raw) {
         : undefined,
   };
 }
-export function prepareProtocolRequest(raw, protocol, limit) {
+export function prepareProtocolRequest(raw, protocol) {
   if (!object(raw)) invalid("请求须为 JSON 对象。");
   const normalized =
     protocol === "responses"
@@ -293,7 +293,7 @@ export function prepareProtocolRequest(raw, protocol, limit) {
       : protocol === "messages"
         ? messagesInput(raw)
         : raw;
-  return { ...prepareApiRequest(normalized, limit), protocol };
+  return { ...prepareApiRequest(normalized), protocol };
 }
 
 // Both adapters consume verified Chat frames. Tools run in the calling client;

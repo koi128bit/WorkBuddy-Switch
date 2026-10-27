@@ -37,12 +37,19 @@ test("legacy output limits are discarded without replacing the API key or select
   const old = JSON.parse(await fs.readFile(file, "utf8"));
   old.config.maxOutputTokens = 4096;
   await fs.writeFile(file, JSON.stringify(old));
-  const gateway = new ApiGateway({ directory: f.directory, stores: f.stores, vault: f.vault });
+  const gateway = new ApiGateway({
+    directory: f.directory,
+    stores: f.stores,
+    vault: f.vault,
+  });
   await gateway.init();
   t.after(() => gateway.stop());
   assert.equal(gateway.getKey(), f.gateway.getKey());
   assert.deepEqual(gateway.config.accounts, old.config.accounts);
-  assert.equal(Object.hasOwn(gateway.snapshot().config, "maxOutputTokens"), false);
+  assert.equal(
+    Object.hasOwn(gateway.snapshot().config, "maxOutputTokens"),
+    false,
+  );
   await gateway.saveConfig(gateway.config);
   const saved = JSON.parse(await fs.readFile(file, "utf8"));
   assert.equal(saved.keyEncrypted, old.keyEncrypted);
@@ -52,7 +59,10 @@ test("legacy output limits are discarded without replacing the API key or select
 test("the built-in API test does not inject an output cap", async (t) => {
   const f = await fixture(t);
   await f.gateway.testChat();
-  assert.equal(Object.hasOwn(JSON.parse(f.calls[0].options.body), "max_tokens"), false);
+  assert.equal(
+    Object.hasOwn(JSON.parse(f.calls[0].options.body), "max_tokens"),
+    false,
+  );
 });
 test("gateway binds only loopback, requires a key and rejects browser origins and rebinding hosts", async (t) => {
   const f = await fixture(t);

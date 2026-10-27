@@ -225,7 +225,12 @@ const textRequest = {
 };
 for (const [protocol, route, body, tokenField] of [
   ["chat", "/chat/completions", textRequest, "max_tokens"],
-  ["responses", "/responses", { model: "fast-model", input: "hi", store: false }, "max_output_tokens"],
+  [
+    "responses",
+    "/responses",
+    { model: "fast-model", input: "hi", store: false },
+    "max_output_tokens",
+  ],
   ["messages", "/messages", textRequest, "max_tokens"],
 ]) {
   test(`${protocol} forwards large caller output budgets without a local cap`, async (t) => {
@@ -238,7 +243,10 @@ for (const [protocol, route, body, tokenField] of [
     const f = await fixture(t);
     const r = await post(f, "/v1" + route, body);
     assert.equal(r.status, 200);
-    assert.equal(Object.hasOwn(JSON.parse(f.calls[0].options.body), "max_tokens"), false);
+    assert.equal(
+      Object.hasOwn(JSON.parse(f.calls[0].options.body), "max_tokens"),
+      false,
+    );
   });
 }
 test("Chat preserves a large max_completion_tokens alias without a local cap", async (t) => {

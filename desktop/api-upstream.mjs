@@ -52,7 +52,7 @@ const fields = new Set([
   "logprobs",
   "top_logprobs",
 ]);
-export function prepareApiRequest(raw, limit) {
+export function prepareApiRequest(raw) {
   if (!record(raw)) fail("请求须为 JSON 对象。");
   if (Object.keys(raw).some((key) => !fields.has(key)))
     fail("请求含不支持的参数；请使用对应接口的请求格式。");
@@ -176,14 +176,15 @@ export function prepareApiRequest(raw, limit) {
       /[\x00-\x1f]/.test(raw.conversation_id))
   )
     fail("conversation_id 无效。");
-  const max = raw.max_tokens ?? raw.max_completion_tokens ?? limit;
-  if (!Number.isSafeInteger(max) || max < 1) fail("max_tokens 应为正整数。");
+  const max = raw.max_tokens ?? raw.max_completion_tokens;
+  if (max !== undefined && (!Number.isSafeInteger(max) || max < 1))
+    fail("max_tokens 应为正整数。");
   const payload = {
     model,
     messages,
     stream: true,
     stream_options: { include_usage: true },
-    max_tokens: Math.min(max, limit),
+    ...(max !== undefined ? { max_tokens: max } : {}),
     agent: "cli",
   };
   for (const [key, low, high] of [

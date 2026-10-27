@@ -287,23 +287,6 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
                   }
                 />
               </label>
-              <label>
-                单次输出 Token 上限
-                <input
-                  aria-label="单次输出 Token 上限"
-                  type="number"
-                  min={16}
-                  max={32768}
-                  value={
-                    Number.isNaN(draft.maxOutputTokens)
-                      ? ""
-                      : draft.maxOutputTokens
-                  }
-                  onChange={(event) =>
-                    update("maxOutputTokens", event.target.valueAsNumber)
-                  }
-                />
-              </label>
             </div>
             <Toggle
               label="随应用启动 API"
@@ -465,8 +448,7 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
             ID，避免把界面显示名称当作模型标识。
           </p>
           <p className="quiet-note">
-            获取模型不发送对话。测试对话会发送一句短消息，输出最多 64
-            Token，按官方计费。
+            获取模型不发送对话。测试对话会发送一句短消息，按官方计费。
           </p>
           <Button
             disabled={!!busy || !status.running}
@@ -498,8 +480,7 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
             </Button>
           </details>
           <p className="quiet-note">
-            模型来源于当前地区的官方目录；获取模型会强制刷新，不发送对话。积分为零的账号会自动跳过，明确积分不足时切换同地区已选账号。输出
-            Token 按本机上限截取；流中断后不会自动重发。
+            模型来源于当前地区的官方目录；获取模型会强制刷新，不发送对话。积分为零的账号会自动跳过，明确积分不足时切换同地区已选账号。输出参数按客户端请求转发，未指定时使用官方默认值；流中断后不会自动重发。
           </p>
           <details className="api-example">
             <summary>其他接口格式的地址</summary>

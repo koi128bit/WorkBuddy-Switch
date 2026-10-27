@@ -289,7 +289,6 @@ export function fixtureApi(): ApiStatus {
       accounts: [{ provider: "workbuddy", id: "wb-sample-001" }],
       strategy: "round_robin",
       maxConcurrency: 2,
-      maxOutputTokens: 4096,
       requestsPerMinute: 60,
     },
     accounts: fixtureState().accounts.map((account) => ({
