@@ -57,7 +57,9 @@ test("an explicit expired-authorization code on HTTP 403 renews the same account
 });
 
 test("a channel-validation HTTP 400 is not upgraded into an authentication HTTP 403", async (t) => {
-  const f = await fixture(t, async () => Response.json({ code: 11128 }, { status: 400 }));
+  const f = await fixture(t, async () =>
+    Response.json({ code: 11128 }, { status: 400 }),
+  );
   const response = await f.send();
   assert.equal(response.status, 400);
   const value = await response.json();

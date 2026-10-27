@@ -394,7 +394,7 @@ function businessError(status, body, retryHeader, contentType = "") {
     );
   if (code === "11128")
     return error(
-      403,
+      status === 403 ? 403 : 400,
       "upstream_access_denied",
       "官方渠道校验未通过，请在官方客户端核对本次请求" + official + "。",
     );
