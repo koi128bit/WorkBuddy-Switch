@@ -25,13 +25,19 @@ for (const [official, local, message] of [
     assert.equal(value.error.code, local);
     assert.match(value.error.message, message);
     assert.match(value.error.message, new RegExp(String(official)));
-    assert.equal(f.calls.length, 1, "a refused request is never moved to another account");
+    assert.equal(
+      f.calls.length,
+      1,
+      "a refused request is never moved to another account",
+    );
     const entry = f.gateway.snapshot().recent[0];
     assert.equal(entry.upstreamStatus, 403);
     assert.equal(entry.upstreamCode, String(official));
     assert.equal(entry.upstreamResponseType, "json");
     assert.ok(!JSON.stringify({ value, entry }).includes("private-token"));
-    assert.ok(!JSON.stringify({ value, entry }).includes("private-client-prompt"));
+    assert.ok(
+      !JSON.stringify({ value, entry }).includes("private-client-prompt"),
+    );
   });
 }
 
@@ -51,11 +57,16 @@ test("an explicit expired-authorization code on HTTP 403 renews the same account
 });
 
 test("an HTML HTTP 403 is not reported as an account or official channel decision", async (t) => {
-  const f = await fixture(t, async () =>
-    new Response("<!doctype html><html>private-token-a private-client-prompt</html>", {
-      status: 403,
-      headers: { "content-type": "text/html" },
-    }),
+  const f = await fixture(
+    t,
+    async () =>
+      new Response(
+        "<!doctype html><html>private-token-a private-client-prompt</html>",
+        {
+          status: 403,
+          headers: { "content-type": "text/html" },
+        },
+      ),
   );
   const response = await f.send();
   const value = await response.json();
@@ -72,49 +83,75 @@ test("an HTML HTTP 403 is not reported as an account or official channel decisio
 
 test("numeric unknown business codes remain visible but arbitrary upstream text never becomes metadata", async (t) => {
   const f = await fixture(t, async () =>
-    Response.json({ error: { code: 11199, message: "private-token-a" } }, { status: 403 }),
+    Response.json(
+      { error: { code: 11199, message: "private-token-a" } },
+      { status: 403 },
+    ),
   );
   const first = await f.send();
   assert.match((await first.json()).error.message, /11199/);
   assert.equal(f.gateway.snapshot().recent[0].upstreamCode, "11199");
-  f.gateway.request = async () => Response.json({ code: "private-token-a" }, { status: 403 });
+  f.gateway.request = async () =>
+    Response.json({ code: "private-token-a" }, { status: 403 });
   const second = await f.send();
   assert.ok(!(await second.text()).includes("private-token"));
   assert.equal(f.gateway.snapshot().recent[0].upstreamCode, null);
 });
 
 test("failed request diagnostics persist only counts, output budget and safe upstream fields", async (t) => {
-  const f = await fixture(t, async () => Response.json({ code: 11128 }, { status: 403 }));
+  const f = await fixture(t, async () =>
+    Response.json({ code: 11128 }, { status: 403 }),
+  );
   await f.send({
     max_tokens: 128000,
     reasoning_effort: "high",
-    tools: [{ type: "function", function: {
-      name: "lookup", description: "private-tool-description",
-      parameters: { type: "object", properties: {} },
-    } }],
+    tools: [
+      {
+        type: "function",
+        function: {
+          name: "lookup",
+          description: "private-tool-description",
+          parameters: { type: "object", properties: {} },
+        },
+      },
+    ],
   });
   const entry = f.gateway.snapshot().recent[0];
   assert.equal(entry.requestInfo.messageCount, 1);
   assert.equal(entry.requestInfo.toolCount, 1);
   assert.equal(entry.requestInfo.maxOutputTokens, 128000);
   assert.equal(entry.requestInfo.reasoningEffort, "high");
-  assert.equal(entry.requestInfo.bodyBytes, Buffer.byteLength(f.calls[0].options.body));
+  assert.equal(
+    entry.requestInfo.bodyBytes,
+    Buffer.byteLength(f.calls[0].options.body),
+  );
   await f.gateway.stop();
   const file = path.join(f.directory, "api-usage.json");
   const saved = await fs.readFile(file, "utf8");
-  for (const secret of ["private-token", "private-client-prompt", "private-tool-description"])
+  for (const secret of [
+    "private-token",
+    "private-client-prompt",
+    "private-tool-description",
+  ])
     assert.ok(!saved.includes(secret));
-  const reloaded = new ApiGateway({ directory: f.directory, stores: f.stores, vault: f.vault });
+  const reloaded = new ApiGateway({
+    directory: f.directory,
+    stores: f.stores,
+    vault: f.vault,
+  });
   await reloaded.init();
   t.after(() => reloaded.stop());
   assert.deepEqual(reloaded.snapshot().recent[0], entry);
 });
 
 test("streamed business refusals keep the actual upstream HTTP status", async (t) => {
-  const f = await fixture(t, async () => new Response(
-    'data: {"code":11128,"message":"private-token-a"}\n\n',
-    { headers: { "content-type": "text/event-stream" } },
-  ));
+  const f = await fixture(
+    t,
+    async () =>
+      new Response('data: {"code":11128,"message":"private-token-a"}\n\n', {
+        headers: { "content-type": "text/event-stream" },
+      }),
+  );
   const response = await f.send();
   assert.equal(response.status, 403);
   assert.match((await response.json()).error.message, /11128/);

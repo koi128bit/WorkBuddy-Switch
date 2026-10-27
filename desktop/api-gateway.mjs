@@ -89,6 +89,52 @@ export function validateApiConfig(value) {
   });
   return config;
 }
+function restoreRequestInfo(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return undefined;
+  return {
+    messageCount: safeNumber(value.messageCount),
+    toolCount: safeNumber(value.toolCount),
+    bodyBytes: safeNumber(value.bodyBytes),
+    maxOutputTokens:
+      Number.isSafeInteger(value.maxOutputTokens) && value.maxOutputTokens > 0
+        ? value.maxOutputTokens
+        : null,
+    reasoningEffort: [
+      "none",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra",
+    ].includes(value.reasoningEffort)
+      ? value.reasoningEffort
+      : null,
+  };
+}
+function restoreUpstreamInfo(value) {
+  if (
+    !Number.isInteger(value.upstreamStatus) ||
+    value.upstreamStatus < 100 ||
+    value.upstreamStatus > 599
+  )
+    return {};
+  return {
+    upstreamStatus: value.upstreamStatus,
+    upstreamCode:
+      typeof value.upstreamCode === "string" &&
+      /^\d{1,8}$/.test(value.upstreamCode)
+        ? value.upstreamCode
+        : null,
+    upstreamResponseType: ["json", "html", "event_stream", "other"].includes(
+      value.upstreamResponseType,
+    )
+      ? value.upstreamResponseType
+      : "other",
+  };
+}
 function restoreRecent(raw) {
   return (Array.isArray(raw) ? raw : [])
     .slice(0, 100)
@@ -114,6 +160,10 @@ function restoreRecent(raw) {
         ? Math.max(0, value.outputTokens)
         : null,
       errorCode: clean(value.errorCode),
+      ...restoreUpstreamInfo(value),
+      ...(value.requestInfo
+        ? { requestInfo: restoreRequestInfo(value.requestInfo) }
+        : {}),
     }));
 }
 export class ApiGateway {
@@ -838,6 +888,13 @@ export class ApiGateway {
       inputTokens: null,
       outputTokens: null,
       errorCode: "",
+      requestInfo: {
+        messageCount: prepared.payload.messages.length,
+        toolCount: prepared.payload.tools?.length ?? 0,
+        bodyBytes: Buffer.byteLength(JSON.stringify(prepared.payload)),
+        maxOutputTokens: prepared.payload.max_tokens ?? null,
+        reasoningEffort: prepared.payload.reasoning_effort ?? null,
+      },
     };
     let usage,
       outputStarted = false;
@@ -980,6 +1037,7 @@ export class ApiGateway {
       entry.status = controller.signal.aborted ? "cancelled" : "error";
       entry.statusCode = safe.status;
       entry.errorCode = safe.code;
+      Object.assign(entry, restoreUpstreamInfo(safe));
       if ([402, 429, 404].includes(safe.status))
         this.cooldowns.set(
           ref(account) + "|" + prepared.payload.model,

@@ -462,6 +462,16 @@ export interface ApiStatus {
     inputTokens: number | null;
     outputTokens: number | null;
     errorCode: string;
+    upstreamStatus?: number;
+    upstreamCode?: string | null;
+    upstreamResponseType?: "json" | "html" | "event_stream" | "other";
+    requestInfo?: {
+      messageCount: number;
+      toolCount: number;
+      bodyBytes: number;
+      maxOutputTokens: number | null;
+      reasoningEffort: string | null;
+    };
   }[];
   lastError: string;
   models: { id: string; name?: string }[];

@@ -361,21 +361,83 @@ async function boundedText(response, limit) {
   }
   return text + decoder.decode();
 }
-function businessError(status, body, retryHeader) {
-  let code;
+function businessError(status, body, retryHeader, contentType = "") {
+  let code = "",
+    json = false;
   try {
     const value = JSON.parse(body);
-    code = String(value.error?.code ?? value.code ?? "");
+    json = true;
+    code = String(value?.error?.code ?? value?.code ?? "");
   } catch {}
+  const upstreamCode = /^\d{1,8}$/.test(code) ? code : null;
+  const upstreamResponseType = contentType.includes("text/event-stream")
+    ? "event_stream"
+    : json
+      ? "json"
+      : contentType.includes("text/html") ||
+          /^\s*<(?:!doctype\s+html|html)\b/i.test(body)
+        ? "html"
+        : "other";
+  const error = (localStatus, localCode, message, retryAfter = 0) =>
+    Object.assign(new ApiError(localStatus, localCode, message, retryAfter), {
+      upstreamStatus: status,
+      upstreamCode,
+      upstreamResponseType,
+    });
+  const official = upstreamCode ? "（官方代码 " + upstreamCode + "）" : "";
   const retry = Math.min(3600, Math.max(1, Number(retryHeader) || 60));
-  if (code === "11128" || status === 403)
-    return new ApiError(
+  if (code === "12153")
+    return error(
+      401,
+      "upstream_auth_expired",
+      "官方授权已失效，请在应用内重新登录" + official + "。",
+    );
+  if (code === "11128")
+    return error(
       403,
       "upstream_access_denied",
-      "上游拒绝 API 通道或账号权限，请在官方客户端核对。",
+      "官方渠道校验未通过，请在官方客户端核对本次请求" + official + "。",
     );
-  if (status === 401 || code === "12153")
-    return new ApiError(
+  if (code === "11136")
+    return error(
+      403,
+      "model_access_denied",
+      "当前账号没有所选模型的使用权限，请在官方客户端核对" + official + "。",
+    );
+  if (code === "11140")
+    return error(
+      403,
+      "upstream_account_restricted",
+      "当前账号的使用已被官方限制，请在官方客户端查看或反馈" + official + "。",
+    );
+  if (code === "11115")
+    return error(
+      400,
+      "context_length_exceeded",
+      "输入与历史对话超过模型上下文上限，请压缩上下文或新建对话" +
+        official +
+        "。",
+    );
+  if (["11148", "11149"].includes(code))
+    return error(
+      400,
+      "invalid_tool_history",
+      "工具调用记录不完整或重复，请检查客户端保存的对话记录" + official + "。",
+    );
+  if (status === 403)
+    return error(
+      403,
+      "upstream_http_forbidden",
+      "官方服务拒绝本次请求（HTTP 403，" +
+        (upstreamCode
+          ? "官方代码 " + upstreamCode
+          : upstreamResponseType === "html"
+            ? "HTML 响应，未提供业务码"
+            : "未提供业务码") +
+        "），请核对请求与官方服务状态。",
+    );
+  if (status === 401)
+    return error(
       401,
       "upstream_auth_expired",
       "官方授权已失效，请在应用内重新登录。",
@@ -384,12 +446,7 @@ function businessError(status, body, retryHeader) {
     status === 402 ||
     ["14001", "14002", "14012", "14013", "14014", "14018"].includes(code)
   )
-    return new ApiError(
-      402,
-      "insufficient_credits",
-      "官方账号积分不足。",
-      retry,
-    );
+    return error(402, "insufficient_credits", "官方账号积分不足。", retry);
   if (
     status === 429 ||
     [
@@ -407,7 +464,7 @@ function businessError(status, body, retryHeader) {
       "insufficient_quota",
     ].includes(code)
   )
-    return new ApiError(
+    return error(
       429,
       "upstream_rate_limit",
       "上游模型使用量或请求频率已达到限制。",
@@ -417,13 +474,8 @@ function businessError(status, body, retryHeader) {
     status === 404 ||
     ["11102", "11158", "model_not_found", "unsupported_model"].includes(code)
   )
-    return new ApiError(
-      404,
-      "model_not_available",
-      "该账号暂不能使用所选模型。",
-      60,
-    );
-  return new ApiError(
+    return error(404, "model_not_available", "该账号暂不能使用所选模型。", 60);
+  return error(
     status >= 400 && status < 500 ? 400 : 502,
     "upstream_error",
     "官方服务未完成本次请求（HTTP " +
@@ -460,6 +512,7 @@ export async function openApiChat(
       response.status,
       await boundedText(response, 1024 * 1024),
       response.headers.get("retry-after"),
+      response.headers.get("content-type") || "",
     );
   return response;
 }
@@ -489,6 +542,7 @@ export async function fetchApiModels(document, request, signal) {
           response.status,
           raw,
           response.headers.get("retry-after"),
+          response.headers.get("content-type") || "",
         );
       let data;
       try {
@@ -497,7 +551,12 @@ export async function fetchApiModels(document, request, signal) {
         throw new ApiError(502, "invalid_model_list", "模型目录格式无法识别。");
       }
       if (data.code !== undefined && ![0, 200, "0", "200"].includes(data.code))
-        throw businessError(502, raw);
+        throw businessError(
+          response.status,
+          raw,
+          null,
+          response.headers.get("content-type") || "",
+        );
       const catalog = data.data?.models;
       if (!Array.isArray(catalog))
         throw new ApiError(502, "invalid_model_list", "模型目录格式无法识别。");
@@ -590,8 +649,10 @@ export async function* apiChatFrames(response, model, requestId) {
       (value.code !== undefined && ![0, 200, "0", "200"].includes(value.code))
     )
       throw businessError(
-        502,
+        response.status,
         JSON.stringify({ code: value.code, error: value.error }),
+        null,
+        "text/event-stream",
       );
     if (!Array.isArray(value.choices)) {
       if (value.usage)
