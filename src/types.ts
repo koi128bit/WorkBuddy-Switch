@@ -471,6 +471,7 @@ export interface ApiStatus {
       bodyBytes: number;
       maxOutputTokens: number | null;
       reasoningEffort: string | null;
+      systemGuard?: number;
     };
   }[];
   lastError: string;

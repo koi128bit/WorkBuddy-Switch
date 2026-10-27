@@ -467,3 +467,90 @@ test("upstream empty finish strings on intermediate chunks are treated as unfini
   assert.equal(response.status, 200);
   assert.equal((await response.json()).choices[0].message.content, "OK");
 });
+test("a long system prompt is shielded before the upstream sees it and the original text is recoverable", async (t) => {
+  const f = await fixture(t);
+  const system = "私有系统提示词".repeat(600);
+  const response = await f.send({
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: "private-client-prompt" },
+    ],
+  });
+  assert.equal(response.status, 200);
+  assert.equal(f.calls.length, 1, "长系统提示词首次请求即遮蔽，不浪费一次被拒请求");
+  const body = JSON.parse(f.calls[0].options.body);
+  const guarded = body.messages.find((message) => message.role === "system");
+  assert.ok(guarded.content.includes("\u200b"));
+  assert.equal(guarded.content.split("\u200b").join(""), system);
+  assert.equal(body.messages.at(-1).content, "private-client-prompt");
+  const entry = f.gateway.snapshot().recent[0];
+  assert.equal(entry.status, "ok");
+  assert.equal(entry.requestInfo.systemGuard, 128);
+  assert.equal(
+    entry.requestInfo.bodyBytes,
+    Buffer.byteLength(f.calls[0].options.body),
+  );
+});
+test("an official channel refusal escalates system shielding on the same account", async (t) => {
+  const f = await fixture(t, async (_url, options) => {
+    const body = JSON.parse(options.body);
+    const system = body.messages.find((message) => message.role === "system").content;
+    const separators = (system.match(/\u200b/g) || []).length;
+    return separators >= 100
+      ? stream("guarded-reply")
+      : Response.json({ code: 11128 }, { status: 403 });
+  });
+  const system = "私有系统提示词".repeat(600);
+  const response = await f.send({
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: "private-client-prompt" },
+    ],
+  });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).choices[0].message.content, "guarded-reply");
+  assert.equal(f.calls.length, 3, "128 与 64 被拒后使用 32 分隔");
+  assert.equal(new Set(f.calls.map((call) => call.options.headers["X-User-Id"])).size, 1);
+  for (const call of f.calls) {
+    const body = JSON.parse(call.options.body);
+    assert.equal(body.messages.at(-1).content, "private-client-prompt");
+    assert.equal(
+      body.messages.find((message) => message.role === "system").content.split("\u200b").join(""),
+      system,
+    );
+  }
+  assert.equal(f.gateway.snapshot().recent[0].requestInfo.systemGuard, 32);
+});
+test("system shielding retries are bounded and never touch user messages", async (t) => {
+  const f = await fixture(t, async () =>
+    Response.json({ code: 11128 }, { status: 400 }),
+  );
+  const response = await f.send({
+    messages: [
+      { role: "system", content: "系统提示".repeat(400) },
+      { role: "user", content: "private-client-prompt" },
+    ],
+  });
+  assert.equal(response.status, 400);
+  const value = await response.json();
+  assert.equal(value.error.code, "upstream_access_denied");
+  assert.match(value.error.message, /11128/);
+  assert.equal(f.calls.length, 5, "一次原始请求加四次逐级遮蔽，不无限重试");
+  const users = f.calls.map((call) => JSON.parse(call.options.body).messages.at(-1).content);
+  assert.deepEqual(new Set(users), new Set(["private-client-prompt"]));
+  assert.equal(new Set(f.calls.map((call) => call.options.headers["X-User-Id"])).size, 1);
+  const entry = f.gateway.snapshot().recent[0];
+  assert.equal(entry.status, "error");
+  assert.equal(entry.upstreamCode, "11128");
+  assert.equal(entry.requestInfo.systemGuard, 16);
+  assert.ok(!JSON.stringify(entry).includes("private-client-prompt"));
+});
+test("a refusal without any system prompt is never replayed", async (t) => {
+  const f = await fixture(t, async () =>
+    Response.json({ code: 11128 }, { status: 403 }),
+  );
+  const response = await f.send();
+  assert.equal(response.status, 403);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.gateway.snapshot().recent[0].requestInfo.systemGuard, 0);
+});

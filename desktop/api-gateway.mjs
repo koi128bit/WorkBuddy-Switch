@@ -15,6 +15,10 @@ import {
   fetchApiModels,
   apiChatFrames,
   aggregateApiFrames,
+  guardSystemPrompt,
+  systemPromptChars,
+  SYSTEM_GUARD_INTERVALS,
+  SYSTEM_GUARD_THRESHOLD,
 } from "./api-upstream.mjs";
 import { prepareProtocolRequest, ProtocolStream } from "./api-protocols.mjs";
 
@@ -112,6 +116,9 @@ function restoreRequestInfo(value) {
     ].includes(value.reasoningEffort)
       ? value.reasoningEffort
       : null,
+    systemGuard: Number.isSafeInteger(value.systemGuard)
+      ? Math.max(0, value.systemGuard)
+      : 0,
   };
 }
 function restoreUpstreamInfo(value) {
@@ -862,6 +869,18 @@ export class ApiGateway {
   }
   async chat(prepared, _req, res) {
     let account = this.pick(prepared);
+    // Long system prompts are shielded up front so a channel validation refusal
+    // never costs a wasted round trip; short prompts stay untouched until the
+    // official service actually refuses them.
+    let payload = prepared.payload,
+      guardApplied = 0;
+    if (systemPromptChars(payload) >= SYSTEM_GUARD_THRESHOLD) {
+      const guarded = guardSystemPrompt(payload, SYSTEM_GUARD_INTERVALS[0]);
+      if (guarded) {
+        payload = guarded;
+        guardApplied = SYSTEM_GUARD_INTERVALS[0];
+      }
+    }
     const requestId = "chatcmpl-" + randomUUID(),
       started = Date.now(),
       controller = new AbortController();
@@ -891,14 +910,17 @@ export class ApiGateway {
       requestInfo: {
         messageCount: prepared.payload.messages.length,
         toolCount: prepared.payload.tools?.length ?? 0,
-        bodyBytes: Buffer.byteLength(JSON.stringify(prepared.payload)),
+        bodyBytes: Buffer.byteLength(JSON.stringify(payload)),
         maxOutputTokens: prepared.payload.max_tokens ?? null,
         reasoningEffort: prepared.payload.reasoning_effort ?? null,
+        systemGuard: guardApplied,
       },
     };
     let usage,
-      outputStarted = false;
+      outputStarted = false,
+      guardAttempt = guardApplied ? 1 : 0;
     const attempted = new Set();
+    const basePayload = prepared.payload;
     const adapter =
       prepared.protocol !== "chat"
         ? new ProtocolStream(prepared.protocol, prepared.model)
@@ -934,7 +956,7 @@ export class ApiGateway {
           const response = await this.credential(account, (doc) =>
             openApiChat(
               doc,
-              prepared.payload,
+              payload,
               account.conversationId,
               this.request,
               controller.signal,
@@ -998,6 +1020,32 @@ export class ApiGateway {
               account = next;
               this.leases.add(ref(account));
               entry.accountId = account.id;
+              continue;
+            }
+          }
+          // The official channel refuses prompts it does not expect from its
+          // own client (business code 11128) before any output exists. Shield
+          // the system text and replay on the same account; user, assistant
+          // and tool messages are never rewritten.
+          if (
+            error instanceof ApiError &&
+            error.code === "upstream_access_denied" &&
+            !outputStarted &&
+            !res.headersSent &&
+            !controller.signal.aborted &&
+            guardAttempt < SYSTEM_GUARD_INTERVALS.length
+          ) {
+            const interval = SYSTEM_GUARD_INTERVALS[guardAttempt];
+            const guarded = guardSystemPrompt(basePayload, interval);
+            guardAttempt = guarded
+              ? guardAttempt + 1
+              : SYSTEM_GUARD_INTERVALS.length;
+            if (guarded) {
+              payload = guarded;
+              entry.requestInfo.systemGuard = interval;
+              entry.requestInfo.bodyBytes = Buffer.byteLength(
+                JSON.stringify(payload),
+              );
               continue;
             }
           }
