@@ -341,6 +341,29 @@ test("API test conversation can be stopped while its upstream request is still p
   await expect(page.getByText("已停止", { exact: true })).toBeVisible();
 });
 
+test("API request history retains refusal diagnostics after a later successful request", async ({ page }) => {
+  await page.evaluate(async () => {
+    const value = await window.workbuddy.apiStatus();
+    value.lastError = "";
+    value.recent = [{
+      requestId: "diagnostic-failure", at: Date.now(), model: "deepseek-v4.1-flash",
+      provider: "workbuddy", accountId: value.accounts[0]?.id || "a",
+      status: "error", statusCode: 403, durationMs: 217,
+      inputTokens: null, outputTokens: null, errorCode: "upstream_access_denied",
+      upstreamStatus: 403, upstreamCode: "11128", upstreamResponseType: "json",
+      requestInfo: { messageCount: 996, toolCount: 41, bodyBytes: 1400000, maxOutputTokens: 128000, reasoningEffort: null },
+    }];
+    Object.assign(window.workbuddyFixture, { apiStatus: async () => structuredClone(value) });
+  });
+  await page.getByRole("button", { name: "API", exact: true }).click();
+  const details = page.getByText("上游 HTTP 403 · JSON · 官方代码 11128", { exact: true });
+  await expect(details).toBeVisible();
+  await details.click();
+  await expect(page.getByText(/996 条消息 · 41 个工具/)).toBeVisible();
+  await expect(page.getByText(/输出预算 128,000 Token/)).toBeVisible();
+  await page.screenshot({ path: "outputs/screenshots/api-refusal-diagnostics.png", animations: "disabled" });
+});
+
 test("local API page saves explicit account scope, controls the listener and never renders credentials", async ({
   page,
 }) => {
