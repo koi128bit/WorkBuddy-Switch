@@ -474,7 +474,7 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
               先将复制的 API Key 配置为 <code>WORKBUDDY_API_KEY</code>{" "}
               环境变量。
             </p>
-            <pre>{`curl '${status.baseUrl}/chat/completions' \\\n  -H "Authorization: Bearer $WORKBUDDY_API_KEY" \\\n  -H 'Content-Type: application/json' \\\n  -d '{"model":"auto","messages":[{"role":"user","content":"你好"}],"max_tokens":256}'`}</pre>
+            <pre>{`curl '${status.baseUrl}/chat/completions' \\\n  -H "Authorization: Bearer $WORKBUDDY_API_KEY" \\\n  -H 'Content-Type: application/json' \\\n  -d '{"model":"auto","messages":[{"role":"user","content":"你好"}]}'`}</pre>
             <Button disabled={!!busy} onClick={() => copy("curl")}>
               复制示例
             </Button>

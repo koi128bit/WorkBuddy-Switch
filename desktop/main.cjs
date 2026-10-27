@@ -505,7 +505,7 @@ async function start() {
       key: () => apiGateway.getKey(),
       baseUrl: () => base,
       curl: () =>
-        `curl '${base}/chat/completions' -H "Authorization: Bearer $WORKBUDDY_API_KEY" -H 'Content-Type: application/json' -d '{"model":"auto","messages":[{"role":"user","content":"你好"}],"max_tokens":256}'`,
+        `curl '${base}/chat/completions' -H "Authorization: Bearer $WORKBUDDY_API_KEY" -H 'Content-Type: application/json' -d '{"model":"auto","messages":[{"role":"user","content":"你好"}]}'`,
     };
     if (!Object.hasOwn(values, kind)) throw new Error("复制内容无效。");
     if (!testMode) clipboard.writeText(values[kind]());
