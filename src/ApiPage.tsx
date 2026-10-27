@@ -544,6 +544,36 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
                 </small>
                 <small>{number(entry.durationMs / 1000, 2)} s</small>
                 {entry.errorCode && <code>{entry.errorCode}</code>}
+                {entry.errorCode && entry.upstreamStatus && (
+                  <details className="api-request-details">
+                    <summary>
+                      {"上游 HTTP " +
+                        entry.upstreamStatus +
+                        " · " +
+                        (entry.upstreamResponseType === "event_stream"
+                          ? "SSE"
+                          : (
+                              entry.upstreamResponseType || "other"
+                            ).toUpperCase()) +
+                        " · " +
+                        (entry.upstreamCode
+                          ? "官方代码 " + entry.upstreamCode
+                          : "未返回官方业务码")}
+                    </summary>
+                    {entry.requestInfo && (
+                      <p>
+                        {number(entry.requestInfo.messageCount)} 条消息 ·{" "}
+                        {number(entry.requestInfo.toolCount)} 个工具 · 请求体{" "}
+                        {number(entry.requestInfo.bodyBytes / 1024, 1)} KB ·{" "}
+                        {entry.requestInfo.maxOutputTokens === null
+                          ? "使用官方默认输出预算"
+                          : "输出预算 " +
+                            number(entry.requestInfo.maxOutputTokens) +
+                            " Token"}
+                      </p>
+                    )}
+                  </details>
+                )}
               </div>
             ))}
           </div>

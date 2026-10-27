@@ -2625,6 +2625,18 @@ body:has(.tray-panel) {
   color: var(--muted);
   font-size: 11px;
 }
+.api-request-details {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+}
+.api-request-details summary {
+  cursor: pointer;
+}
+.api-request-details p {
+  margin: 8px 0 0;
+  line-height: 1.6;
+}
 @media (max-width: 1100px) {
   .api-columns {
     grid-template-columns: 1fr;
