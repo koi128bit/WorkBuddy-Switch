@@ -56,6 +56,17 @@ test("an explicit expired-authorization code on HTTP 403 renews the same account
   );
 });
 
+test("a channel-validation HTTP 400 is not upgraded into an authentication HTTP 403", async (t) => {
+  const f = await fixture(t, async () => Response.json({ code: 11128 }, { status: 400 }));
+  const response = await f.send();
+  assert.equal(response.status, 400);
+  const value = await response.json();
+  assert.equal(value.error.type, "invalid_request_error");
+  assert.match(value.error.message, /11128/);
+  assert.equal(f.gateway.snapshot().recent[0].upstreamStatus, 400);
+  assert.equal(f.calls.length, 1);
+});
+
 test("an HTML HTTP 403 is not reported as an account or official channel decision", async (t) => {
   const f = await fixture(
     t,
@@ -153,7 +164,7 @@ test("streamed business refusals keep the actual upstream HTTP status", async (t
       }),
   );
   const response = await f.send();
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 400);
   assert.match((await response.json()).error.message, /11128/);
   const entry = f.gateway.snapshot().recent[0];
   assert.equal(entry.upstreamStatus, 200);
