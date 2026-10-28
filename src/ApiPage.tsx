@@ -464,6 +464,20 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
               previous_response_id；模型能力与官方账号权限一致。
             </p>
           </details>
+          <details className="api-example">
+            <summary>向量与官方工具接口</summary>
+            <p>
+              向量：请求 <code>{status.baseUrl}/embeddings</code>，模型为{" "}
+              <code>bge-m3</code> 或 <code>hunyuan-embedding</code>（1024 维）。
+              单条文本最长 8188 字符，请先切块；<code>encoding_format</code> 仅支持{" "}
+              <code>float</code>。
+            </p>
+            <p>
+              官方工具：请求 <code>{status.baseUrl}/tools/agentic_search</code>、
+              <code>/tools/knowledge_search</code> 或 <code>/tools/tempkey</code>
+              ，请求体与官方客户端一致。结果由官方服务生成，计费与权限由官方决定。
+            </p>
+          </details>
         </section>
       </div>
       <section className="settings-card api-history">

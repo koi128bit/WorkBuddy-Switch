@@ -19,6 +19,11 @@ import {
   systemPromptChars,
   SYSTEM_GUARD_INTERVALS,
   SYSTEM_GUARD_THRESHOLD,
+  prepareEmbeddingRequest,
+  openApiEmbedding,
+  AGENT_TOOLS,
+  agentToolBody,
+  openAgentTool,
 } from "./api-upstream.mjs";
 import { prepareProtocolRequest, ProtocolStream } from "./api-protocols.mjs";
 
@@ -503,8 +508,49 @@ export class ApiGateway {
       now - quota.fetchedAt < 300000
     );
   }
+  // Round-robin / sequential / expiring selection without conversation
+  // stickiness, shared by chat and by the vector and agent-tool routes that
+  // carry no message history.
+  chooseCandidate(provider, model = "", excluded) {
+    const candidates = this.candidates(provider, model, excluded);
+    if (!candidates.length)
+      throw new ApiError(
+        503,
+        "no_available_accounts",
+        "没有可用的所选账号，请检查积分余额、授权与冷却状态。",
+      );
+    if (this.config.strategy === "expiring")
+      candidates.sort((a, b) => {
+        const quota = (account) =>
+          this.stores
+            .get(account.provider)
+            ?.records.find((row) => row.profile.id === account.id)?.profile
+            .quota;
+        const expiry = (account) => {
+          const value = quota(account);
+          return value?.remaining > 0 &&
+            value.expiresAt > Date.now() &&
+            Date.now() - value.fetchedAt < 21600000
+            ? value.expiresAt
+            : Infinity;
+        };
+        return expiry(a) - expiry(b);
+      });
+    const cursor = this.cursors.get(provider) || 0;
+    const selected =
+      this.config.strategy === "round_robin"
+        ? candidates[cursor % candidates.length]
+        : this.config.strategy === "sequential"
+          ? candidates.find(
+              (account) => ref(account) === this.cursors.get("selected:" + provider),
+            ) || candidates[0]
+          : candidates[0];
+    this.cursors.set(provider, cursor + 1);
+    this.cursors.set("selected:" + provider, ref(selected));
+    return selected;
+  }
   pick(prepared, excluded) {
-    let candidates = this.candidates(
+    const candidates = this.candidates(
       prepared.provider,
       prepared.payload.model,
       excluded,
@@ -536,38 +582,12 @@ export class ApiGateway {
         prior?.until > Date.now() &&
         candidates.find((account) => ref(account) === prior.account);
     let selected = sticky;
-    if (!selected) {
-      if (this.config.strategy === "expiring")
-        candidates.sort((a, b) => {
-          const quota = (account) =>
-            this.stores
-              .get(account.provider)
-              ?.records.find((row) => row.profile.id === account.id)?.profile
-              .quota;
-          const expiry = (account) => {
-            const value = quota(account);
-            return value?.remaining > 0 &&
-              value.expiresAt > Date.now() &&
-              Date.now() - value.fetchedAt < 21600000
-              ? value.expiresAt
-              : Infinity;
-          };
-          return expiry(a) - expiry(b);
-        });
-      const cursor = this.cursors.get(prepared.provider) || 0;
-      selected =
-        this.config.strategy === "round_robin"
-          ? candidates[cursor % candidates.length]
-          : this.config.strategy === "sequential"
-            ? candidates.find(
-                (account) =>
-                  ref(account) ===
-                  this.cursors.get("selected:" + prepared.provider),
-              ) || candidates[0]
-            : candidates[0];
-      this.cursors.set(prepared.provider, cursor + 1);
-      this.cursors.set("selected:" + prepared.provider, ref(selected));
-    }
+    if (!selected)
+      selected = this.chooseCandidate(
+        prepared.provider,
+        prepared.payload.model,
+        excluded,
+      );
     if (this.sessions.size >= 1000)
       this.sessions.delete(this.sessions.keys().next().value);
     const conversationId = sticky ? prior.conversationId : randomUUID();
@@ -675,6 +695,10 @@ export class ApiGateway {
         "no_selected_accounts",
         "请先选择用于 API 的 WorkBuddy 账号。",
       );
+    // Vector models deliberately stay out of this chat catalog: clients pick a
+    // default chat model from /v1/models, and listing an embedding model there
+    // only produces "model not available" turns. They are documented on the API
+    // page and accepted by /v1/embeddings only.
     return { object: "list", data: result };
   }
   async start() {
@@ -908,6 +932,14 @@ export class ApiGateway {
           200,
           await this.models(url.searchParams.get("refresh") === "1"),
         );
+      if (req.method === "POST" && pathname === "/embeddings")
+        return await this.embedding(await this.body(req), res);
+      if (req.method === "POST" && pathname.startsWith("/tools/"))
+        return await this.agentTool(
+          pathname.slice("/tools/".length),
+          await this.body(req),
+          res,
+        );
       if (
         req.method !== "POST" ||
         !["/chat/completions", "/responses", "/messages"].includes(pathname)
@@ -915,7 +947,7 @@ export class ApiGateway {
         throw new ApiError(
           404,
           "not_found",
-          "API 路径不存在，支持 /v1/models、/v1/chat/completions、/v1/responses 和 /v1/messages。",
+          "API 路径不存在，支持 /v1/models、/v1/embeddings、/v1/tools/{agentic_search|knowledge_search|tempkey}、/v1/chat/completions、/v1/responses 和 /v1/messages。",
         );
       const prepared = prepareProtocolRequest(await this.body(req), protocol);
       await this.chat(prepared, req, res);
@@ -987,6 +1019,15 @@ export class ApiGateway {
     let usage,
       outputStarted = false,
       guardAttempt = guardApplied ? 1 : 0;
+    // Business code 11128 is an intermittent channel-validation refusal rather
+    // than a verdict on the request: the same body is accepted by another
+    // account, or by the same account moments later. A refused request is
+    // therefore retried on the other selected accounts, but the whole replay
+    // stays bounded so an official outage cannot multiply paid calls.
+    // Refusals cost no tokens because they land before any output exists.
+    const CHANNEL_REFUSAL_REPLAYS = 3;
+    let channelReplays = 0;
+    const refused = new Set();
     const attempted = new Set();
     const basePayload = prepared.payload;
     const adapter =
@@ -1100,22 +1141,50 @@ export class ApiGateway {
             error.code === "upstream_access_denied" &&
             !outputStarted &&
             !res.headersSent &&
-            !controller.signal.aborted &&
-            guardAttempt < SYSTEM_GUARD_INTERVALS.length
+            !controller.signal.aborted
           ) {
-            const interval = SYSTEM_GUARD_INTERVALS[guardAttempt];
-            const guarded = guardSystemPrompt(basePayload, interval);
-            guardAttempt = guarded
-              ? guardAttempt + 1
-              : SYSTEM_GUARD_INTERVALS.length;
-            if (guarded) {
-              payload = guarded;
-              entry.requestInfo.systemGuard = interval;
-              entry.requestInfo.bodyBytes = Buffer.byteLength(
-                JSON.stringify(payload),
-              );
-              continue;
+            if (guardAttempt < SYSTEM_GUARD_INTERVALS.length) {
+              const interval = SYSTEM_GUARD_INTERVALS[guardAttempt];
+              const guarded = guardSystemPrompt(basePayload, interval);
+              guardAttempt = guarded
+                ? guardAttempt + 1
+                : SYSTEM_GUARD_INTERVALS.length;
+              if (guarded) {
+                payload = guarded;
+                entry.requestInfo.systemGuard = interval;
+                entry.requestInfo.bodyBytes = Buffer.byteLength(
+                  JSON.stringify(payload),
+                );
+                continue;
+              }
             }
+            // The ladder is exhausted on this account. Because the refusal is
+            // intermittent rather than a verdict on the body, hand the request
+            // to a different selected account before reporting it. The refused
+            // account is skipped for this request even when the shielding had
+            // to fall back to the unguarded body.
+            refused.add(ref(account));
+            if (channelReplays >= CHANNEL_REFUSAL_REPLAYS) throw error;
+            let next;
+            try {
+              next = this.pick(prepared, new Set([...attempted, ...refused]));
+            } catch {
+              throw error;
+            }
+            channelReplays++;
+            this.leases.delete(ref(account));
+            account = next;
+            this.leases.add(ref(account));
+            entry.accountId = account.id;
+            // A fresh account restarts the shielding ladder, and the
+            // unshielded body is the least likely to trip the channel scan.
+            payload = basePayload;
+            guardAttempt = 0;
+            entry.requestInfo.systemGuard = 0;
+            entry.requestInfo.bodyBytes = Buffer.byteLength(
+              JSON.stringify(payload),
+            );
+            continue;
           }
           throw error;
         }
@@ -1182,52 +1251,201 @@ export class ApiGateway {
       entry.durationMs = Date.now() - started;
       entry.inputTokens = usage?.prompt_tokens ?? null;
       entry.outputTokens = usage?.completion_tokens ?? null;
-      this.recordApiUsage(
-        account.provider,
-        account.id,
-        prepared.payload.model,
-        entry.inputTokens,
-        entry.outputTokens,
-      );
-      this.totals.requests++;
-      this.totals[entry.status === "ok" ? "succeeded" : "failed"]++;
-      this.totals.inputTokens += entry.inputTokens ?? 0;
-      this.totals.outputTokens += entry.outputTokens ?? 0;
-      if (entry.inputTokens === null || entry.outputTokens === null)
-        this.totals.unknownUsage++;
-      this.recent.unshift(entry);
-      this.recent = this.recent.slice(0, 100);
-      for (const [key, until] of this.cooldowns)
-        if (until < Date.now()) this.cooldowns.delete(key);
-      const saved = JSON.stringify(
-        {
-          version: 1,
-          totals: this.totals,
-          recent: this.recent,
-          cooldowns: [...this.cooldowns]
-            .slice(-5000)
-            .map(([key, until]) => ({ key, until })),
-        },
-        null,
-        2,
-      );
-      const savedDaily = JSON.stringify(
-        { version: 1, days: this.dailyApiUsage() },
-        null,
-        2,
-      );
-      this.writeTail = this.writeTail
-        .then(() =>
-          atomicWrite(path.join(this.directory, "api-usage.json"), saved),
-        )
-        .then(() => atomicWrite(this.apiUsagePath(), savedDaily))
-        .catch(() => {
-          this.lastError =
-            "API 请求结果已保留在内存，但本地用量记录保存失败，请检查磁盘。";
-          this.onChange();
-        });
-      this.onChange();
+      this.commitEntry(entry, account, prepared.payload.model);
       finished();
+    }
+  }
+  // Chat, vector and agent-tool requests share one bookkeeping path so the usage
+  // page and the recent list never diverge between protocols.
+  commitEntry(entry, account, model) {
+    this.recordApiUsage(
+      account.provider,
+      account.id,
+      model,
+      entry.inputTokens,
+      entry.outputTokens,
+    );
+    this.totals.requests++;
+    this.totals[entry.status === "ok" ? "succeeded" : "failed"]++;
+    this.totals.inputTokens += entry.inputTokens ?? 0;
+    this.totals.outputTokens += entry.outputTokens ?? 0;
+    if (entry.inputTokens === null || entry.outputTokens === null)
+      this.totals.unknownUsage++;
+    this.recent.unshift(entry);
+    this.recent = this.recent.slice(0, 100);
+    for (const [key, until] of this.cooldowns)
+      if (until < Date.now()) this.cooldowns.delete(key);
+    const saved = JSON.stringify(
+      {
+        version: 1,
+        totals: this.totals,
+        recent: this.recent,
+        cooldowns: [...this.cooldowns]
+          .slice(-5000)
+          .map(([key, until]) => ({ key, until })),
+      },
+      null,
+      2,
+    );
+    const savedDaily = JSON.stringify(
+      { version: 1, days: this.dailyApiUsage() },
+      null,
+      2,
+    );
+    this.writeTail = this.writeTail
+      .then(() =>
+        atomicWrite(path.join(this.directory, "api-usage.json"), saved),
+      )
+      .then(() => atomicWrite(this.apiUsagePath(), savedDaily))
+      .catch(() => {
+        this.lastError =
+          "API 请求结果已保留在内存，但本地用量记录保存失败，请检查磁盘。";
+        this.onChange();
+      });
+    this.onChange();
+  }
+  async embedding(raw, res) {
+    const prepared = prepareEmbeddingRequest(raw);
+    const account = this.chooseCandidate("workbuddy", prepared.model);
+    const started = Date.now();
+    const entry = {
+      requestId: "emb-" + randomUUID(),
+      at: started,
+      model: prepared.model,
+      provider: account.provider,
+      accountId: account.id,
+      status: "error",
+      statusCode: 502,
+      durationMs: 0,
+      inputTokens: null,
+      outputTokens: 0,
+      errorCode: "",
+      requestInfo: {
+        messageCount: 0,
+        toolCount: 0,
+        bodyBytes: Buffer.byteLength(JSON.stringify(prepared.payload)),
+        maxOutputTokens: null,
+        embeddingCount: prepared.payload.input.length,
+        reason: "embedding",
+      },
+    };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120000);
+    timer.unref();
+    res.once("close", () => {
+      if (!res.writableEnded) controller.abort();
+    });
+    try {
+      const data = await this.credential(account, (document) =>
+        openApiEmbedding(
+          document,
+          prepared.payload,
+          this.request,
+          controller.signal,
+        ),
+      );
+      entry.inputTokens = data.usage.prompt_tokens;
+      entry.status = "ok";
+      entry.statusCode = 200;
+      this.lastError = "";
+      this.json(res, 200, data);
+    } catch (error) {
+      const safe = controller.signal.aborted
+        ? new ApiError(499, "request_cancelled", "向量请求已停止。")
+        : error instanceof ApiError
+          ? error
+          : new ApiError(502, "gateway_error", "向量请求未完成。");
+      entry.status = controller.signal.aborted ? "cancelled" : "error";
+      entry.statusCode = safe.status;
+      entry.errorCode = safe.code;
+      Object.assign(entry, restoreUpstreamInfo(safe));
+      this.lastError = safe.message;
+      if (safe.retryAfter) res.setHeader("Retry-After", String(safe.retryAfter));
+      this.json(res, safe.status, this.errorBody(safe, "chat"));
+    } finally {
+      clearTimeout(timer);
+      entry.durationMs = Date.now() - started;
+      this.commitEntry(entry, account, prepared.model);
+    }
+  }
+  async agentTool(tool, raw, res) {
+    if (!Object.hasOwn(AGENT_TOOLS, tool))
+      throw new ApiError(
+        404,
+        "not_found",
+        "可用工具：" + Object.keys(AGENT_TOOLS).join("、") + "。",
+      );
+    const body = agentToolBody(tool, raw);
+    const account = this.chooseCandidate("workbuddy", "agenttool:" + tool);
+    const started = Date.now();
+    const entry = {
+      requestId: "tool-" + randomUUID(),
+      at: started,
+      model: "agenttool:" + tool,
+      provider: account.provider,
+      accountId: account.id,
+      status: "error",
+      statusCode: 502,
+      durationMs: 0,
+      inputTokens: null,
+      outputTokens: null,
+      errorCode: "",
+      requestInfo: {
+        messageCount: 0,
+        toolCount: 1,
+        bodyBytes: Buffer.byteLength(JSON.stringify(body)),
+        maxOutputTokens: null,
+        reason: "agent_tool",
+      },
+    };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 300000);
+    timer.unref();
+    res.once("close", () => {
+      if (!res.writableEnded) controller.abort();
+    });
+    try {
+      const response = await this.credential(account, (document) =>
+        openAgentTool(document, tool, body, this.request, controller.signal),
+      );
+      entry.status = "ok";
+      entry.statusCode = 200;
+      this.lastError = "";
+      res.writeHead(200, {
+        "Content-Type":
+          response.headers.get("content-type") || "application/json",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      });
+      if (!response.body) res.end();
+      else {
+        for await (const chunk of response.body) {
+          if (controller.signal.aborted || res.destroyed) break;
+          if (!res.write(chunk))
+            await new Promise((resolve) => res.once("drain", resolve));
+        }
+        res.end();
+      }
+    } catch (error) {
+      const safe = controller.signal.aborted
+        ? new ApiError(499, "request_cancelled", "工具请求已停止。")
+        : error instanceof ApiError
+          ? error
+          : new ApiError(502, "gateway_error", "工具请求未完成。");
+      entry.status = controller.signal.aborted ? "cancelled" : "error";
+      entry.statusCode = safe.status;
+      entry.errorCode = safe.code;
+      Object.assign(entry, restoreUpstreamInfo(safe));
+      this.lastError = safe.message;
+      if (!res.headersSent) {
+        if (safe.retryAfter)
+          res.setHeader("Retry-After", String(safe.retryAfter));
+        this.json(res, safe.status, this.errorBody(safe, "chat"));
+      } else if (!res.destroyed) res.end();
+    } finally {
+      clearTimeout(timer);
+      entry.durationMs = Date.now() - started;
+      this.commitEntry(entry, account, entry.model);
     }
   }
   async testChat(model = "auto") {

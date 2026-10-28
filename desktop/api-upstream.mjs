@@ -486,6 +486,21 @@ function businessError(status, body, retryHeader, contentType = "") {
       "invalid_tool_history",
       "工具调用记录不完整或重复，请检查客户端保存的对话记录" + official + "。",
     );
+  // The knowledge-search endpoint answers 401 / 10034 when its search ticket is
+  // missing or unusable. That is a tool-credential problem, not an expired
+  // account authorization, so it must not trigger a login renewal.
+  if (code === "10034")
+    return error(
+      502,
+      "tool_credentials_required",
+      "官方知识库检索未接受本次凭据，请在应用内重新登录后重试" + official + "。",
+    );
+  if (code === "10040")
+    return error(
+      502,
+      "tool_service_unavailable",
+      "官方工具服务暂不可用，该数据源当前未开通或未接入" + official + "。",
+    );
   if (status === 403)
     return error(
       403,
@@ -576,6 +591,212 @@ export async function openApiChat(
       response.headers.get("retry-after"),
       response.headers.get("content-type") || "",
     );
+  return response;
+}
+// The official service exposes OpenAI-shaped vectors on /v2/embeddings while the
+// personal model catalog only lists chat and media models. The ids below are the
+// two the official gateway accepts; anything else answers 11351.
+export const EMBEDDING_MODELS = Object.freeze([
+  { id: "bge-m3", name: "BGE-M3", dimensions: 1024 },
+  { id: "hunyuan-embedding", name: "Hunyuan Embedding", dimensions: 1024 },
+]);
+// Single inputs above 8188 characters come back as 11353 / HTTP 500 (TEI 413),
+// so the gateway refuses them locally instead of forwarding a doomed request.
+export const EMBEDDING_INPUT_CHARS = 8188;
+export function prepareEmbeddingRequest(raw) {
+  if (!record(raw)) fail("请求须为 JSON 对象。");
+  const global =
+    typeof raw.model === "string" && raw.model.startsWith("global:");
+  const model = global ? raw.model.slice(7) : raw.model;
+  if (!identifier(model)) fail("模型标识无效。");
+  if (global)
+    throw new ApiError(
+      400,
+      "unsupported_region",
+      "向量模型目前仅验证国内版可用，暂不接受 global: 前缀。",
+    );
+  if (!EMBEDDING_MODELS.some((entry) => entry.id === model))
+    throw new ApiError(
+      404,
+      "model_not_available",
+      "可用的向量模型为 " + EMBEDDING_MODELS.map((m) => m.id).join("、") + "。",
+    );
+  const inputs = Array.isArray(raw.input) ? raw.input : [raw.input];
+  if (!inputs.length || inputs.length > 2048)
+    fail("input 应包含 1–2048 条文本或 token 序列。");
+  const normalized = inputs.map((item) => {
+    if (typeof item === "string") {
+      if (!item.length) fail("input 不能包含空字符串。");
+      if (item.length > EMBEDDING_INPUT_CHARS)
+        fail(
+          "单条 input 最长 " +
+            EMBEDDING_INPUT_CHARS +
+            " 个字符，请先切块再请求。",
+        );
+      return item;
+    }
+    if (
+      Array.isArray(item) &&
+      item.length &&
+      item.every((token) => Number.isSafeInteger(token) && token >= 0)
+    )
+      return item;
+    fail("input 仅支持文本或 token 数组。");
+  });
+  if (raw.encoding_format !== undefined && raw.encoding_format !== "float")
+    fail("仅支持 encoding_format=float。");
+  const payload = { model, input: normalized };
+  if (raw.user !== undefined) {
+    if (typeof raw.user !== "string" || raw.user.length > 256)
+      fail("user 无效。");
+    payload.user = raw.user;
+  }
+  return { model, payload };
+}
+export async function openApiEmbedding(document, payload, request, signal) {
+  let response;
+  try {
+    response = await request(endpoint(document) + "/v2/embeddings", {
+      method: "POST",
+      redirect: "error",
+      signal,
+      headers: {
+        ...headers(document, randomUUID()),
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new ApiError(
+      502,
+      "upstream_transport_error",
+      "向量请求连接中断，请重试。",
+    );
+  }
+  if (!response.ok)
+    throw businessError(
+      response.status,
+      await boundedText(response, 1024 * 1024),
+      response.headers.get("retry-after"),
+      response.headers.get("content-type") || "",
+    );
+  let data;
+  try {
+    data = JSON.parse(await boundedText(response, 256 * 1024 * 1024));
+  } catch (error) {
+    throw error instanceof ApiError
+      ? error
+      : new ApiError(502, "invalid_embedding_response", "向量响应无法解析。");
+  }
+  if (
+    data?.code !== undefined &&
+    ![0, 200, "0", "200"].includes(data.code)
+  )
+    throw businessError(
+      response.status,
+      JSON.stringify({ code: data.code, msg: data.msg }),
+      null,
+      "application/json",
+    );
+  if (!Array.isArray(data?.data) || !data.data.length)
+    throw new ApiError(502, "invalid_embedding_response", "向量响应缺少 data。");
+  return {
+    object: "list",
+    data: data.data.map((row, index) => ({
+      object: "embedding",
+      index,
+      embedding: row.embedding,
+    })),
+    model: typeof data.model === "string" ? data.model : payload.model,
+    usage: {
+      prompt_tokens: number(data?.usage?.prompt_tokens) ?? 0,
+      total_tokens:
+        number(data?.usage?.total_tokens) ??
+        number(data?.usage?.prompt_tokens) ??
+        0,
+    },
+  };
+}
+// Agent tools live under /agenttool and are not part of the chat protocol: the
+// official client forwards these requests with the same bearer token.
+export const AGENT_TOOLS = Object.freeze({
+  agentic_search: { path: "/agenttool/v1/agentic_search", stream: true },
+  knowledge_search: { path: "/agenttool/v1/knowledge_search", stream: false },
+  tempkey: { path: "/agenttool/v1/tempkey", stream: false },
+});
+export function agentToolBody(tool, raw) {
+  if (!record(raw)) fail("请求须为 JSON 对象。");
+  if (tool === "agentic_search") {
+    if (typeof raw.query !== "string" || !raw.query.trim())
+      fail("query 必填。");
+    if (Buffer.byteLength(raw.query, "utf8") > 64 * 1024)
+      fail("query 最长 64 KiB。");
+    return {
+      query: raw.query,
+      search_mode: raw.search_mode === 1 ? 1 : 2,
+      stream: raw.stream === false ? false : true,
+      biz_via: raw.biz_via === "internal" ? "internal" : "public",
+    };
+  }
+  if (tool === "knowledge_search") {
+    if (typeof raw.query !== "string" || !raw.query.trim())
+      fail("query 必填。");
+    if (
+      raw.sources !== undefined &&
+      (!Array.isArray(raw.sources) || raw.sources.length > 32)
+    )
+      fail("sources 无效。");
+    return {
+      query: raw.query,
+      ...(Array.isArray(raw.sources) && raw.sources.length
+        ? {
+            sources: raw.sources.slice(0, 32).map((source) => {
+              if (!record(source) || typeof source.source_type !== "string")
+                fail("sources 项须包含 source_type。");
+              return { source_type: source.source_type.slice(0, 120) };
+            }),
+          }
+        : {}),
+    };
+  }
+  return {};
+}
+export async function openAgentTool(document, tool, body, request, signal) {
+  const { path, stream } = AGENT_TOOLS[tool];
+  const extra = headers(document, randomUUID());
+  // knowledge_search authenticates twice: the bearer token carries the account
+  // and X-User-Ticket carries the same login ticket. Without the ticket the
+  // official service answers 401 "platform credentials and search ticket are
+  // required", which must not be mistaken for an expired authorization.
+  if (tool === "knowledge_search") extra["X-User-Ticket"] = document.token;
+  let response;
+  try {
+    response = await request(endpoint(document) + path, {
+      method: "POST",
+      redirect: "error",
+      signal,
+      headers: {
+        ...extra,
+        Accept: stream ? "text/event-stream" : "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(
+      502,
+      "upstream_transport_error",
+      "工具请求连接中断，请重试。",
+    );
+  }
+  if (!response.ok) {
+    const record = await boundedText(response, 1024 * 1024);
+    throw businessError(
+      response.status,
+      record,
+      response.headers.get("retry-after"),
+      response.headers.get("content-type") || "",
+    );
+  }
   return response;
 }
 export async function fetchApiModels(document, request, signal) {
