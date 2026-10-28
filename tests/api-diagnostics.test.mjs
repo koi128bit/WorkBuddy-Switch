@@ -25,10 +25,14 @@ for (const [official, local, message] of [
     assert.equal(value.error.code, local);
     assert.match(value.error.message, message);
     assert.match(value.error.message, new RegExp(String(official)));
+    // Intermittent channel validation (11128) is retried on another account;
+    // every other refusal is a verdict about this account and stays put.
     assert.equal(
       f.calls.length,
-      1,
-      "a refused request is never moved to another account",
+      official === 11128 ? 2 : 1,
+      official === 11128
+        ? "11128 is replayed once on the next account"
+        : "a refused request is never moved to another account",
     );
     const entry = f.gateway.snapshot().recent[0];
     assert.equal(entry.upstreamStatus, 403);
@@ -66,7 +70,11 @@ test("a channel-validation HTTP 400 is not upgraded into an authentication HTTP 
   assert.equal(value.error.type, "invalid_request_error");
   assert.match(value.error.message, /11128/);
   assert.equal(f.gateway.snapshot().recent[0].upstreamStatus, 400);
-  assert.equal(f.calls.length, 1);
+  assert.equal(
+    f.calls.length,
+    2,
+    "two same-region accounts each refuse the body once; the 400 status survives",
+  );
 });
 
 test("an HTML HTTP 403 is not reported as an account or official channel decision", async (t) => {
@@ -172,5 +180,7 @@ test("streamed business refusals keep the actual upstream HTTP status", async (t
   assert.equal(entry.upstreamStatus, 200);
   assert.equal(entry.upstreamCode, "11128");
   assert.equal(entry.upstreamResponseType, "event_stream");
-  assert.equal(f.calls.length, 1);
+  // The refusal arrived as a streamed business error, which still counts as a
+  // pre-output refusal and is therefore replayed on the other account.
+  assert.equal(f.calls.length, 2);
 });

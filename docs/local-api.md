@@ -9,6 +9,8 @@
 | OpenAI Chat Completions | `POST /v1/chat/completions` | `http://127.0.0.1:8317/v1` |
 | OpenAI Responses        | `POST /v1/responses`        | `http://127.0.0.1:8317/v1` |
 | Anthropic Messages      | `POST /v1/messages`         | `http://127.0.0.1:8317`    |
+| OpenAI Embeddings       | `POST /v1/embeddings`       | `http://127.0.0.1:8317/v1` |
+| 官方工具                | `POST /v1/tools/{name}`     | 同上                       |
 | 模型目录                | `GET /v1/models`            | 同上                       |
 
 也支持无 `/v1` 前缀和尾部斜杠。使用同一密钥，支持 `Authorization: Bearer …` 或 `x-api-key`；同时发送两者时必须一致。
@@ -71,7 +73,7 @@ API 页面展示近 7 / 30 天请求与 Token 趋势、成功率、P50 / P95 延
 
 | 官方业务码        | 含义与处理                                                                                                                                                                          |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `11128`           | 官方渠道校验未通过。1.9.2 起保留上游的 HTTP 400 请求拒绝，不再误改成授权类 403；上游明确返回 403 时仍保留 403。1.9.3 起为超过 4 KB 的系统提示词插入零宽分隔符，被拒时在同一账号按 128 / 64 / 32 / 16 字符间隔逐级加强；仍被拒绝说明请求本身不被官方接纳。 |
+| `11128`           | 官方渠道校验未通过。1.9.2 起保留上游的 HTTP 400 请求拒绝，不再误改成授权类 403；上游明确返回 403 时仍保留 403。1.9.3 起为超过 4 KB 的系统提示词插入零宽分隔符，被拒时按 128 / 64 / 32 / 16 字符间隔逐级加强。该拒绝是间歇性的——同一份请求体换个账号或稍后重发通常会被接受——因此 1.9.5 起遮蔽阶梯耗尽后会改用账号池里的下一个账号重放（最多 3 次，且必须尚未产生任何输出）；只有所有账号都被拒时才把 400 交给客户端。 |
 | `11136` / `11140` | 分别为模型使用权限与账号限制，请在官方客户端查看权限或反馈。                                                                                                                        |
 | `11115`           | 输入与历史超过模型上下文上限，请在调用客户端压缩历史或新建会话。                                                                                                                    |
 | `11148` / `11149` | 工具记录缺失或重复，请检查调用客户端保存的工具历史。                                                                                                                                |
@@ -84,4 +86,38 @@ curl http://127.0.0.1:8317/v1/chat/completions \
   -H "Authorization: Bearer $WORKBUDDY_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{"model":"auto","messages":[{"role":"user","content":"你好"}]}'
+```
+
+## 向量
+
+`POST /v1/embeddings`，请求体与 OpenAI 一致。可用模型为 `bge-m3` 与 `hunyuan-embedding`，均输出 1024 维，返回 `data[].embedding` 浮点数组与 `usage.prompt_tokens`。向量模型不在官方对话模型目录中，`GET /v1/models` 不列出它们，客户端需手动填写模型名。
+
+- 单条文本最长 8188 字符，超长请先切块；超出会在本机直接拒绝，不会转发。
+- 一次请求最多 2048 条输入，可用字符串、字符串数组或 token 数组；`dimensions` 不生效，`encoding_format` 仅支持 `float`（官方不接受 `base64`）。
+- 目前仅验证国内版账号可用，`global:` 前缀会被拒绝。
+
+```bash
+curl http://127.0.0.1:8317/v1/embeddings \
+  -H "Authorization: Bearer $WORKBUDDY_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"bge-m3","input":["第一条","第二条"]}'
+```
+
+## 官方工具
+
+`POST /v1/tools/{name}` 转发官方 `/agenttool` 接口，请求体与官方客户端一致，响应原样透传（流式接口保持 SSE）。
+
+| 工具               | 必填字段 | 说明                                                              |
+| ------------------ | -------- | ----------------------------------------------------------------- |
+| `agentic_search`   | `query`  | 多来源联网研究，`stream` 默认 `true`；可传 `search_mode`、`biz_via` |
+| `knowledge_search` | `query`  | 检索账号内部资料库；`sources` 可选，默认由官方决定可使用源        |
+| `tempkey`          | 无       | 获取临时密钥                                                      |
+
+工具在当前所选账号上执行，配额与权限由官方决定；数据源未开通时官方返回 `10040`，本机映射为 `tool_service_unavailable`。检索凭据问题返回 `10034` → `tool_credentials_required`，不会被当作登录失效。
+
+```bash
+curl http://127.0.0.1:8317/v1/tools/agentic_search \
+  -H "Authorization: Bearer $WORKBUDDY_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"研究 A 股半导体设备行业整体情况","stream":false}'
 ```

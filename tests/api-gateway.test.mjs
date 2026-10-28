@@ -563,10 +563,40 @@ test("an official channel refusal escalates system shielding on the same account
   }
   assert.equal(f.gateway.snapshot().recent[0].requestInfo.systemGuard, 32);
 });
-test("system shielding retries are bounded and never touch user messages", async (t) => {
-  const f = await fixture(t, async () =>
-    Response.json({ code: 11128 }, { status: 400 }),
+test("an exhausted shielding ladder moves to another account instead of failing the turn", async (t) => {
+  // 11128 is an intermittent channel refusal, so a body the first account
+  // keeps refusing is replayed on the next selected account.
+  const users = [];
+  const f = await fixture(t, async (_url, options) => {
+    const id = options.headers["X-User-Id"];
+    users.push(id);
+    return id === "a"
+      ? Response.json({ code: 11128 }, { status: 400 })
+      : stream("second-account-reply");
+  });
+  const response = await f.send({
+    messages: [
+      { role: "system", content: "系统提示".repeat(400) },
+      { role: "user", content: "private-client-prompt" },
+    ],
+  });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).choices[0].message.content, "second-account-reply");
+  assert.equal(f.calls.length, 6, "首个账号一次原始请求加四次遮蔽，然后换号");
+  assert.equal(new Set(users).size, 2, "重放发生在另一个账号上");
+  const body = JSON.parse(f.calls.at(-1).options.body);
+  assert.equal(body.messages.at(-1).content, "private-client-prompt");
+  assert.equal(
+    body.messages.find((message) => message.role === "system").content.includes("\u200b"),
+    false,
+    "新账号从未遮蔽的原始请求体开始",
   );
+  const entry = f.gateway.snapshot().recent[0];
+  assert.equal(entry.status, "ok");
+  assert.equal(entry.requestInfo.systemGuard, 0);
+});
+test("channel refusal replays are bounded across accounts and never touch user messages", async (t) => {
+  const f = await fixture(t, async () => Response.json({ code: 11128 }, { status: 400 }));
   const response = await f.send({
     messages: [
       { role: "system", content: "系统提示".repeat(400) },
@@ -577,24 +607,45 @@ test("system shielding retries are bounded and never touch user messages", async
   const value = await response.json();
   assert.equal(value.error.code, "upstream_access_denied");
   assert.match(value.error.message, /11128/);
-  assert.equal(f.calls.length, 5, "一次原始请求加四次逐级遮蔽，不无限重试");
-  const users = f.calls.map((call) => JSON.parse(call.options.body).messages.at(-1).content);
-  assert.deepEqual(new Set(users), new Set(["private-client-prompt"]));
-  assert.equal(new Set(f.calls.map((call) => call.options.headers["X-User-Id"])).size, 1);
+  // Two same-region accounts, each getting one raw attempt plus the four
+  // shielding steps, and no more: an official outage must stay bounded.
+  assert.equal(f.calls.length, 10);
+  const payloads = f.calls.map((call) => JSON.parse(call.options.body));
+  assert.deepEqual(
+    new Set(payloads.map((body) => body.messages.at(-1).content)),
+    new Set(["private-client-prompt"]),
+  );
+  assert.deepEqual(
+    new Set(f.calls.map((call) => call.options.headers["X-User-Id"])),
+    new Set(["a", "b"]),
+  );
   const entry = f.gateway.snapshot().recent[0];
   assert.equal(entry.status, "error");
   assert.equal(entry.upstreamCode, "11128");
-  assert.equal(entry.requestInfo.systemGuard, 16);
   assert.ok(!JSON.stringify(entry).includes("private-client-prompt"));
 });
-test("a refusal without any system prompt is never replayed", async (t) => {
-  const f = await fixture(t, async () =>
-    Response.json({ code: 11128 }, { status: 403 }),
+test("a refusal without any system prompt still gets one replay on another account", async (t) => {
+  const f = await fixture(t, async (_url, options) =>
+    options.headers["X-User-Id"] === "a"
+      ? Response.json({ code: 11128 }, { status: 403 })
+      : stream("replayed"),
   );
   const response = await f.send();
-  assert.equal(response.status, 403);
-  assert.equal(f.calls.length, 1);
+  assert.equal(response.status, 200);
+  assert.equal(f.calls.length, 2);
   assert.equal(f.gateway.snapshot().recent[0].requestInfo.systemGuard, 0);
+});
+test("a channel refusal that arrives after output started is never replayed", async (t) => {
+  const f = await fixture(t, async () =>
+    new Response(
+      'data: {"choices":[{"delta":{"content":"半截回复"}}]}\n\n' +
+        'data: {"code":11128}\n\n',
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+  const response = await f.send();
+  assert.equal(f.calls.length, 1, "已经开始输出就不能再放一次付费请求");
+  assert.ok(response.status >= 400);
 });
 test("local API token usage is recorded per day, account and model and survives a restart", async (t) => {
   const f = await fixture(t);
