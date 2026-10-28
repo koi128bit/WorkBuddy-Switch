@@ -270,12 +270,25 @@ test("local API usage is added to totals, daily rows and models without inventin
       ["2026-10-28", 110],
     ],
   );
+  // Day boundaries follow the same local calendar the ledger labels use, so the
+  // assertion holds in any runner timezone instead of only in Beijing time.
+  const startOfDay = (label) => {
+    const [year, month, day] = label.split("-").map(Number);
+    return new Date(year, month - 1, day).getTime();
+  };
   assert.equal(
     mergeApiUsage(base, records, {
-      since: Date.parse("2026-10-28T00:00:00+08:00"),
+      since: startOfDay("2026-10-28"),
     }).api.requests,
     1,
     "只有 10-28 的当天记录落在筛选范围内",
+  );
+  assert.equal(
+    mergeApiUsage(base, records, {
+      until: startOfDay("2026-10-28"),
+    }).api.requests,
+    3,
+    "结束日期不包含当天",
   );
   assert.equal(
     mergeApiUsage(base, records, { accountId: "b" }).api.requests,
