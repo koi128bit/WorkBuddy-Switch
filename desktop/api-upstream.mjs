@@ -20,6 +20,9 @@ const name = (value) =>
 const finite = (value) => typeof value === "number" && Number.isFinite(value);
 const number = (value) =>
   Number.isSafeInteger(value) && value >= 0 ? value : null;
+// Long agent sessions keep every turn in the request; the previous 2000 message
+// ceiling rejected them even though the model still had context budget left.
+export const MESSAGE_LIMIT = 20000;
 const fields = new Set([
   "model",
   "messages",
@@ -124,9 +127,9 @@ export function prepareApiRequest(raw) {
   if (
     !Array.isArray(raw.messages) ||
     !raw.messages.length ||
-    raw.messages.length > 2000
+    raw.messages.length > MESSAGE_LIMIT
   )
-    fail("messages 应包含 1–2000 条消息。");
+    fail("messages 应包含 1–" + MESSAGE_LIMIT + " 条消息。");
   const messages = raw.messages.map((message) => {
     if (
       !record(message) ||

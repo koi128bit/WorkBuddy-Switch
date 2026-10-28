@@ -1416,6 +1416,38 @@ input[type="checkbox"] {
   padding: 20px 0;
   text-align: center;
 }
+.api-usage-panel {
+  margin-bottom: 24px;
+}
+.api-usage-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.api-usage-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.api-usage-summary span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.api-usage-summary strong {
+  font-size: 16px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 880px) {
+  .api-usage-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 .settings-layout {
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);

@@ -253,40 +253,6 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
                   <option value="expiring">先用临期积分</option>
                 </select>
               </label>
-              <label>
-                最大并发
-                <input
-                  aria-label="最大并发"
-                  type="number"
-                  min={1}
-                  max={8}
-                  value={
-                    Number.isNaN(draft.maxConcurrency)
-                      ? ""
-                      : draft.maxConcurrency
-                  }
-                  onChange={(event) =>
-                    update("maxConcurrency", event.target.valueAsNumber)
-                  }
-                />
-              </label>
-              <label>
-                每分钟请求上限
-                <input
-                  aria-label="每分钟请求上限"
-                  type="number"
-                  min={1}
-                  max={600}
-                  value={
-                    Number.isNaN(draft.requestsPerMinute)
-                      ? ""
-                      : draft.requestsPerMinute
-                  }
-                  onChange={(event) =>
-                    update("requestsPerMinute", event.target.valueAsNumber)
-                  }
-                />
-              </label>
             </div>
             <Toggle
               label="随应用启动 API"

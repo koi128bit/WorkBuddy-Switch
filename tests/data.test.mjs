@@ -8,6 +8,7 @@ import {
   parseUsage,
   aggregateUsage,
   usageCSV,
+  mergeApiUsage,
   UsageScanner,
 } from "../desktop/usage.mjs";
 import { parseQuota, fetchQuota } from "../desktop/quota.mjs";
@@ -211,4 +212,74 @@ test("session migration backs up WAL data, touches one row and rejects stale own
     /变化/,
   );
   assert.equal(initial.userId, "a");
+});
+
+test("local API usage is added to totals, daily rows and models without inventing credits", () => {
+  const base = aggregateUsage([], []);
+  const records = [
+    {
+      day: "2026-10-27",
+      provider: "workbuddy",
+      accountId: "a",
+      model: "deepseek-v4.1-flash",
+      input: 700,
+      output: 30,
+      requests: 2,
+      unknown: 0,
+    },
+    {
+      day: "2026-10-27",
+      provider: "workbuddy-global",
+      accountId: "g",
+      model: "global-model",
+      input: 5,
+      output: 5,
+      requests: 1,
+      unknown: 0,
+    },
+    {
+      day: "2026-10-28",
+      provider: "workbuddy",
+      accountId: "a",
+      model: "deepseek-v4.1-flash",
+      input: 100,
+      output: 10,
+      requests: 1,
+      unknown: 1,
+    },
+  ];
+  const merged = mergeApiUsage(base, records, {
+    provider: "workbuddy",
+    accountId: "a",
+  });
+  assert.equal(merged.total.input, 800);
+  assert.equal(merged.total.output, 40);
+  assert.equal(merged.total.total, 840);
+  assert.equal(merged.total.requests, 3);
+  assert.equal(merged.credits, 0, "本机 API 不推算官方积分");
+  assert.equal(merged.api.total, 840);
+  assert.equal(merged.api.requests, 3);
+  assert.equal(merged.api.unknownUsage, 1);
+  assert.equal(merged.api.creditsKnown, false);
+  assert.equal(merged.api.models.length, 1);
+  assert.equal(merged.api.models[0].name, "deepseek-v4.1-flash");
+  assert.deepEqual(
+    merged.daily.map((day) => [day.day, day.tokens.total]),
+    [
+      ["2026-10-27", 730],
+      ["2026-10-28", 110],
+    ],
+  );
+  assert.equal(
+    mergeApiUsage(base, records, {
+      since: Date.parse("2026-10-28T00:00:00+08:00"),
+    }).api.requests,
+    1,
+    "只有 10-28 的当天记录落在筛选范围内",
+  );
+  assert.equal(
+    mergeApiUsage(base, records, { accountId: "b" }).api.requests,
+    0,
+    "账号筛选同样生效",
+  );
 });

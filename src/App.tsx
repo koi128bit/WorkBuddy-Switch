@@ -123,6 +123,16 @@ const emptyUsage: Usage = {
   records: 0,
   scannedFiles: 0,
   warnings: [],
+  api: {
+    input: 0,
+    output: 0,
+    total: 0,
+    requests: 0,
+    unknownUsage: 0,
+    models: [],
+    days: [],
+    creditsKnown: false,
+  },
 };
 const localDay = () => {
   const d = new Date();
@@ -1166,6 +1176,7 @@ function UsagePage({
           100,
       )
     : 0;
+  const api = usage.api;
   const [modelSort, setModelSort] = useState("tokens");
   const models = [...usage.models].sort((a, b) =>
     modelSort === "credits"
@@ -1242,7 +1253,11 @@ function UsagePage({
         <Metric
           label="总 Token"
           value={shortNumber(usage.total.total)}
-          detail={`${number(usage.records, 0)} 条有效用量记录`}
+          detail={
+            api && api.total > 0
+              ? `${number(usage.records, 0)} 条客户端记录 · 含本机 API ${shortNumber(api.total)}`
+              : `${number(usage.records, 0)} 条有效用量记录`
+          }
           icon={Zap}
         />
         <Metric
@@ -1349,6 +1364,53 @@ function UsagePage({
           )}
         </section>
       </div>
+      {api && api.requests > 0 && (
+        <section className="panel api-usage-panel">
+          <SectionHeader
+            title="本机 API 用量"
+            detail="已计入上方总计与趋势 · 积分以官方账单为准"
+          />
+          <div className="api-usage-summary">
+            <div>
+              <span>总 Token</span>
+              <strong>{shortNumber(api.total)}</strong>
+            </div>
+            <div>
+              <span>输入 / 输出</span>
+              <strong>
+                {shortNumber(api.input)} / {shortNumber(api.output)}
+              </strong>
+            </div>
+            <div>
+              <span>请求次数</span>
+              <strong>{number(api.requests, 0)}</strong>
+            </div>
+            <div>
+              <span>未返回 Token</span>
+              <strong>{number(api.unknownUsage, 0)}</strong>
+            </div>
+          </div>
+          {api.models.length > 0 && (
+            <div className="model-list">
+              {api.models.slice(0, 8).map((m) => (
+                <div className="model-row" key={m.name}>
+                  <span className="model-rank">API</span>
+                  <div>
+                    <strong>{m.name}</strong>
+                    <span>{number(m.tokens.requests, 0)} 次请求</span>
+                  </div>
+                  <strong>{shortNumber(m.tokens.total)}</strong>
+                </div>
+              ))}
+            </div>
+          )}
+          {api.unknownUsage > 0 && (
+            <p className="quiet-note pending">
+              {api.unknownUsage} 次请求未返回完整 Token，未计入总量。
+            </p>
+          )}
+        </section>
+      )}
       <section className="data-section model-comparison">
         <SectionHeader
           title="模型消耗对比"

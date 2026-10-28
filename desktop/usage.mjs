@@ -161,6 +161,125 @@ export function aggregateUsage(
   };
 }
 
+const dayTime = (label) => {
+  const [year, month, day] = label.split("-").map(Number);
+  return new Date(year, month - 1, day).getTime();
+};
+// Local API requests are counted in the same token statistics as the client
+// logs, and reported separately so credits stay attributable to the official
+// service instead of being estimated locally.
+export function mergeApiUsage(
+  usage,
+  records,
+  { provider = null, accountId = null, since = null, until = null } = {},
+) {
+  const total = { ...usage.total };
+  const daily = new Map(usage.daily.map((day) => [day.day, {
+    day: day.day,
+    tokens: { ...day.tokens },
+    credits: day.credits,
+  }]));
+  const models = new Map(usage.models.map((model) => [model.name, {
+    name: model.name,
+    tokens: { ...model.tokens },
+    credits: model.credits,
+  }]));
+  const api = {
+    input: 0,
+    output: 0,
+    total: 0,
+    requests: 0,
+    unknownUsage: 0,
+    models: [],
+    days: [],
+    creditsKnown: false,
+  };
+  const apiModels = new Map();
+  const apiDays = new Map();
+  for (const record of Array.isArray(records) ? records : []) {
+    if (!record || typeof record.day !== "string") continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(record.day)) continue;
+    if (provider && record.provider !== provider) continue;
+    if (accountId && record.accountId !== accountId) continue;
+    const start = dayTime(record.day),
+      end = start + 86400000;
+    if (since && end <= since) continue;
+    if (until && start >= until) continue;
+    const input = Math.max(0, Math.floor(Number(record.input) || 0));
+    const output = Math.max(0, Math.floor(Number(record.output) || 0));
+    const requests = Math.max(0, Math.floor(Number(record.requests) || 0));
+    const unknown = Math.max(0, Math.floor(Number(record.unknown) || 0));
+    const tokens = { input, output, total: input + output, requests };
+    total.input += input;
+    total.output += output;
+    total.total += input + output;
+    total.requests += requests;
+    api.input += input;
+    api.output += output;
+    api.total += input + output;
+    api.requests += requests;
+    api.unknownUsage += unknown;
+    const day = daily.get(record.day) ?? {
+      day: record.day,
+      tokens: emptyTokens(),
+      credits: 0,
+    };
+    day.tokens.input += input;
+    day.tokens.output += output;
+    day.tokens.total += input + output;
+    day.tokens.requests += requests;
+    daily.set(record.day, day);
+    const dayApi = apiDays.get(record.day) ?? {
+      day: record.day,
+      total: 0,
+      input: 0,
+      output: 0,
+      requests: 0,
+      unknownUsage: 0,
+    };
+    dayApi.total += input + output;
+    dayApi.input += input;
+    dayApi.output += output;
+    dayApi.requests += requests;
+    dayApi.unknownUsage += unknown;
+    apiDays.set(record.day, dayApi);
+    const model = models.get(record.model) ?? {
+      name: record.model,
+      tokens: emptyTokens(),
+      credits: 0,
+    };
+    model.tokens.input += input;
+    model.tokens.output += output;
+    model.tokens.total += input + output;
+    model.tokens.requests += requests;
+    models.set(record.model, model);
+    const apiModel = apiModels.get(record.model) ?? {
+      name: record.model,
+      tokens,
+    };
+    apiModel.tokens = {
+      input: apiModel.tokens.input + input,
+      output: apiModel.tokens.output + output,
+      total: apiModel.tokens.total + input + output,
+      requests: apiModel.tokens.requests + requests,
+    };
+    apiModels.set(record.model, apiModel);
+  }
+  api.models = [...apiModels.values()].sort(
+    (a, b) => b.tokens.total - a.tokens.total,
+  );
+  api.days = [...apiDays.values()].sort((a, b) => a.day.localeCompare(b.day));
+  return {
+    ...usage,
+    total,
+    daily: [...daily.values()].sort((a, b) => a.day.localeCompare(b.day)),
+    models: [...models.values()].sort(
+      (a, b) => b.tokens.total - a.tokens.total,
+    ),
+    api,
+  };
+}
+
 export class UsageScanner {
   cache = new Map();
   async scan(root, sessions, query = {}) {

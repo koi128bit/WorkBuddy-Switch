@@ -144,7 +144,9 @@ export function Dashboard({
           value={usage ? shortNumber(usage.total.total) : "—"}
           detail={
             usage
-              ? `${number(usage.total.requests)} 次请求 · 本地记录`
+              ? usage.api && usage.api.requests > 0
+                ? `${number(usage.total.requests)} 次请求 · 含本机 API ${number(usage.api.requests)}`
+                : `${number(usage.total.requests)} 次请求 · 本地记录`
               : "正在读取本地用量"
           }
           icon={Zap}

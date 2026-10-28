@@ -259,6 +259,26 @@ export interface Tokens {
   requests: number;
   total: number;
 }
+export interface ApiUsage {
+  input: number;
+  output: number;
+  total: number;
+  requests: number;
+  unknownUsage: number;
+  models: {
+    name: string;
+    tokens: { input: number; output: number; total: number; requests: number };
+  }[];
+  days: {
+    day: string;
+    total: number;
+    input: number;
+    output: number;
+    requests: number;
+    unknownUsage: number;
+  }[];
+  creditsKnown: boolean;
+}
 export interface Usage {
   total: Tokens;
   credits: number;
@@ -269,6 +289,7 @@ export interface Usage {
   records: number;
   scannedFiles: number;
   warnings: string[];
+  api?: ApiUsage;
 }
 export interface UsageQuery {
   accountId: string | null;
@@ -425,8 +446,6 @@ export interface ApiConfig {
   autoStart: boolean;
   accounts: { provider: WorkBuddyProvider; id: string }[];
   strategy: "round_robin" | "sequential" | "expiring";
-  maxConcurrency: number;
-  requestsPerMinute: number;
 }
 export interface ApiStatus {
   running: boolean;

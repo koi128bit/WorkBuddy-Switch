@@ -27,9 +27,26 @@ export const apiDefaults = Object.freeze({
   autoStart: false,
   accounts: [],
   strategy: "round_robin",
-  maxConcurrency: 2,
-  requestsPerMinute: 60,
 });
+// Local request limits were removed in 1.9.4: the selected accounts, the
+// official rate limiting and the model context decide what can run. Old saved
+// configurations that still carry these keys stay readable and are ignored.
+const retiredKeys = ["maxOutputTokens", "maxConcurrency", "requestsPerMinute"];
+export const REQUEST_BODY_LIMIT = 32 * 1024 * 1024;
+// Local API consumption is kept per day, account and model so the usage page can
+// add it to the token statistics without storing prompts or replies.
+const API_USAGE_DAYS = 120;
+const DAY_MS = 86400000;
+const dayLabel = (value) => {
+  const date = new Date(value);
+  return (
+    date.getFullYear() +
+    "-" +
+    String(date.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(date.getDate()).padStart(2, "0")
+  );
+};
 const realms = ["workbuddy", "workbuddy-global"];
 const ref = (account) => account.provider + ":" + account.id;
 const safeNumber = (value) =>
@@ -52,24 +69,19 @@ export function validateApiConfig(value) {
     typeof value !== "object" ||
     Array.isArray(value) ||
     Object.keys(value).some(
-      (key) => key !== "maxOutputTokens" && !Object.hasOwn(apiDefaults, key),
+      (key) => !retiredKeys.includes(key) && !Object.hasOwn(apiDefaults, key),
     )
   )
     throw new Error("API 设置格式无效。");
   const config = { ...apiDefaults, ...value };
-  // Accept old saved configurations without restoring the removed output cap.
-  delete config.maxOutputTokens;
-  for (const [key, min, max] of [
-    ["port", 1024, 65535],
-    ["maxConcurrency", 1, 8],
-    ["requestsPerMinute", 1, 600],
-  ])
-    if (
-      !Number.isInteger(config[key]) ||
-      config[key] < min ||
-      config[key] > max
-    )
-      throw new Error("API 设置 " + key + " 不在支持范围内。");
+  // Accept old saved configurations without restoring removed settings.
+  for (const key of retiredKeys) delete config[key];
+  if (
+    !Number.isInteger(config.port) ||
+    config.port < 1024 ||
+    config.port > 65535
+  )
+    throw new Error("API 设置 port 不在支持范围内。");
   if (
     typeof config.autoStart !== "boolean" ||
     !["round_robin", "sequential", "expiring"].includes(config.strategy) ||
@@ -189,6 +201,7 @@ export class ApiGateway {
   cursors = new Map();
   modelCache = new Map();
   modelPromises = new Map();
+  apiDaily = new Map();
   renewals = new Map();
   writeTail = Promise.resolve();
   draining = false;
@@ -211,6 +224,7 @@ export class ApiGateway {
   }
   async init() {
     await fs.mkdir(this.directory, { recursive: true, mode: 0o700 });
+    await this.loadApiDaily();
     try {
       const raw = JSON.parse(
         await readBounded(
@@ -297,6 +311,74 @@ export class ApiGateway {
         this.lastError = error.message;
         this.onChange();
       }
+  }
+  apiUsagePath() {
+    return path.join(this.directory, "api-usage-daily.json");
+  }
+  async loadApiDaily() {
+    let raw;
+    try {
+      raw = JSON.parse(await readBounded(this.apiUsagePath(), 4 * 1024 * 1024));
+    } catch (error) {
+      // A missing file only means the local API has not served a request yet.
+      if (error.code !== "ENOENT")
+        this.lastError = "本机 API 用量记录损坏，已跳过历史统计。";
+      return;
+    }
+    const cutoff = dayLabel(Date.now() - (API_USAGE_DAYS - 1) * DAY_MS);
+    for (const row of Array.isArray(raw?.days) ? raw.days : []) {
+      const day = typeof row?.day === "string" ? row.day : "";
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < cutoff) continue;
+      if (!realms.includes(row.provider)) continue;
+      const accountId = clean(row.accountId);
+      const model = clean(row.model);
+      if (!accountId || !model) continue;
+      this.apiDaily.set(
+        day + "|" + row.provider + "|" + accountId + "|" + model,
+        {
+          day,
+          provider: row.provider,
+          accountId,
+          model,
+          input: safeNumber(row.input),
+          output: safeNumber(row.output),
+          requests: safeNumber(row.requests),
+          unknown: safeNumber(row.unknown),
+        },
+      );
+    }
+  }
+  recordApiUsage(provider, accountId, model, inputTokens, outputTokens) {
+    const day = dayLabel(Date.now());
+    const key =
+      day + "|" + provider + "|" + String(accountId) + "|" + String(model);
+    const row = this.apiDaily.get(key) ?? {
+      day,
+      provider,
+      accountId: String(accountId),
+      model: String(model),
+      input: 0,
+      output: 0,
+      requests: 0,
+      unknown: 0,
+    };
+    row.requests += 1;
+    if (
+      Number.isSafeInteger(inputTokens) &&
+      Number.isSafeInteger(outputTokens)
+    ) {
+      row.input += Math.max(0, inputTokens);
+      row.output += Math.max(0, outputTokens);
+    } else row.unknown += 1;
+    this.apiDaily.set(key, row);
+    const cutoff = dayLabel(Date.now() - API_USAGE_DAYS * DAY_MS);
+    for (const [key, value] of this.apiDaily)
+      if (value.day < cutoff) this.apiDaily.delete(key);
+  }
+  dailyApiUsage() {
+    return [...this.apiDaily.values()]
+      .map((row) => ({ ...row }))
+      .sort((a, b) => a.day.localeCompare(b.day));
   }
   getKey() {
     if (!this.secret)
@@ -392,7 +474,6 @@ export class ApiGateway {
           (row) =>
             row.provider === provider && row.id === account.id && row.available,
         ) &&
-        (!model || !this.leases.has(ref(account))) &&
         (!model || this.creditAvailable(account, now)) &&
         (this.cooldowns.get(ref(account) + "|" + model) || 0) <= Date.now(),
     );
@@ -432,7 +513,7 @@ export class ApiGateway {
       throw new ApiError(
         503,
         "no_available_accounts",
-        "没有可用的所选账号，请检查积分余额、授权、冷却状态及在途请求。",
+        "没有可用的所选账号，请检查积分余额、授权与冷却状态。",
       );
     const first = prepared.payload.messages.find(
       (message) => message.role === "user",
@@ -738,10 +819,14 @@ export class ApiGateway {
     res.end(JSON.stringify(value));
   }
   async body(req) {
-    const limit = 8 * 1024 * 1024;
+    const limit = REQUEST_BODY_LIMIT;
     if (Number(req.headers["content-length"]) > limit) {
       req.resume();
-      throw new ApiError(413, "request_too_large", "请求体最大为 8 MB。");
+      throw new ApiError(
+        413,
+        "request_too_large",
+        "请求体最大为 32 MB。",
+      );
     }
     if (
       !req.headers["content-type"]?.toLowerCase().startsWith("application/json")
@@ -812,16 +897,6 @@ export class ApiGateway {
         throw new ApiError(503, "service_stopping", "API 服务正在停止。");
       if (!this.authorize(req))
         throw new ApiError(401, "invalid_api_key", "API Key 无效或缺失。");
-      const now = Date.now();
-      if (!this.rateWindow || now - this.rateWindow.at >= 60000)
-        this.rateWindow = { at: now, count: 0 };
-      if (++this.rateWindow.count > this.config.requestsPerMinute)
-        throw new ApiError(
-          429,
-          "local_rate_limit",
-          "已达到本机 API 每分钟请求上限。",
-          60,
-        );
       if (req.method === "GET" && pathname === "/healthz")
         return this.json(res, 200, {
           status: "ok",
@@ -843,13 +918,6 @@ export class ApiGateway {
           "API 路径不存在，支持 /v1/models、/v1/chat/completions、/v1/responses 和 /v1/messages。",
         );
       const prepared = prepareProtocolRequest(await this.body(req), protocol);
-      if (this.active.size >= this.config.maxConcurrency)
-        throw new ApiError(
-          429,
-          "concurrency_limit",
-          "API 并发请求已达到上限。",
-          1,
-        );
       await this.chat(prepared, req, res);
     } catch (error) {
       const safe =
@@ -1114,6 +1182,13 @@ export class ApiGateway {
       entry.durationMs = Date.now() - started;
       entry.inputTokens = usage?.prompt_tokens ?? null;
       entry.outputTokens = usage?.completion_tokens ?? null;
+      this.recordApiUsage(
+        account.provider,
+        account.id,
+        prepared.payload.model,
+        entry.inputTokens,
+        entry.outputTokens,
+      );
       this.totals.requests++;
       this.totals[entry.status === "ok" ? "succeeded" : "failed"]++;
       this.totals.inputTokens += entry.inputTokens ?? 0;
@@ -1136,10 +1211,16 @@ export class ApiGateway {
         null,
         2,
       );
+      const savedDaily = JSON.stringify(
+        { version: 1, days: this.dailyApiUsage() },
+        null,
+        2,
+      );
       this.writeTail = this.writeTail
         .then(() =>
           atomicWrite(path.join(this.directory, "api-usage.json"), saved),
         )
+        .then(() => atomicWrite(this.apiUsagePath(), savedDaily))
         .catch(() => {
           this.lastError =
             "API 请求结果已保留在内存，但本地用量记录保存失败，请检查磁盘。";

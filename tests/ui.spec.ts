@@ -106,6 +106,11 @@ test("usage charts reveal real values to keyboard users and offer a data table",
     "126,000",
   );
   await expect(page.getByRole("figure", { name: "Token 构成" })).toBeVisible();
+  const apiUsage = page.locator(".api-usage-panel");
+  await expect(apiUsage).toContainText("本机 API 用量");
+  await expect(apiUsage).toContainText("60K");
+  await expect(apiUsage).toContainText("24");
+  await expect(apiUsage).toContainText("1 次请求未返回完整 Token");
 });
 
 test("dark workspace covers every page without horizontal overflow at minimum size", async ({
@@ -303,8 +308,6 @@ test("API test conversation can be stopped while its upstream request is still p
         autoStart: false,
         accounts: [{ provider: "workbuddy", id: account.id }],
         strategy: "round_robin",
-        maxConcurrency: 2,
-        requestsPerMinute: 60,
       },
       accounts: [
         {
@@ -416,8 +419,6 @@ test("local API page saves explicit account scope, controls the listener and nev
         autoStart: false,
         accounts: [] as { provider: string; id: string }[],
         strategy: "round_robin",
-        maxConcurrency: 2,
-        requestsPerMinute: 60,
       },
       accounts: snapshot.accounts.map((account) => ({
         provider: "workbuddy",

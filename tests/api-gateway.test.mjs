@@ -16,8 +16,7 @@ test("API configuration rejects remote binds, unknown options, invalid accounts 
   for (const patch of [
     { port: 0 },
     { port: 70000 },
-    { maxConcurrency: 100 },
-    { requestsPerMinute: 0 },
+    { unknownSetting: 1 },
     { strategy: "unknown" },
     { accounts: [{ provider: "trae-cn", id: "a" }] },
     {
@@ -247,7 +246,7 @@ test("invalid bodies, excessive outputs and unsupported request fields never rea
     assert.equal((await f.send(body)).status, 400);
   assert.equal((await f.send({}, { body: "not-json" })).status, 400);
   assert.equal(
-    (await f.send({}, { body: "x".repeat(8 * 1024 * 1024 + 1) })).status,
+    (await f.send({}, { body: "x".repeat(32 * 1024 * 1024 + 1) })).status,
     413,
   );
   assert.equal(f.calls.length, 0);
@@ -352,37 +351,80 @@ test("key rotation invalidates old clients without exposing either key in status
   );
   assert.ok(!JSON.stringify(f.gateway.snapshot()).includes(f.gateway.getKey()));
 });
-test("concurrency control and stopping abort in-flight upstream work and release every lease", async (t) => {
-  let entered;
-  const ready = new Promise((resolve) => (entered = resolve));
-  let aborted = false;
+test("parallel requests are no longer rejected and stopping aborts every in-flight upstream lease", async (t) => {
+  const waiters = [];
+  const entered = () =>
+    new Promise((resolve) => waiters.push(resolve));
+  const aborts = [];
   const f = await fixture(t, async (_url, options) => {
-    entered();
+    waiters.shift()?.();
     return new Promise((_resolve, reject) =>
       options.signal.addEventListener(
         "abort",
         () => {
-          aborted = true;
+          aborts.push(options.headers["X-User-Id"]);
           reject(new Error("aborted"));
         },
         { once: true },
       ),
     );
   });
+  const first = entered();
+  const pending = [f.send().catch(() => null)];
+  await first;
+  const second = entered();
+  pending.push(f.send({ conversation_id: "parallel" }).catch(() => null));
+  await second;
+  assert.equal(
+    f.gateway.snapshot().activeRequests,
+    2,
+    "多个会话可以同时运行，不再返回 429",
+  );
   await f.gateway.stop();
-  await f.gateway.saveConfig({
-    ...f.gateway.snapshot().config,
-    maxConcurrency: 1,
-  });
-  await f.gateway.start();
-  const pending = f.send().catch(() => null);
-  await ready;
-  assert.equal((await f.send({ conversation_id: "parallel" })).status, 429);
-  await f.gateway.stop();
-  await pending;
-  assert.equal(aborted, true);
+  await Promise.all(pending);
+  assert.equal(aborts.length, 2);
   assert.equal(f.gateway.snapshot().activeRequests, 0);
   assert.equal(f.gateway.snapshot().running, false);
+});
+test("more concurrent conversations than selected accounts all reach an account", async (t) => {
+  const waiters = [];
+  const entered = () => new Promise((resolve) => waiters.push(resolve));
+  const f = await fixture(t, async () => {
+    waiters.shift()?.();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return stream();
+  });
+  const waits = [entered(), entered(), entered()];
+  const pending = [0, 1, 2].map((index) =>
+    f.send({ conversation_id: "parallel-" + index }),
+  );
+  await Promise.all(waits);
+  const responses = await Promise.all(pending);
+  assert.deepEqual(
+    responses.map((response) => response.status),
+    [200, 200, 200],
+    "两个账号也要能同时承载三个会话，不再按在途请求拒绝",
+  );
+  assert.equal(f.calls.length, 3);
+  assert.equal(f.gateway.snapshot().activeRequests, 0);
+});
+test("long conversations are accepted beyond the retired 2000 message cap", async (t) => {
+  const f = await fixture(t);
+  const messages = [
+    { role: "system", content: "你是一个长期会话助手。" },
+    ...Array.from({ length: 2400 }, (_, index) => ({
+      role: index % 2 ? "assistant" : "user",
+      content: "第 " + index + " 条历史",
+    })),
+  ];
+  const response = await f.send({ messages });
+  assert.equal(response.status, 200);
+  assert.equal(f.gateway.snapshot().recent[0].requestInfo.messageCount, 2401);
+  assert.equal(
+    JSON.parse(f.calls[0].options.body).messages.length,
+    2401,
+    "请求体中的历史条数原样转发，不截断",
+  );
 });
 test("no selected credentials means no listener can be started and startup errors remain visible", async (t) => {
   const f = await fixture(t);
@@ -553,4 +595,57 @@ test("a refusal without any system prompt is never replayed", async (t) => {
   assert.equal(response.status, 403);
   assert.equal(f.calls.length, 1);
   assert.equal(f.gateway.snapshot().recent[0].requestInfo.systemGuard, 0);
+});
+test("local API token usage is recorded per day, account and model and survives a restart", async (t) => {
+  const f = await fixture(t);
+  assert.equal((await f.send()).status, 200);
+  const rows = f.gateway.dailyApiUsage();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].provider, "workbuddy");
+  assert.equal(rows[0].model, "fast-model");
+  assert.equal(rows[0].input, 7);
+  assert.equal(rows[0].output, 3);
+  assert.equal(rows[0].requests, 1);
+  assert.equal(rows[0].unknown, 0);
+  assert.match(rows[0].day, /^\d{4}-\d{2}-\d{2}$/);
+  await f.gateway.stop();
+  const reloaded = new ApiGateway({
+    directory: f.directory,
+    stores: f.stores,
+    vault: f.vault,
+  });
+  await reloaded.init();
+  t.after(() => reloaded.stop());
+  assert.deepEqual(reloaded.dailyApiUsage(), rows);
+  assert.ok(
+    !(await fs.readFile(path.join(f.directory, "api-usage-daily.json"), "utf8"))
+      .includes("private-client-prompt"),
+    "本地 API 用量只保存计数，不保存提示词",
+  );
+});
+test("a local API request without reported usage counts as an unknown request instead of zero tokens", async (t) => {
+  const f = await fixture(
+    t,
+    async () =>
+      new Response(
+        [
+          "data: " +
+            JSON.stringify({
+              id: "no-usage",
+              choices: [
+                { index: 0, delta: { content: "OK" }, finish_reason: "stop" },
+              ],
+            }) +
+            "\n\n",
+          "data: [DONE]\n\n",
+        ].join(""),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+  );
+  assert.equal((await f.send()).status, 200);
+  const [row] = f.gateway.dailyApiUsage();
+  assert.equal(row.requests, 1);
+  assert.equal(row.unknown, 1);
+  assert.equal(row.input, 0);
+  assert.equal(row.output, 0);
 });

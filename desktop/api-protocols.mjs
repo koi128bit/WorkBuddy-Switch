@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ApiError, prepareApiRequest } from "./api-upstream.mjs";
+import { ApiError, prepareApiRequest, MESSAGE_LIMIT } from "./api-upstream.mjs";
 
 const object = (v) => v && typeof v === "object" && !Array.isArray(v);
 const invalid = (message) => {
@@ -9,8 +9,8 @@ const unsupported = (message) => {
   throw new ApiError(400, "unsupported_parameter", message);
 };
 const list = (v, name) => {
-  if (!Array.isArray(v) || v.length > 2000)
-    invalid(name + " 必须是最多 2000 项的数组。");
+  if (!Array.isArray(v) || v.length > MESSAGE_LIMIT)
+    invalid(name + " 必须是最多 " + MESSAGE_LIMIT + " 项的数组。");
   return v;
 };
 function textBlocks(value) {

@@ -394,7 +394,7 @@ async function start() {
     { Store },
     { WorkBuddyController },
     { readBounded, atomicWrite },
-    { usageCSV },
+    { usageCSV, mergeApiUsage },
     { Login },
     { EditorStore },
     { EditorController, editorDefinition },
@@ -491,6 +491,17 @@ async function start() {
     apiGateway.lastError =
       "API 初始化未完成，请检查系统加密服务及应用数据目录。";
   }
+  // Local API token usage is merged into the same statistics the usage page and
+  // dashboard already show, scoped to the provider that store belongs to.
+  const usageWithApi = async (provider, queryValue) => {
+    const usage = await workbuddyStores.get(provider).usage(queryValue);
+    return mergeApiUsage(usage, apiGateway.dailyApiUsage(), {
+      provider,
+      accountId: queryValue?.accountId ?? null,
+      since: queryValue?.since ?? null,
+      until: queryValue?.until ?? null,
+    });
+  };
   const apiHandle = (name, action) => handle(name, action, true);
   apiHandle("api-status", () => apiGateway.snapshot());
   apiHandle("api-save", (value) => apiGateway.saveConfig(value));
@@ -691,7 +702,7 @@ async function start() {
       refreshQuotas: () =>
         target.refreshQuotas(args[0] ? string(args[0], 200) : null),
       sessions: () => target.sessions(),
-      usage: () => target.usage(query(args[0])),
+      usage: () => usageWithApi("workbuddy-global", query(args[0])),
       launchClient: () => target.exclusive(() => globalController.launch()),
       diagnostics: () => target.diagnostics(),
       backups: () => target.backups(),
@@ -724,7 +735,7 @@ async function start() {
             );
       },
       exportUsage: async () => {
-        const usage = await target.usage(query(args[0]));
+        const usage = await usageWithApi("workbuddy-global", query(args[0]));
         const result = await dialog.showSaveDialog(mainWindow, {
           defaultPath: "WorkBuddy-global-usage.csv",
         });
@@ -795,7 +806,7 @@ async function start() {
     store.depart(string(id, 200), string(locationId, 80)),
   );
   handle("sessions", () => store.sessions());
-  handle("usage", (q) => store.usage(query(q)));
+  handle("usage", (q) => usageWithApi("workbuddy", query(q)));
   handle("resume", (id) =>
     store.resumeSession(string(id, 200), async (sessionId) =>
       shell.openExternal(`workbuddy://chat/${encodeURIComponent(sessionId)}`),
@@ -983,7 +994,7 @@ async function start() {
     return { imported, skipped };
   });
   handle("export-usage", async (q) => {
-    const usage = await store.usage(query(q));
+    const usage = await usageWithApi("workbuddy", query(q));
     const result = await dialog.showSaveDialog(mainWindow, {
       title: "导出用量 CSV",
       defaultPath: "WorkBuddy-usage.csv",

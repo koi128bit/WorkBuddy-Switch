@@ -274,6 +274,30 @@ export function fixtureUsage(): Usage {
     records: 286,
     scannedFiles: 24,
     warnings: [],
+    api: {
+      input: 48000,
+      output: 12000,
+      total: 60000,
+      requests: 24,
+      unknownUsage: 1,
+      models: [
+        {
+          name: "deepseek-v4.1-flash",
+          tokens: { input: 48000, output: 12000, total: 60000, requests: 24 },
+        },
+      ],
+      days: [
+        {
+          day: new Date().toISOString().slice(0, 10),
+          total: 60000,
+          input: 48000,
+          output: 12000,
+          requests: 24,
+          unknownUsage: 1,
+        },
+      ],
+      creditsKnown: false,
+    },
   };
 }
 
@@ -288,8 +312,6 @@ export function fixtureApi(): ApiStatus {
       autoStart: false,
       accounts: [{ provider: "workbuddy", id: "wb-sample-001" }],
       strategy: "round_robin",
-      maxConcurrency: 2,
-      requestsPerMinute: 60,
     },
     accounts: fixtureState().accounts.map((account) => ({
       provider: "workbuddy",
