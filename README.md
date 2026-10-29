@@ -13,15 +13,15 @@
     <img src="https://img.shields.io/badge/macOS-13%2B-444444?style=flat-square&logo=apple" alt="macOS 13+" />
     <img src="https://img.shields.io/badge/Windows-10%2F11%20x64-444444?style=flat-square" alt="Windows 10/11 x64" />
     <img src="https://img.shields.io/badge/Linux-x64%20%2F%20ARM64-444444?style=flat-square&logo=linux" alt="Linux x64 / ARM64" />
-    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-444444?style=flat-square" alt="MIT License" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-Attribution%201.0-444444?style=flat-square" alt="WorkBuddy Switch Attribution License 1.0" /></a>
   </p>
 </div>
 
-> **来源标注声明**
+> **强制署名与来源链接**
 >
-> 我们要求：凡实际复用本项目代码、移植实现，或借鉴本项目功能方案、界面与交互设计后对外发布的项目，都应公开标注 **WorkBuddy Switch**、原作者 **[koi128bit](https://github.com/koi128bit)**，并附上 **[原项目链接](https://github.com/koi128bit/WorkBuddy-Switch)**。Fork、改名、重写部分代码或商业分发，都请如实说明来源与复用范围，不要冒充独立原创。
+> 自 **1.9.6** 起，新增原创内容采用 **[WorkBuddy Switch Attribution License 1.0](LICENSE)**。对外分发该许可覆盖的内容、衍生应用，或用其提供服务时，**必须**在 README / 文档中标注 **WorkBuddy Switch**、原作者 **[koi128bit](https://github.com/koi128bit)** 和 **[原项目链接](https://github.com/koi128bit/WorkBuddy-Switch)**；具有用户界面的衍生应用与服务，还须在用户可访问的「关于 / 致谢 / 法律声明」中展示来源。
 >
-> 代码复用须遵守 MIT 的版权与许可保留义务；上述公开署名是项目维护者提出的署名规范，具体边界与模板见 [来源标注与许可](#来源标注与许可)。
+> 这是正式授权条件。**历史 MIT 授权和第三方许可继续有效，独立实现相同功能不因功能相似而受此许可约束。** 适用范围、展示方式和补正规则见 [来源标注与许可](#来源标注与许可)。
 
 <p align="center"><img src=".github/assets/overview.png" width="1120" alt="总览工作台：积分、Token 趋势、账号分布、任务状态与本机 API，演示数据" /></p>
 
@@ -144,7 +144,7 @@ API Key：从应用 API 页复制
 
 - **账号调度**：刚确认积分为零的账号自动跳过；明确积分不足且未生成内容时，可切换同地区已选账号。
 - **请求范围**：无额外本机并发或每分钟请求上限；消息上限 20000 条，请求体上限 32 MB。客户端指定的输出预算原样转发，未指定时使用官方默认值；实际仍受官方限流、模型上下文与账号权限约束。
-- **异常处理**：连接中断或半截回复不会自动重发。最近请求保留官方业务码、原始 HTTP 状态与请求规模，`11128` 渠道校验拒绝不会误报为授权 403；系统提示词兼容处理以 `systemGuard` 记录。
+- **异常处理**：连接中断或半截回复不会自动重发。最近请求保留官方业务码、原始 HTTP 状态与请求规模，`11128` 渠道校验拒绝不会误报为授权 403；1.9.6 将 system / developer 文本合并到首条 user 消息，保留文本但会改变消息角色和指令优先级；`systemGuard` 保留为 0。仅在未产生任何输出时，对官方明确的 `11128` 拒绝最多换号重试 3 次。
 - **统计与隐私**：API Token 用量按日、账号与模型并入用量页；服务仅监听本机，不记录对话正文。请求分析覆盖保留的最近 100 条，累计用量另列，未知用量不推算。
 
 已用真实 OpenCode 验证部分模型的流式回复与工具调用闭环；其他 Agent、模型和账号组合需分别验证。配置示例、协议差异与使用范围见 **[本机 API 接入指南](docs/local-api.md)**。
@@ -199,43 +199,52 @@ macOS 使用原生背景模糊，Windows 11 22H2 及以上使用 Acrylic，其�
 
 ## 来源标注与许可
 
-### 代码许可义务
+### 当前许可证与历史授权
 
-代码采用 **[MIT License](LICENSE)**，版权声明为 `Copyright (c) 2026 koi128bit`。复制、修改或分发本项目软件及其实质部分时，**必须保留原版权声明与 MIT 许可全文**，包括免责声明。涉及上游代码与第三方依赖时，也须保留相应版权和许可；本项目相关说明见 [NOTICE](NOTICE) 与 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+**WorkBuddy Switch Attribution License 1.0** 是自定义软件许可证，允许商业使用、修改、分发和提供服务，以保留版权、许可及可见的来源署名为条件；不要求公开衍生项目源码。它不是标准 MIT，也未宣称获得 OSI 认证。完整条款见 **[LICENSE](LICENSE)**。
 
-### 公开署名规范
-
-**我们要求实际复用或参考本项目的发布者，公开说明来源并附可点击的原项目链接。** 署名应便于用户找到，并说明具体复用或参考了哪些部分。
-
-| 使用方式 | 项目要求的来源说明 |
+| 内容 | 适用许可 |
 | --- | --- |
-| **复制、修改或移植代码** | 在 README 或项目网站标明 WorkBuddy Switch、koi128bit、原仓库链接及复用模块，并保留代码许可声明 |
-| **借鉴功能方案或交互流程** | 在功能介绍或致谢中说明对应功能参考 WorkBuddy Switch，并附原项目链接 |
-| **复用界面、截图或文档** | 在使用位置或公开致谢中注明出处与原项目链接，并保留相关第三方权利声明 |
-| **Fork、改名或重新打包发布** | 在 README、发布说明或下载页面清晰说明衍生关系；有图形界面的衍生应用也请在「关于 / 致谢」保留来源入口 |
+| **1.9.6 及以后引入的新增原创代码、文档与素材** | 除另有标注外，适用 WorkBuddy Switch Attribution License 1.0 |
+| **1.9.5 及以前版本、仓库提交 `bfa9b64` 及以前已按 MIT 提供的内容** | 继续适用原有 [MIT 授权](LICENSES/MIT-legacy.txt)，不因换证追溯增加限制；旧文件中的历史部分也保留原授权 |
+| **第三方与单独授权的贡献** | 保留各自原有许可、作者和来源，见 [NOTICE](NOTICE) 与 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) |
+| **独立实现的同类功能、一般思想与操作方法** | 不因功能相似而纳入本许可证；仍欢迎自愿说明实际参考来源 |
 
-仅标注“来源于网络”“参考某开源项目”或只保留无法点击的名称，不符合本项目提出的公开署名规范。改名、调整配色、重写部分代码或转为闭源分发，也请如实说明实际参考与复用范围。
+### 强制署名要求
 
-可直接采用以下模板，按实际情况填写具体模块或功能：
+对外分发新许可覆盖的内容、实质部分或包含它的衍生作品时，必须：
+
+1. 随附本许可证和适用的版权、历史及第三方许可声明。
+2. 在主要 README 或随附文档中清晰标注 **WorkBuddy Switch**、**koi128bit** 和 **https://github.com/koi128bit/WorkBuddy-Switch**。
+3. 有用户界面的应用，还须在可正常访问的「关于 / 致谢 / 法律声明」页面展示相同来源。使用新许可内容提供网络服务时，也须在服务界面或公开文档可到达的声明页面展示。
+4. 支持超链接的展示位置必须提供可点击链接；纯文本环境保留完整 URL。无界面服务或命令行工具可使用公开文档或可访问的许可命令，无需为此另建图形界面。
+5. 说明复用范围与修改，不将原项目或上游贡献冒充为独立原创，不暗示原作者为衍生产品背书。
+
+改名、调整配色、部分重写、商业分发或闭源发布，不免除对仍包含的新许可内容的署名义务。仅写“来源于网络”“参考某开源项目”或隐藏、模糊化署名，不满足要求。私人使用且不分发或向他人提供服务时，无需建立公开署名页。
+
+可按实际情况采用以下模板：
 
 ```markdown
-本项目的【具体模块 / 功能 / 界面】基于或参考了
+本项目的【具体模块 / 功能 / 界面】基于
 [WorkBuddy Switch](https://github.com/koi128bit/WorkBuddy-Switch)，
 原作者为 [koi128bit](https://github.com/koi128bit)。
-复用范围与修改：【说明实际复用的部分及本项目的改动】。
-原项目代码采用 MIT License，相关版权与许可声明随附保留。
+复用范围与修改：【说明实际复用部分及本项目的改动】。
+其 1.9.6 起新增原创内容采用 WorkBuddy Switch Attribution License 1.0；
+适用的历史 MIT 和第三方版权、许可声明一并保留。
 ```
 
-**许可边界：** MIT 强制要求保留版权和许可声明，但不强制在 README 或「关于」页附链接，也不因功能相似就当然要求署名。上面的公开链接、展示位置及功能借鉴说明，是维护者提出的署名规范，**不构成对 MIT 的附加许可限制**；代码授权以 [LICENSE](LICENSE) 原文为准。我们欢迎依规使用，也要求如实呈现实际来源，不将本项目或上游贡献冒充为独立原创。
+### 违反与补正
+
+上述要求是授权条件。未遵守的分发或服务须停止或立即改正，实质违约会导致相应新许可权利终止。首次违规在知悉后 30 天内完整补正，可按 LICENSE 自动恢复；逾期或再次违规需取得版权方书面同意。此规则不撤销历史 MIT 权限，不设置自动罚款，具体权利义务以 [LICENSE](LICENSE) 为准。
 
 ### 致谢与第三方来源
 
-本项目的本机 API 互操作层参考了以下项目的协议文档和实现，相关作者、来源链接与 MIT 许可已保留在 [NOTICE](NOTICE)：
+本机 API 互操作层参考了以下项目的协议文档和实现，相关作者、来源链接与原 MIT 许可保留在 [NOTICE](NOTICE)：
 
 - [Sliverkiss / workbuddy2api](https://github.com/Sliverkiss/workbuddy2api)：NOTICE 记载的上游原项目。原始地址目前返回 404，仍保留原作者署名与来源记录。
 - [linguo2625469 / workbuddy2api-panel](https://github.com/linguo2625469/workbuddy2api-panel)：协议文档与实现参考。
 
-第三方依赖及许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。WorkBuddy、Trae、Qoder 的名称与相关商标归各自权利人所有，本项目与其官方没有隶属关系，也不代表官方背书。
+第三方依赖及许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。WorkBuddy、Trae、Qoder 的名称与商标归各自权利人所有，本项目与其官方没有隶属关系，也不代表官方背书。
 
 ## 本地开发
 

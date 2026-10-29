@@ -1,21 +1,122 @@
-MIT License
-
+WorkBuddy Switch Attribution License 1.0
+Effective release: 1.9.6 (2026-10-29)
 Copyright (c) 2026 koi128bit
+Original project: https://github.com/koi128bit/WorkBuddy-Switch
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This is a custom software license. It is not the MIT License and is not
+represented as an OSI-approved license. The English text below governs;
+the README and application provide explanatory summaries.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Scope and prior rights
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+"Covered Material" means original copyrightable contributions introduced by
+the copyright holder in WorkBuddy Switch release 1.9.6 and later, including
+original additions and modifications to code, documentation and artwork,
+except material explicitly identified under another license.
+
+Material already made available under MIT through repository commit
+bfa9b64c49eb11ae7bdf9131464ceb242b86afc0, including releases 1.9.5 and earlier,
+remains available under its existing MIT terms. That notice is reproduced in
+LICENSES/MIT-legacy.txt. This license does not revoke or restrict permissions
+previously granted for that material. A later modification does not remove
+MIT rights in the pre-existing portion of a file.
+
+Third-party works and contributions separately licensed by their authors are
+excluded from Covered Material and remain subject to their own licenses.
+Their notices, including the API interoperability references, are retained
+in NOTICE and THIRD_PARTY_NOTICES.md. Do not attribute those works exclusively
+to koi128bit or remove their original notices.
+
+This license does not claim rights over ideas, general functionality,
+algorithms, methods of operation, independently created implementations,
+or any use that applicable law permits without copyright permission.
+
+2. Permission
+
+Subject to the conditions below, the copyright holder grants a worldwide,
+non-exclusive, royalty-free license to use, reproduce, modify, combine,
+distribute and make Covered Material available, including in commercial
+products and network services. Modified source code need not be published.
+You may license your own additions separately, but must not remove these
+conditions from Covered Material or purport to grant it under unrestricted
+alternative terms on behalf of the copyright holder.
+
+3. Required notices and visible attribution
+
+When distributing Covered Material, a substantial copyrightable portion of
+it, or a derivative work containing it, you must:
+
+(a) Include this license, applicable copyright notices, and the applicable
+    upstream and third-party notices with the distributed material.
+
+(b) In the primary README or accompanying documentation, clearly identify
+    the original project, its author and its original repository URL using
+    the following notice, or a faithful translation:
+
+    Based on WorkBuddy Switch by koi128bit.
+    Original project: https://github.com/koi128bit/WorkBuddy-Switch
+
+(c) If the distributed product has a user interface, also display that
+    notice in a normally accessible About, Credits or Legal Notices view.
+    A network service using Covered Material must display it in such a view
+    or in a legal/credits page linked from the service interface or public
+    documentation. A headless service or command-line tool may use its
+    public documentation or an accessible credits/license command instead;
+    no graphical interface must be created solely for this requirement.
+
+(d) Make the repository URL clickable wherever the display format supports
+    hyperlinks. Otherwise reproduce the complete URL as readable text.
+    Do not conceal, make illegible, or misleadingly relabel the notice.
+    No splash screen, advertisement or fixed toolbar branding is required.
+
+(e) Clearly state that your product is modified or derived when applicable,
+    and describe the reused component or contribution in its documentation.
+    Do not present the original author's contribution as solely your own,
+    or suggest the original author endorses your product.
+
+These are conditions of the permissions in section 2, not merely requests.
+They apply to the use of Covered Material, even if its enclosing product is
+renamed, rebranded, partly rewritten, commercially distributed or closed
+source. They do not apply solely because an independently written product
+has similar functions. Private use without distribution or offering a
+service to others does not require a public attribution page.
+
+4. Non-compliance, cure and reinstatement
+
+Permission to perform an otherwise restricted act involving Covered
+Material is conditional on compliance. Non-compliant distribution or
+service operation is outside this license's grant and must stop or be
+brought into compliance. Rights under this license terminate upon a
+material breach, without affecting rights obtained under other licenses.
+
+For a first violation, your rights are automatically reinstated if you
+fully cure it within 30 days after you become aware of it, including by
+restoring the required notices. For later violations or a cure after that
+period, reinstatement requires written permission from the copyright
+holder. Termination does not terminate the rights of compliant downstream
+recipients. Remedies and any statutory exceptions remain subject to
+applicable law; this license sets no automatic monetary penalty.
+
+5. No trademark or endorsement grant
+
+This license permits the required factual attribution, but grants no right
+to impersonate the original project, claim official affiliation, or use
+third-party names or trademarks beyond applicable law and their owners'
+permissions. WorkBuddy, Trae and Qoder are not licensors under this license.
+
+6. Disclaimer
+
+Covered Material is supplied as is, without warranties of merchantability,
+fitness for a particular purpose, non-infringement or continued operation.
+To the extent permitted by applicable law, the copyright holder and
+contributors are not liable for loss or damages arising from its use or
+inability to use it. Liability that cannot lawfully be excluded remains
+unaffected.
+
+7. Separability and additional permissions
+
+If a provision is unenforceable, it is limited to the extent required by
+applicable law; the remaining provisions continue to apply. Additional
+permissions or waivers require written authorization from the relevant
+copyright holder. A waiver for one recipient does not waive these
+conditions for others.

@@ -1,4 +1,22 @@
 WorkBuddy Switch
+Copyright (c) 2026 koi128bit
+Original project: https://github.com/koi128bit/WorkBuddy-Switch
+
+Original contributions introduced in 1.9.6 and later are covered by the
+WorkBuddy Switch Attribution License 1.0 in LICENSE. Distribution and
+services using that covered material require visible author and source
+attribution as described there. Independently implemented similar features
+are not covered solely because they are similar.
+
+Historical first-party material through commit
+bfa9b64c49eb11ae7bdf9131464ceb242b86afc0 and releases up to 1.9.5 retains its
+MIT grant, reproduced in LICENSES/MIT-legacy.txt. Existing MIT permissions
+and all third-party licenses remain in force. This is not a retroactive
+license change. The copyright holder may not be attributed as the sole
+author of third-party material.
+
+Third-party API interoperability references and their original MIT notice
+follow unchanged:
 
 The local API interoperability layer was developed with reference to the
 protocol documentation and implementation of workbuddy2api-panel.

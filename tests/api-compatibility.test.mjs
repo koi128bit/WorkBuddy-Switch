@@ -454,7 +454,15 @@ test("Responses accepts full-history agent input, instructions and function resu
   assert.equal(j.output[0].content[0].text, "private-reply");
   assert.equal(j.usage.input_tokens, 7);
   const sent = JSON.parse(f.calls[0].options.body);
-  assert.equal(sent.messages[0].role, "system");
+  assert.equal(
+    sent.messages[0].role,
+    "user",
+    "instructions are folded into the first user message for the official channel",
+  );
+  assert.deepEqual(sent.messages[0].content, [
+    { type: "text", text: "help" },
+    { type: "text", text: "lookup" },
+  ]);
   assert.equal(sent.messages.at(-1).tool_call_id, "call_prior");
   assert.equal(sent.tools[0].function.name, "lookup");
   await f.gateway.stop();

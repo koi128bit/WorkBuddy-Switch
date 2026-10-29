@@ -246,6 +246,20 @@ test("command shortcut and every settings section work in the compact dark works
   });
 });
 
+test("about exposes the current license and source through the trusted link bridge", async ({ page }) => {
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "设置", exact: true }).click();
+  await page.getByRole("button", { name: "关于与更新", exact: true }).click();
+  await expect(page.getByText("WorkBuddy Switch Attribution License 1.0", { exact: true })).toBeVisible();
+  await expect(page.getByText(/原作者 koi128bit/)).toBeVisible();
+  await page.evaluate(() => {
+    window.workbuddyFixture.openLink = async (name) => { document.documentElement.dataset.openedLink = name; };
+  });
+  await page.getByRole("button", { name: "查看许可全文", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-opened-link", "license");
+  await page.getByRole("button", { name: "上游与历史许可", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-opened-link", "notices");
+});
+
 test("API page keeps completed growth task history out of the connection workflow", async ({
   page,
 }) => {

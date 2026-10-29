@@ -432,7 +432,7 @@ export interface Bridge {
   exportUsage(query: UsageQuery): Promise<boolean>;
   checkUpdate(): Promise<{ available: boolean; version: string }>;
   openLink(
-    name: "github" | "wiki" | "releases" | "privacy" | "growth",
+    name: "github" | "wiki" | "releases" | "privacy" | "growth" | "license" | "notices",
   ): Promise<void>;
   launchClient(): Promise<void>;
   onChange(callback: () => void): () => void;

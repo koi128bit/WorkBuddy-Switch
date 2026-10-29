@@ -1,9 +1,9 @@
 {
   "name": "workbuddy-switch",
-  "version": "1.9.5",
+  "version": "1.9.6",
   "description": "Raycast Dark 毛玻璃工作台：WorkBuddy、Trae、Qoder 多账号切换，积分任务、用量图表与本机 OpenAI / Anthropic 兼容 API",
   "author": "koi128bit",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "private": true,
   "type": "module",
   "main": "desktop/main.cjs",
@@ -57,6 +57,7 @@
       "assets/icon-mac.png",
       "package.json",
       "LICENSE",
+      "LICENSES/**",
       "NOTICE",
       "THIRD_PARTY_NOTICES.md"
     ],

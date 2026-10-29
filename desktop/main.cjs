@@ -67,6 +67,8 @@ const links = {
   releases: "https://github.com/koi128bit/WorkBuddy-Switch/releases/latest",
   privacy:
     "https://github.com/koi128bit/WorkBuddy-Switch/blob/main/SECURITY.md",
+  license: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.6/LICENSE",
+  notices: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.6/NOTICE",
   growth: "https://www.codebuddy.cn/profile/growth-center",
 };
 app.setName("WorkBuddy Switch");
@@ -197,7 +199,9 @@ function createApplicationMenu() {
   app.setAboutPanelOptions({
     applicationName: "WorkBuddy Switch",
     applicationVersion: app.getVersion(),
-    copyright: "© koi128bit · MIT License",
+    copyright: "© koi128bit · WorkBuddy Switch Attribution License 1.0",
+    website: links.github,
+    credits: "原作者 koi128bit · 历史 MIT 与上游许可保留，详见随附 LICENSE 和 NOTICE。",
     iconPath: path.join(root, "assets/icon.png"),
   });
   Menu.setApplicationMenu(
@@ -435,7 +439,9 @@ async function start() {
   session.defaultSession.setPermissionRequestHandler(
     (_wc, _permission, callback) => callback(false),
   );
-  const vault = createSystemVault(safeStorage);
+  const vault = createSystemVault(safeStorage, process.platform, {
+    directory: app.getPath("userData"),
+  });
   const editorContext = testMode
     ? { home: testMode, env: { APPDATA: testMode, LOCALAPPDATA: testMode } }
     : {};

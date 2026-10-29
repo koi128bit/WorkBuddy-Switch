@@ -1,16 +1,15 @@
-WorkBuddy Switch 1.9.5：本机 API 新增向量与官方工具接口，长会话不再被 11128 打断。
+WorkBuddy Switch 1.9.6：正式启用新增原创内容的强制署名许可，并调整本机 API 兼容处理。
 
-- 新增 `POST /v1/embeddings`：转发官方向量接口，支持 `bge-m3` 与 `hunyuan-embedding`（1024 维），按 OpenAI 格式返回 `data[].embedding` 与 `usage.prompt_tokens`。单条文本上限 8188 字符（超出由本机直接拒绝，官方此处返回 11353/500），单次最多 2048 条；`encoding_format` 仅支持 `float`，`dimensions` 不生效；目前仅验证国内版账号。
-- 向量模型不在官方对话目录中，因此不并入 `GET /v1/models`，客户端需手动填写模型名，避免把它当成对话模型选中。
-- 新增 `POST /v1/tools/{agentic_search|knowledge_search|tempkey}`：转发官方 `/agenttool` 接口，请求体与官方客户端一致，响应（含 SSE 流）原样透传；`knowledge_search` 自动附带官方要求的检索票据。
-- 区分工具侧错误码：`10034` 归为 `tool_credentials_required`，不再被误判为授权过期而触发重新登录；`10040` 归为 `tool_service_unavailable`（数据源未开通）。
-- 修复官方 `11128` 渠道校验拒绝打断长会话：该拒绝是间歇性的，同一份请求体在别的账号或稍后会被正常接受。遮蔽阶梯在单个账号上耗尽后，改用账号池中的下一个账号重放同一份请求体；用户、助手与工具消息始终原样不动。
-- 只在官方明确返回 `11128` 且尚未产生任何输出时换号；已经开始输出的拒绝，以及模型权限（11136）、账号限制（11140）、上下文超限（11115）、工具记录异常（11148/11149）仍绝不换号或重发。
-- 重放最多换号 3 次，官方大范围拒绝时不会放大成成倍的付费调用；拒绝发生在产生 Token 之前，被拒的重放不产生费用。换号后从未遮蔽的原始请求体重新开始，`systemGuard` 记录最后一次实际生效的间隔。
-- 向量与工具请求共用账号池调度、取消、最近请求与按日用量统计。
+- 新增原创内容采用 WorkBuddy Switch Attribution License 1.0。对外分发、衍生应用或使用其提供服务时，须保留项目名 WorkBuddy Switch、原作者 koi128bit、可点击的原仓库链接及适用的「关于 / 致谢」署名。允许商业使用和闭源衍生分发，不要求公开源码。
+- 1.9.5 及以前版本与提交 bfa9b64 及以前已按 MIT 提供的内容继续保留原授权；第三方许可不变。独立实现同类功能不因功能相似受此许可约束。全文见随包 LICENSE，历史与上游声明见 LICENSES/MIT-legacy.txt、NOTICE 和 THIRD_PARTY_NOTICES.md。
+- README、应用「关于与更新」、系统关于面板和包许可字段同步更新，应用提供固定版本的许可全文与上游声明入口。
+- 本机 API 将 system / developer 文本合并到首条 user 消息，保留其文本、工具定义与其余历史；移除零宽分隔符和身份句改写，systemGuard 保留为 0。此处理会改变角色及指令优先级，不保证与原请求语义等价。
+- 官方明确返回 11128 且尚未产生任何输出时，最多改用账号池中的其他账号重试 3 次；已输出、权限、账号限制、上下文或工具记录错误不重发。实际可用性、限流、权限与计费以官方为准。
+- macOS 自构建可显式启用 WORKBUDDY_LOCAL_VAULT=1，使用随机密钥和 nonce 的 AES-256-GCM。原系统记录通过真实系统密钥环读取，保留已有本地密钥，损坏或缺失时停止操作；正式包仍默认使用 safeStorage，ASAR 完整性验证保持开启。
 
-实际速度与可用性仍取决于所选账号、官方限流、模型上下文与数据源开通情况；上下文超限时官方返回 11115，本机不做额外截断。
+提供 Mac Apple Silicon / Intel、Windows x64、Linux x64 / ARM64 安装包，附 SHA256SUMS.txt。
 
-提供 Mac Apple Silicon / Intel、Windows x64、Linux x64 / ARM64 的安装包，附 SHA256SUMS.txt。
+macOS 使用 ad-hoc 签名，未做 Apple 公证；Windows 尚未做 Authenticode 签名。
 
-macOS 使用 ad-hoc 签名、未 Apple 公证，PKG 未签署 Developer ID Installer；Windows 尚未 Authenticode 签名。
+许可全文：https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.6/LICENSE
+原项目：https://github.com/koi128bit/WorkBuddy-Switch

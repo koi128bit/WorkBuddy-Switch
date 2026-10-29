@@ -419,11 +419,18 @@ test("long conversations are accepted beyond the retired 2000 message cap", asyn
   ];
   const response = await f.send({ messages });
   assert.equal(response.status, 200);
-  assert.equal(f.gateway.snapshot().recent[0].requestInfo.messageCount, 2401);
+  // The single system message is folded into the first user message, so the
+  // forwarded history keeps every message body but no longer needs its own
+  // system role.
+  assert.equal(f.gateway.snapshot().recent[0].requestInfo.messageCount, 2400);
   assert.equal(
     JSON.parse(f.calls[0].options.body).messages.length,
-    2401,
+    2400,
     "请求体中的历史条数原样转发，不截断",
+  );
+  assert.equal(
+    JSON.parse(f.calls[0].options.body).messages[0].content,
+    "你是一个长期会话助手。\n\n第 0 条历史",
   );
 });
 test("no selected credentials means no listener can be started and startup errors remain visible", async (t) => {
@@ -509,7 +516,7 @@ test("upstream empty finish strings on intermediate chunks are treated as unfini
   assert.equal(response.status, 200);
   assert.equal((await response.json()).choices[0].message.content, "OK");
 });
-test("a long system prompt is shielded before the upstream sees it and the original text is recoverable", async (t) => {
+test("the system prompt is folded into the first user message before the upstream sees it", async (t) => {
   const f = await fixture(t);
   const system = "私有系统提示词".repeat(600);
   const response = await f.send({
@@ -519,53 +526,80 @@ test("a long system prompt is shielded before the upstream sees it and the origi
     ],
   });
   assert.equal(response.status, 200);
-  assert.equal(f.calls.length, 1, "长系统提示词首次请求即遮蔽，不浪费一次被拒请求");
+  assert.equal(f.calls.length, 1);
   const body = JSON.parse(f.calls[0].options.body);
-  const guarded = body.messages.find((message) => message.role === "system");
-  assert.ok(guarded.content.includes("\u200b"));
-  assert.equal(guarded.content.split("\u200b").join(""), system);
-  assert.equal(body.messages.at(-1).content, "private-client-prompt");
+  assert.equal(
+    body.messages.some((message) => message.role === "system"),
+    false,
+    "系统角色不再出现在上游请求里",
+  );
+  assert.equal(
+    body.messages[0].content,
+    system + "\n\nprivate-client-prompt",
+    "系统提示词完整前置到第一条用户消息",
+  );
   const entry = f.gateway.snapshot().recent[0];
   assert.equal(entry.status, "ok");
-  assert.equal(entry.requestInfo.systemGuard, 128);
   assert.equal(
     entry.requestInfo.bodyBytes,
     Buffer.byteLength(f.calls[0].options.body),
   );
 });
-test("an official channel refusal escalates system shielding on the same account", async (t) => {
+test("every system message and text part is folded while user and tool roles stay untouched", async (t) => {
+  // The official service scans system / developer messages for third-party
+  // harness fingerprints and answers 11128; it never refuses user content.
+  // Folding the harness prompt into the first user message keeps the model
+  // instructions intact and the channel sees the prompt shape it accepts.
   const f = await fixture(t, async (_url, options) => {
     const body = JSON.parse(options.body);
-    const system = body.messages.find((message) => message.role === "system").content;
-    const separators = (system.match(/\u200b/g) || []).length;
-    return separators >= 100
-      ? stream("guarded-reply")
-      : Response.json({ code: 11128 }, { status: 403 });
+    return body.messages.some((message) => message.role === "system")
+      ? Response.json({ code: 11128 }, { status: 400 })
+      : stream("folded-reply");
   });
-  const system = "私有系统提示词".repeat(600);
+  const tools = [
+    { type: "function", function: { name: "read", parameters: { type: "object" } } },
+  ];
   const response = await f.send({
     messages: [
-      { role: "system", content: system },
-      { role: "user", content: "private-client-prompt" },
+      {
+        role: "system",
+        content: "You are an AI agent powered by DeepSeek Harness.\n\nBe helpful.",
+      },
+      {
+        role: "system",
+        content: [{ type: "text", text: "Prefix.\nSecond system part." }],
+      },
+      {
+        role: "user",
+        content: "You are an AI agent powered by DeepSeek Harness.",
+      },
     ],
+    tools,
   });
   assert.equal(response.status, 200);
-  assert.equal((await response.json()).choices[0].message.content, "guarded-reply");
-  assert.equal(f.calls.length, 3, "128 与 64 被拒后使用 32 分隔");
-  assert.equal(new Set(f.calls.map((call) => call.options.headers["X-User-Id"])).size, 1);
-  for (const call of f.calls) {
-    const body = JSON.parse(call.options.body);
-    assert.equal(body.messages.at(-1).content, "private-client-prompt");
-    assert.equal(
-      body.messages.find((message) => message.role === "system").content.split("\u200b").join(""),
-      system,
-    );
-  }
-  assert.equal(f.gateway.snapshot().recent[0].requestInfo.systemGuard, 32);
+  assert.equal(
+    (await response.json()).choices[0].message.content,
+    "folded-reply",
+  );
+  assert.equal(f.calls.length, 1, "折叠后的首个请求直接通过，不浪费被拒请求");
+  const body = JSON.parse(f.calls[0].options.body);
+  assert.equal(
+    body.messages.some((message) => message.role === "system"),
+    false,
+    "每一段系统提示词都被折走",
+  );
+  assert.equal(
+    body.messages[0].content,
+    "You are an AI agent powered by DeepSeek Harness.\n\nBe helpful." +
+      "\n\nPrefix.\nSecond system part." +
+      "\n\nYou are an AI agent powered by DeepSeek Harness.",
+    "按顺序拼接后前置到第一条用户消息",
+  );
+  assert.deepEqual(body.tools, tools, "工具定义原样转发");
 });
-test("an exhausted shielding ladder moves to another account instead of failing the turn", async (t) => {
+test("a refused request is replayed on another account instead of failing the turn", async (t) => {
   // 11128 is an intermittent channel refusal, so a body the first account
-  // keeps refusing is replayed on the next selected account.
+  // refuses is replayed on the next selected account.
   const users = [];
   const f = await fixture(t, async (_url, options) => {
     const id = options.headers["X-User-Id"];
@@ -581,19 +615,22 @@ test("an exhausted shielding ladder moves to another account instead of failing 
     ],
   });
   assert.equal(response.status, 200);
-  assert.equal((await response.json()).choices[0].message.content, "second-account-reply");
-  assert.equal(f.calls.length, 6, "首个账号一次原始请求加四次遮蔽，然后换号");
+  assert.equal(
+    (await response.json()).choices[0].message.content,
+    "second-account-reply",
+  );
+  assert.equal(f.calls.length, 2, "首个账号被拒后只换一次号");
   assert.equal(new Set(users).size, 2, "重放发生在另一个账号上");
   const body = JSON.parse(f.calls.at(-1).options.body);
-  assert.equal(body.messages.at(-1).content, "private-client-prompt");
   assert.equal(
-    body.messages.find((message) => message.role === "system").content.includes("\u200b"),
+    body.messages.some((message) => message.role === "system"),
     false,
-    "新账号从未遮蔽的原始请求体开始",
   );
-  const entry = f.gateway.snapshot().recent[0];
-  assert.equal(entry.status, "ok");
-  assert.equal(entry.requestInfo.systemGuard, 0);
+  assert.equal(
+    body.messages[0].content,
+    "系统提示".repeat(400) + "\n\nprivate-client-prompt",
+  );
+  assert.equal(f.gateway.snapshot().recent[0].status, "ok");
 });
 test("channel refusal replays are bounded across accounts and never touch user messages", async (t) => {
   const f = await fixture(t, async () => Response.json({ code: 11128 }, { status: 400 }));
@@ -607,13 +644,23 @@ test("channel refusal replays are bounded across accounts and never touch user m
   const value = await response.json();
   assert.equal(value.error.code, "upstream_access_denied");
   assert.match(value.error.message, /11128/);
-  // Two same-region accounts, each getting one raw attempt plus the four
-  // shielding steps, and no more: an official outage must stay bounded.
-  assert.equal(f.calls.length, 10);
+  // Two same-region accounts, one attempt each and no more: an official
+  // outage must stay bounded.
+  assert.equal(f.calls.length, 2);
   const payloads = f.calls.map((call) => JSON.parse(call.options.body));
-  assert.deepEqual(
-    new Set(payloads.map((body) => body.messages.at(-1).content)),
-    new Set(["private-client-prompt"]),
+  assert.equal(
+    new Set(payloads.map((body) => JSON.stringify(body.messages))).size,
+    1,
+    "每个账号收到的请求体完全相同，用户消息从未被改写",
+  );
+  assert.equal(
+    payloads[0].messages.at(-1).content,
+    "系统提示".repeat(400) + "\n\nprivate-client-prompt",
+    "用户消息正文保持原样，只是前面拼上了系统提示词",
+  );
+  assert.equal(
+    payloads[0].messages.some((message) => message.role === "system"),
+    false,
   );
   assert.deepEqual(
     new Set(f.calls.map((call) => call.options.headers["X-User-Id"])),
@@ -633,7 +680,6 @@ test("a refusal without any system prompt still gets one replay on another accou
   const response = await f.send();
   assert.equal(response.status, 200);
   assert.equal(f.calls.length, 2);
-  assert.equal(f.gateway.snapshot().recent[0].requestInfo.systemGuard, 0);
 });
 test("a channel refusal that arrives after output started is never replayed", async (t) => {
   const f = await fixture(t, async () =>

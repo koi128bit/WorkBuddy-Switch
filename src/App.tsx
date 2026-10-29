@@ -2403,7 +2403,7 @@ function SettingsPage({
             )}
             {section(
               "隐私与许可",
-              "独立社区工具 · MIT 开源许可。",
+              "独立社区工具 · 新增原创内容采用强制署名许可。",
               <div className="about-privacy">
                 <ShieldCheck size={24} />
                 <div>
@@ -2418,6 +2418,26 @@ function SettingsPage({
                   </TextLink>
                 </div>
               </div>,
+            )}
+            {section(
+              "来源与许可",
+              "自 1.9.6 起适用；历史 MIT 授权与第三方许可保留。",
+              <>
+                <p><strong>WorkBuddy Switch Attribution License 1.0</strong></p>
+                <p>原作者 koi128bit · WorkBuddy Switch</p>
+                <p>
+                  分发或提供基于新许可内容的衍生应用与服务时，须保留版权、许可声明和原项目链接，
+                  并在 README / 文档及用户可访问的「关于 / 致谢」页面展示来源。
+                  独立实现相同功能不受此许可约束。
+                </p>
+                <TextLink arrow onClick={() => void api.openLink("github")}>
+                  https://github.com/koi128bit/WorkBuddy-Switch
+                </TextLink>
+                <div className="about-links">
+                  <Button icon={BookOpen} onClick={() => void api.openLink("license")}>查看许可全文</Button>
+                  <Button icon={BookOpen} onClick={() => void api.openLink("notices")}>上游与历史许可</Button>
+                </div>
+              </>,
             )}
             <p className="about-disclaimer">
               本项目是独立工具，与 WorkBuddy、Trae 和 Qoder 官方没有隶属关系。

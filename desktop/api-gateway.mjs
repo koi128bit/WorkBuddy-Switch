@@ -15,10 +15,6 @@ import {
   fetchApiModels,
   apiChatFrames,
   aggregateApiFrames,
-  guardSystemPrompt,
-  systemPromptChars,
-  SYSTEM_GUARD_INTERVALS,
-  SYSTEM_GUARD_THRESHOLD,
   prepareEmbeddingRequest,
   openApiEmbedding,
   AGENT_TOOLS,
@@ -969,18 +965,7 @@ export class ApiGateway {
   }
   async chat(prepared, _req, res) {
     let account = this.pick(prepared);
-    // Long system prompts are shielded up front so a channel validation refusal
-    // never costs a wasted round trip; short prompts stay untouched until the
-    // official service actually refuses them.
-    let payload = prepared.payload,
-      guardApplied = 0;
-    if (systemPromptChars(payload) >= SYSTEM_GUARD_THRESHOLD) {
-      const guarded = guardSystemPrompt(payload, SYSTEM_GUARD_INTERVALS[0]);
-      if (guarded) {
-        payload = guarded;
-        guardApplied = SYSTEM_GUARD_INTERVALS[0];
-      }
-    }
+    let payload = prepared.payload;
     const requestId = "chatcmpl-" + randomUUID(),
       started = Date.now(),
       controller = new AbortController();
@@ -1013,12 +998,11 @@ export class ApiGateway {
         bodyBytes: Buffer.byteLength(JSON.stringify(payload)),
         maxOutputTokens: prepared.payload.max_tokens ?? null,
         reasoningEffort: prepared.payload.reasoning_effort ?? null,
-        systemGuard: guardApplied,
+        systemGuard: 0,
       },
     };
     let usage,
-      outputStarted = false,
-      guardAttempt = guardApplied ? 1 : 0;
+      outputStarted = false;
     // Business code 11128 is an intermittent channel-validation refusal rather
     // than a verdict on the request: the same body is accepted by another
     // account, or by the same account moments later. A refused request is
@@ -1133,9 +1117,9 @@ export class ApiGateway {
             }
           }
           // The official channel refuses prompts it does not expect from its
-          // own client (business code 11128) before any output exists. Shield
-          // the system text and replay on the same account; user, assistant
-          // and tool messages are never rewritten.
+          // own client (business code 11128) before any output exists. Because
+          // the refusal is intermittent rather than a verdict on the body, hand
+          // the request to a different selected account before reporting it.
           if (
             error instanceof ApiError &&
             error.code === "upstream_access_denied" &&
@@ -1143,26 +1127,6 @@ export class ApiGateway {
             !res.headersSent &&
             !controller.signal.aborted
           ) {
-            if (guardAttempt < SYSTEM_GUARD_INTERVALS.length) {
-              const interval = SYSTEM_GUARD_INTERVALS[guardAttempt];
-              const guarded = guardSystemPrompt(basePayload, interval);
-              guardAttempt = guarded
-                ? guardAttempt + 1
-                : SYSTEM_GUARD_INTERVALS.length;
-              if (guarded) {
-                payload = guarded;
-                entry.requestInfo.systemGuard = interval;
-                entry.requestInfo.bodyBytes = Buffer.byteLength(
-                  JSON.stringify(payload),
-                );
-                continue;
-              }
-            }
-            // The ladder is exhausted on this account. Because the refusal is
-            // intermittent rather than a verdict on the body, hand the request
-            // to a different selected account before reporting it. The refused
-            // account is skipped for this request even when the shielding had
-            // to fall back to the unguarded body.
             refused.add(ref(account));
             if (channelReplays >= CHANNEL_REFUSAL_REPLAYS) throw error;
             let next;
@@ -1176,11 +1140,7 @@ export class ApiGateway {
             account = next;
             this.leases.add(ref(account));
             entry.accountId = account.id;
-            // A fresh account restarts the shielding ladder, and the
-            // unshielded body is the least likely to trip the channel scan.
             payload = basePayload;
-            guardAttempt = 0;
-            entry.requestInfo.systemGuard = 0;
             entry.requestInfo.bodyBytes = Buffer.byteLength(
               JSON.stringify(payload),
             );

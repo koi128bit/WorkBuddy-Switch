@@ -1,5 +1,7 @@
 import path from "node:path";
 import os from "node:os";
+import fs from "node:fs";
+import crypto from "node:crypto";
 
 export const supportedPlatforms = Object.freeze(["darwin", "win32", "linux"]);
 export function assertPlatform(platform) {
@@ -34,8 +36,89 @@ export function workBuddyAuthRoot({
         : absolute(env.XDG_DATA_HOME, path.join(home, ".local", "share"));
   return path.join(base, "CodeBuddyExtension", "Data", "Public", "auth");
 }
-export function createSystemVault(engine, platform = process.platform) {
+
+// Local encryption is an explicit macOS development option. New records use
+// authenticated encryption; pre-existing local CBC records remain readable.
+const LOCAL_MAGIC = Buffer.from("wbv1");
+const localVaultRequested = (platform, env) =>
+  platform === "darwin" && env.WORKBUDDY_LOCAL_VAULT === "1";
+
+function readLocalVaultKey(file, create = false) {
+  let fd;
+  try {
+    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || ![16, 32].includes(stat.size) ||
+        (process.platform !== "win32" && (stat.mode & 0o077)))
+      throw new Error("本地保险库密钥损坏或权限不安全，请保留原文件并恢复备份。");
+    const key = fs.readFileSync(fd);
+    if (![16, 32].includes(key.length)) throw new Error("本地保险库密钥损坏。");
+    return key;
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    if (!create) throw new Error("本地保险库密钥缺失，请恢复原密钥；不会自动重建。", { cause: error });
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  try {
+    fs.writeFileSync(file, crypto.randomBytes(32), { mode: 0o600, flag: "wx" });
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+  }
+  return readLocalVaultKey(file);
+}
+
+const authenticatedKey = (key) => key.length === 32 ? key :
+  Buffer.from(crypto.hkdfSync("sha256", key, Buffer.alloc(0), "WorkBuddy Switch local vault v1", 32));
+
+export function createSystemVault(engine, platform = process.platform, {
+  env = process.env,
+  directory = path.join(configRoot(), "WorkBuddy Switch"),
+} = {}) {
   assertPlatform(platform);
+  if (localVaultRequested(platform, env)) {
+    const file = path.join(directory, ".local-vault-key");
+    return {
+      available: () => true,
+      local: true,
+      encrypt(raw) {
+        const key = authenticatedKey(readLocalVaultKey(file, true));
+        const nonce = crypto.randomBytes(12);
+        const cipher = crypto.createCipheriv("aes-256-gcm", key, nonce);
+        cipher.setAAD(LOCAL_MAGIC);
+        const ciphertext = Buffer.concat([cipher.update(raw, "utf8"), cipher.final()]);
+        return Buffer.concat([LOCAL_MAGIC, nonce, cipher.getAuthTag(), ciphertext]);
+      },
+      decrypt(bytes) {
+        const buffer = Buffer.from(bytes);
+        if (buffer.subarray(0, 4).equals(LOCAL_MAGIC)) {
+          if (buffer.length < 32) throw new Error("本地保险库密文损坏。");
+          const key = authenticatedKey(readLocalVaultKey(file));
+          const decipher = crypto.createDecipheriv("aes-256-gcm", key, buffer.subarray(4, 16));
+          decipher.setAAD(LOCAL_MAGIC);
+          decipher.setAuthTag(buffer.subarray(16, 32));
+          return Buffer.concat([decipher.update(buffer.subarray(32)), decipher.final()]).toString("utf8");
+        }
+        // Only unpublished local builds used a 16-byte key for v10 records.
+        // Do not invent a key or embed a system/keychain password to read them.
+        if (buffer.subarray(0, 3).toString() === "v10" && fs.existsSync(file)) {
+          const key = readLocalVaultKey(file);
+          if (key.length === 16) {
+            try {
+              const decipher = crypto.createDecipheriv("aes-128-cbc", key, Buffer.alloc(16, 0x20));
+              return Buffer.concat([decipher.update(buffer.subarray(3)), decipher.final()]).toString("utf8");
+            } catch {
+              // This may instead be an OS-encrypted record. The real system
+              // service must authorize it; there is no hardcoded fallback.
+            }
+          }
+        }
+        if (!engine.isEncryptionAvailable()) throw new Error("系统加密不可用，无法读取旧账号；请解锁系统钥匙串。");
+        return engine.decryptString(buffer);
+      },
+    };
+  }
   const available = () =>
     engine.isEncryptionAvailable() &&
     (platform !== "linux" ||
@@ -52,6 +135,7 @@ export function createSystemVault(engine, platform = process.platform) {
   };
   return {
     available,
+    local: false,
     encrypt(raw) {
       requireSecure();
       return engine.encryptString(raw);
