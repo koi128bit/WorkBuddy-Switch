@@ -1,9 +1,10 @@
 <div align="center">
-  <img src="assets/icon.png" width="96" height="96" alt="WorkBuddy Switch 渐变猫咪图标" />
+  <img src="assets/icon.png" width="96" height="96" alt="WorkBuddy Switch 猫咪图标" />
   <h1>WorkBuddy Switch</h1>
-  <p>管理 WorkBuddy、Trae 与 Qoder 的国内和国际版，支持 macOS、Windows 与 Linux。<br />本机 API · 一键做任务 · 一键领积分 · 猫猫旅行 · 安全切换 · 对话续接</p>
+  <p><strong>把账号、积分、对话和本机 API，放进一个桌面工作台。</strong></p>
+  <p>WorkBuddy · Trae · Qoder ｜ 国内版与国际版 ｜ macOS · Windows · Linux</p>
   <p>
-    <a href="https://github.com/koi128bit/WorkBuddy-Switch/releases/latest">下载应用</a> ·
+    <a href="https://github.com/koi128bit/WorkBuddy-Switch/releases/latest">下载最新版</a> ·
     <a href="https://github.com/koi128bit/WorkBuddy-Switch/wiki">使用指南</a> ·
     <a href="CHANGELOG.md">更新日志</a> ·
     <a href="https://github.com/koi128bit/WorkBuddy-Switch/issues">反馈问题</a>
@@ -11,229 +12,255 @@
   <p>
     <img src="https://img.shields.io/badge/macOS-13%2B-444444?style=flat-square&logo=apple" alt="macOS 13+" />
     <img src="https://img.shields.io/badge/Windows-10%2F11%20x64-444444?style=flat-square" alt="Windows 10/11 x64" />
-    <a href="LICENSE"><img src="https://img.shields.io/github/license/koi128bit/WorkBuddy-Switch?style=flat-square&color=444444" alt="MIT License" /></a>
+    <img src="https://img.shields.io/badge/Linux-x64%20%2F%20ARM64-444444?style=flat-square&logo=linux" alt="Linux x64 / ARM64" />
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-444444?style=flat-square" alt="MIT License" /></a>
   </p>
 </div>
 
-<p align="center"><img src=".github/assets/overview.png" width="1120" alt="Raycast Dark 总览：积分、Token 趋势、账号分布、任务状态与本机 API" /></p>
+> **来源标注声明**
+>
+> 我们要求：凡实际复用本项目代码、移植实现，或借鉴本项目功能方案、界面与交互设计后对外发布的项目，都应公开标注 **WorkBuddy Switch**、原作者 **[koi128bit](https://github.com/koi128bit)**，并附上 **[原项目链接](https://github.com/koi128bit/WorkBuddy-Switch)**。Fork、改名、重写部分代码或商业分发，都请如实说明来源与复用范围，不要冒充独立原创。
+>
+> 代码复用须遵守 MIT 的版权与许可保留义务；上述公开署名是项目维护者提出的署名规范，具体边界与模板见 [来源标注与许可](#来源标注与许可)。
 
-WorkBuddy Switch 1.9.5 采用统一的 Raycast Dark 工作台：深色毛玻璃、紧凑导航、细分隔线与珊瑚红强调。新增总览、交互图表和命令搜索，管理 WorkBuddy、Trae 和 Qoder 的六个独立客户端入口。账号库、渐变猫咪图标、菜单栏与固定位置覆盖升级继续保留。
+<p align="center"><img src=".github/assets/overview.png" width="1120" alt="总览工作台：积分、Token 趋势、账号分布、任务状态与本机 API，演示数据" /></p>
 
-> 截图均为演示账号和模拟数据。真实积分、任务资格与奖励以官方接口为准，本地用量来自设备上的记录。原生毛玻璃的透底效果随系统与窗口后的内容变化。
+WorkBuddy Switch 是由 [koi128bit](https://github.com/koi128bit) 维护的独立社区桌面工具。统一的 Raycast Dark 工作台提供账号切换、积分任务、对话续接、用量分析和本机 API 转发，支持三个产品、两个地区的六个独立客户端入口。
 
-## 支持的客户端
+截图均为演示账号与模拟数据。功能以所下载版本的 [发布说明](https://github.com/koi128bit/WorkBuddy-Switch/releases) 为准；官方积分、奖励、模型权限和任务资格以官方服务返回为准。
 
-| 客户端            | 账号功能                                                   | 其他功能                                                       |
-| ----------------- | ---------------------------------------------------------- | -------------------------------------------------------------- |
-| WorkBuddy 国内版  | 保存当前登录、官方网页登录、刷新授权、切换、跨设备加密备份 | 官方积分、一键做任务、签到与旅行领奖、自动任务、本地对话与用量 |
-| WorkBuddy 国际版  | 独立账号库与官方授权、切换、积分查询、跨设备加密备份       | 独立本地对话与用量；活动不调用国内版接口                       |
-| Trae CN / 国际版  | 真实 UID 识别、官方网页登录、授权续期、完整登录快照切换    | 备注、收藏、搜索、托盘切换、切换失败恢复                       |
-| Qoder CN / 国际版 | 真实 UID 识别、官方网页登录、授权续期、完整登录快照切换    | 备注、收藏、搜索、托盘切换、切换失败恢复                       |
+[功能概览](#功能概览) · [下载安装](#下载安装) · [快速开始](#快速开始) · [本机 API](#本机-api) · [来源标注与许可](#来源标注与许可) · [本地开发](#本地开发)
 
-产品、地区和本机操作系统分别适配，账号库、授权域名、应用标识及数据目录隔离。当前支持桌面客户端；Qoder IDE 插件、独立 CLI、Trae SOLO 使用不同的程序和登录目录，不共用桌面快照。
+## 功能概览
 
-Trae / Qoder 网页授权与客户端登录资料分别加密保存，用同地区真实 UID 关联。**网页登录不会直接替换桌面登录。** 首次切换前，在官方客户端登录该账号并点击「保存当前账号」一次。未关联完整客户端资料的账号会显示待关联，并禁用切换，避免拼接另一账号的资料导致退登。
+| 能力 | 你可以做什么 |
+| --- | --- |
+| **多账号管理** | 保存当前登录、官方网页登录授权、搜索、收藏、备注、排序、安全切换与跨设备加密备份 |
+| **积分与任务** | 查询可用及临期积分，一键做任务、每日签到、猫猫旅行、领奖与按账号配置自动任务 |
+| **对话续接** | 搜索本地记录、恢复回收站对话，将选中记录迁移至当前账号继续 |
+| **用量分析** | 查看 Token 趋势、缓存构成、模型消耗、每日明细、API 用量与 CSV 导出 |
+| **本机 API** | 将已授权的 WorkBuddy 账号接入 OpenAI / Anthropic 兼容接口，管理账号池与实时模型目录 |
+| **桌面快捷操作** | 菜单栏 / 系统托盘切换、快捷领奖、命令搜索、隐私遮罩、原生毛玻璃与紧凑布局 |
 
-客户端格式暂不能识别时，可保留兼容快照；此时不把手填名称当成已验证身份。恢复成功只代表本机登录文件检查通过，最终登录状态由官方客户端与服务器确认。
+### 支持的客户端
 
-## WorkBuddy 功能
+| 客户端 | 账号与授权 | 专属能力 |
+| --- | --- | --- |
+| **WorkBuddy 国内版** | 保存登录、网页登录、续期、切换、加密备份 | 积分、签到、旅行、任务、本地对话、用量与 API 转发 |
+| **WorkBuddy 国际版** | 独立账号库、官方授权、切换、加密备份 | 独立本地对话、用量与 API 转发；活动不调用国内版接口 |
+| **Trae CN / 国际版** | 真实 UID 识别、网页登录、续期、完整登录快照切换 | 备注、收藏、搜索、托盘切换与失败恢复 |
+| **Qoder CN / 国际版** | 真实 UID 识别、网页登录、续期、完整登录快照切换 | 备注、收藏、搜索、托盘切换与失败恢复 |
 
-| 页面     | 功能                                                                                 |
-| -------- | ------------------------------------------------------------------------------------ |
-| **总览** | 可用积分、临期积分、近 7 天 Token 趋势、账号余额分布、任务状态与本机服务             |
-| **账号** | 官方网页登录添加、保存当前登录、搜索、收藏、备注、排序、多选领取、安全切换和加密备份 |
-| **积分** | 一键做任务、每日签到、猫猫旅行、成长任务进度、按账号配置自动任务和执行结果           |
-| **对话** | 搜索本地记录、按账号筛选、恢复回收站对话、迁移到当前账号继续                         |
-| **用量** | 交互折线图、Token 构成环图、模型消耗对比、每日数据表、筛选与 CSV 导出                |
-| **API**  | OpenAI / Anthropic 兼容接口、账号池、实时模型目录、工具调用、请求趋势与延迟          |
-| **设置** | 常规、自动任务、外观与隐私、连接与路径、数据与备份、关于与更新                       |
+产品、地区和操作系统分别适配，账号库、授权域名、应用标识与数据目录隔离。支持范围是桌面客户端；Qoder IDE 插件、独立 CLI 和 Trae SOLO 使用不同的程序与登录目录。
 
-WorkBuddy 账号页提供「需关注」筛选，集中显示查询失败、凭据待续期、低余额与临期积分。积分包明细展示各包可用量和到期时间；「建议先用」仅依据最近 6 小时内查询成功的临期积分，不会自动切换账号。
+## 下载安装
 
-底部状态栏显示当前客户端的运行状态、自动任务开关、正在执行的操作和积分刷新时间，并提供保存当前账号与隐私遮罩快捷操作。
+前往 **[GitHub Releases 下载最新版](https://github.com/koi128bit/WorkBuddy-Switch/releases/latest)**，在 Assets 中选择对应系统与架构的文件。每次发布附带 `SHA256SUMS.txt`，可用于校验下载文件。
 
-## 数据视图与命令搜索
+| 系统 | 推荐文件 | 其他选择 |
+| --- | --- | --- |
+| Apple Silicon Mac | `mac-arm64.pkg`，覆盖安装至「应用程序」 | `mac-arm64.dmg` |
+| Intel Mac | `mac-x64.pkg`，覆盖安装至「应用程序」 | `mac-x64.dmg` |
+| Windows 10 / 11 x64 | `windows-x64-setup.exe`，沿用原位置升级 | `windows-x64-portable.exe`，便携运行 |
+| Linux x64 | `linux-amd64.deb` | `linux-x86_64.AppImage` |
+| Linux ARM64 | `linux-arm64.deb` | `linux-arm64.AppImage` |
 
-- **总览**：展示最近 7 天、全部当前地区 WorkBuddy 账号的本地用量；积分汇总保留已查询账号数量，查询失败或未查询时显示未知。
-- **用量图表**：悬停或用 Tab 聚焦折线图上的日期，查看当天值；环图可聚焦分项，模型条形图跟随排序。展开「查看每日数据」可读取精确数字。
-- **奖励趋势**：积分页展示当前账号近 7 天在本应用执行的签到与旅行领奖；未返回的奖励金额单独标注。成长任务结果显示在任务执行记录中。
-- **API 分析**：切换 7 / 30 天、请求量 / Token，查看成功率、P50 / P95 延迟和模型分布。分析仅覆盖保留的最近 100 条请求，累计用量另列；未知用量不推算。
-- **毛玻璃**：macOS 使用原生背景模糊，Windows 11 22H2 及以上使用 Acrylic；其他系统保留深色兼容外观。「设置 → 外观与隐私」可关闭；系统减少透明度和高对比度优先，不降低文字透明度。
-- **命令搜索**：按 `⌘ / Ctrl + K` 或点击顶部搜索框，输入页面名称，以方向键选择、回车打开、Esc 关闭。命令只提供当前客户端可用的入口。
+表中为安装包文件名后缀，完整名称以 `WorkBuddy-Switch-版本号-` 开头。
 
-![命令搜索，演示数据](.github/assets/command-search.png)
+- **macOS**：支持 13 及以上。推荐 PKG，安装前先退出旧版；DMG 中的应用也提供安装与替换入口。安装后从 `/Applications/WorkBuddy Switch.app` 启动，并推出旧的 DMG。
+- **Windows**：推荐安装版，沿用已有安装记录与位置。便携版需自行覆盖原文件。
+- **Linux**：需要桌面图形环境与已解锁的系统密钥环；AppImage 还需执行权限及对应 FUSE 支持。目标官方客户端也需提供相应系统与架构版本；WorkBuddy 国内版 Linux 由 UOS / 麒麟商店提供。
 
-## Trae 与 Qoder 账号
+升级沿用相同应用标识和数据目录，保留账号库、设置与记录。请先完成或停止运行中的任务；历史下载文件不会自动清理。从 0.x 升级的 macOS 用户，可在「设置 → 数据与备份」迁入旧版账号，原文件与钥匙串条目保留。
 
-<p align="center"><img src=".github/assets/trae-cn.png" width="1120" alt="Trae CN 本机登录快照，演示账号" /></p>
+macOS 包使用 ad-hoc 签名，尚未做 Apple 公证；Windows 包尚未做 Authenticode 签名。首次启动提示及详细步骤见 [安装与首次启动](https://github.com/koi128bit/WorkBuddy-Switch/wiki/安装与首次启动)。
 
-1. 在侧栏的「客户端」选择 对应产品的国内版或国际版。
-2. 在对应官方客户端登录账号 A，回到本应用点击 **保存当前账号**，填写容易辨认的名称；应用会尝试识别真实 UID。
-3. 在官方客户端登录账号 B 后再次保存。之后在列表或菜单栏选择目标账号，确认切换。
-4. 自定义安装位置可在账号页的 **路径配置**，或「设置 → 连接与路径」中指定。Windows 的 Qoder CN 支持读取官方启动器位置。
+## 快速开始
 
-切换前正常退出目标客户端、保存切换前的登录快照，再恢复目标登录。只处理明确的登录字段或登录文件，保留设置、插件、工作区、对话、机器标识与其他客户端的状态。失败时尝试恢复原登录；中断后的加密恢复记录可通过 **恢复切换前登录** 处理。检测到后续新登录时，会停止恢复以保护新登录；此时可选择「保留当前登录并归档」，保存当前快照并归档旧恢复记录，再继续切换。
+### WorkBuddy
 
-产品和地区分别校验。客户端升级导致格式变化时请重新保存快照。客户端格式只做只读核验，尚未使用用户真实账号执行 Trae / Qoder 切换；测试使用隔离文件、模拟接口和原生主机。
+1. 安装并登录对应地区的 WorkBuddy 桌面客户端。
+2. 打开 WorkBuddy Switch，在侧栏选择对应客户端，点击底部的 **保存当前账号**。
+3. 需要查询积分、参与活动或使用 API 时，点击 **添加账号**，在官方网页授权同一账号。网页授权不会替换桌面客户端的当前登录。
+4. 点击 **刷新**，查看积分与活动状态；保存更多账号后即可切换或多选操作。
+
+切换前请结束客户端正在运行的任务。应用会确认并正常退出目标客户端、备份原登录，再恢复目标账号；失败时尝试恢复原登录。WorkBuddy 5.6 的本机加密凭据原样保存，不提取客户端内置密钥；可移植备份需要官方网页登录授权。
+
+### Trae 与 Qoder
+
+1. 选择产品与地区，在对应官方客户端登录账号 A，再点击 **保存当前账号**。
+2. 在官方客户端登录账号 B 后再次保存，之后从列表或菜单栏选择账号切换。
+3. 自定义安装位置可在账号页 **路径配置**，或「设置 → 连接与路径」指定。
+
+**网页登录授权与桌面登录快照分别保存，并按同地区真实 UID 关联。** 未关联完整客户端资料的账号会显示待关联并禁用切换。只完成网页登录时，仍需在官方客户端登录该账号并保存一次；应用不会把网页 Token 拼接到其他账号的资料中。
+
+切换仅处理明确的登录字段或文件，保留设置、插件、工作区、对话和机器标识。中断时可使用 **恢复切换前登录**；检测到后续新登录时会停止恢复，保护当前状态。客户端升级后如格式变化，请重新保存快照。无法识别身份的兼容快照不会将手填名称当作已验证 UID。
+
+<p align="center"><img src=".github/assets/trae-cn.png" width="1120" alt="Trae CN 登录快照管理，演示账号" /></p>
+
+Trae / Qoder 的切换测试使用隔离文件、模拟接口与原生主机，尚未使用用户真实账号逐项验收；本机恢复检查通过不代表官方服务已确认登录。
+
+## 积分、任务与猫猫旅行
+
+在 **WorkBuddy 国内版 → 账号** 勾选账号，即可一键领积分或一键做任务；积分页提供当前账号的详细操作。
+
+| 操作 | 执行方式 |
+| --- | --- |
+| **一键领积分** | 先查询官方状态，再完成未签到账号的签到，并领取已到达的旅行奖励 |
+| **猫猫旅行** | 选择官方提供的地点出发，按官方状态区分旅行中、已到达与今日次数用完 |
+| **一键做任务** | 预览并确认账号、任务、模型、内容与次数后，接取任务、执行、等待计分并领奖 |
+| **自动任务** | 在「设置 → 自动任务」分别开启签到、旅行领奖与出发；各账号可单独退出 |
+
+<p align="center"><img src=".github/assets/task-confirmation.png" width="1000" alt="执行前确认账号、任务内容、模型与对话次数，演示数据" /></p>
+
+- **次数与消耗**：真实对话默认总上限 80 条，可调为 1–200 条，每账号最多 40 条，单次输出上限 64 Token。实际按官方计费，不能保证奖励覆盖消耗。
+- **执行范围**：确认范围绑定账号、内容、模型、专家资源和次数，10 分钟有效且仅用一次；可继续处理范围内新解锁任务，范围外的新对话任务需要再次确认。
+- **活动操作**：部分体验任务通过兼容活动上报推进，部分还会发送真实对话并计入上限。主题任务会应用官方主题；不会生成实际画布、建立长期定时任务或授予第三方应用权限，官方仍可能要求实际客户端操作。
+- **停止与记录**：进度不推进、调用失败或结果不明时停止该账号后续对话，不自动重发付费请求；保留已完成结果，异常退出标记中断。未知进度不会当成完成。
+
+自动任务默认关闭，仅在应用运行且电脑未休眠时执行，完全退出后停止；签到时间按北京时间计算。奖励只统计官方明确返回的金额，未返回金额单独标注。关注关系、付款、协议和时间条件等限制仍由官方决定，全部任务计分及扣费结果尚未逐项验收。
 
 ## 本机 API
 
-<p align="center"><img src=".github/assets/api.png" width="1120" alt="本机 API，演示数据" /></p>
-
-在 **API** 页勾选用于转发的 WorkBuddy 账号，保存设置后启动服务。默认 Base URL 为 `http://127.0.0.1:8317/v1`，密钥通过 **复制 API Key** 获取。账号须完成官方网页登录授权，Trae / Qoder 不参与转发。
-
-1.9 支持 OpenAI Chat Completions、Responses 和 Anthropic Messages 的流式回复、工具调用、图片输入与实际用量；兼容 OpenCode 的缓存提示字段和 48 个工具注册。刚确认积分为 0 的账号自动跳过，明确积分不足且未生成内容时会切换同地区已选账号。
-
-模型目录优先读取当前 WorkBuddy 客户端使用的个人目录，包含 Hy4、GLM-5.3、DeepSeek V4.1 等模型及其精确 ID；页面获取模型会强制刷新。目录可见不等于所有账号均有权限。已用真实 OpenCode 验证 DeepSeek V4.1 Flash 的流式回复、文件读取工具与结果回传；其他 Agent 的实际接入仍需分别验证。
-
-本机 API 不额外限制输出 Token：客户端传入的输出预算原样转发，未指定时使用官方默认值。连接中断或半截回复不会自动重发。服务仅监听本机，保持系统加密与不记录对话正文的边界。
-
-1.9.2 在最近请求中保留官方业务码、原始 HTTP 状态及请求规模，失败详情可展开查看。官方 `400 / 11128` 表示渠道校验拒绝，不再误报为授权 403；具体 Agent 仍受官方渠道校验限制。
-
-1.9.3 为超过 4 KB 的系统提示词插入零宽分隔符后再转发，并在仍被拒绝时按同一账号逐级加强，修复 dsh 等长系统提示词客户端被官方 `11128` 渠道校验整轮拒绝的问题。用户、助手与工具消息保持原样，最近请求以 `systemGuard` 记录实际间隔。
-
-1.9.4 取消本机 API 的并发与每分钟请求上限，`messages` 上限提高到 20000 条、请求体上限提高到 32 MB，长会话不再被本机校验拒绝；本机 API 产生的 Token 用量并入「用量」统计（按日、账号与模型），积分仍只取客户端日志中的显式 Credits。同版本新增 `POST /v1/embeddings`（`bge-m3`、`hunyuan-embedding`，1024 维）与 `POST /v1/tools/{agentic_search|knowledge_search|tempkey}`，转发官方向量与 `/agenttool` 接口。
-
-[接入格式、OpenCode 配置与使用范围](docs/local-api.md)。
-
-## 一键做任务
-
-<p align="center"><img src=".github/assets/tasks.png" width="1120" alt="一键任务执行结果：已领取奖励、待完成任务与逐项进度，演示数据" /></p>
-
-在 **WorkBuddy 国内版 → 账号** 勾选账号，点击 **一键做任务**；积分页也可对当前选中的账号执行。先查看确认窗口，再决定执行范围。
-
-<p align="center"><img src=".github/assets/task-confirmation.png" width="1000" alt="执行前确认：对话开关、总次数上限、内容、每个账号的任务和模型，演示数据" /></p>
-
-- **一次确认，连续处理**：接取任务 → 执行动作 → 等待官方计分 → 达标领奖 → 继续已确认范围内新解锁的任务。范围绑定账号、内容、模型、专家资源和次数，10 分钟有效、仅使用一次。
-- **解锁后继续**：已知任务尚未返回进度时先显示预留上限，解锁后读取官方次数再执行；接取未确认的任务会在前置任务推进后重新接取，最多检查 30 轮。未知进度不会当成完成，付费调用仍受已确认预算约束。
-- **真实对话任务**：普通对话、GLM-5.2、夜间对话、桌面对话、专家、专家团、腾讯轻量云等指定专家，以及已安装技能。专家来自官方市场，使用实际服务端请求标识记录活动。
-- **活动事件任务**：资料库、主题、自动化、发现应用等可通过兼容活动上报推进；模板、灵感、画布和技能体验还会发送真实对话，计入对话上限。主题任务会应用官方主题，可在官方客户端改回。不会生成实际画布、建立长期定时任务或授予第三方应用权限；服务端仍可能要求实际客户端操作。确认框分别显示纯活动操作和真实对话次数。
-- **消耗控制**：默认总上限 80 条，可调为 1–200 条，每账号最多 40 条；单次请求输出上限 64 Token。实际积分按官方计费，无法保证奖励覆盖消耗。进度不推进、结果不明或调用失败时停止该账号后续对话，不自动重发付费请求。每次最多预览 20 个账号的体验任务。
-- **进度与停止**：显示等待计分、活动记录、真实对话、领奖和逐项结果。停止后保留已完成结果；公众号关注、协议确认、捐款、夜间时间条件或尚未支持的任务逐项说明原因。
-
-积分和能量只统计官方明确返回的奖励，活动请求成功不等于任务已完成。本轮会继续处理已确认范围内的前置解锁关系；范围外的新对话任务需要再次确认。此功能限 WorkBuddy 国内版，不改变设置中的定时任务范围。
-
-最近一批记录保存在本机，异常退出会标记为中断；再次执行前重新查询官方状态。记录不含完整对话文本或凭据，损坏记录备份保留。功能通过隔离账号、模拟接口及原生系统检查，并已验证部分真实任务执行与官方领奖；全部任务计分和每种扣费结果尚未逐项验收，不承诺绕过关注关系、付款、协议或服务端限制。
-
-## 一键领积分与猫猫旅行
-
-<p align="center"><img src=".github/assets/rewards.png" width="1120" alt="签到与猫猫旅行：官方状态、出发、领奖、账号自动任务与领取记录" /></p>
-
-- **一键领取**：在账号列表勾选账号，点击「一键领积分」。先查询官方状态，再完成未签到账号的每日签到，并领取已经到达的旅行奖励。账号详情和菜单栏也提供快捷领取。
-- **旅行出发**：在积分页选择官方提供的地点，点击「出发」。旅行中、已到达和今日次数已用完分别展示；到达前不会按本地倒计时提前领奖。
-- **自动任务**：在「设置 → 自动任务」分别开启自动签到、旅行领奖和旅行出发，设置签到时间与检查间隔。各账号可单独退出自动任务；自动出发需要预先选择地点。
-- **领取记录**：保存本应用执行的签到、旅行和出发结果。官方未返回奖励金额时显示「未返回金额」，不推测或补造积分；失败不会计入成功领取。
-
-签到与旅行目前适用于国内版账号，并受官方活动开放情况和账号资格限制。自动任务默认关闭，只有应用运行且电脑未休眠时才执行；关闭到菜单栏或托盘后可继续运行，完全退出后停止。签到时间按北京时间计算，到达设置时间后在下一次检查中执行。
-
-在 Trae / Qoder 账号行点击「续期」可更新已识别的授权；这不会将网页 token 拼接到另一个人的客户端资料。要更新桌面快照，请在客户端正常登录后重新保存。
-
-## 菜单栏与系统托盘
-
-<p align="center"><img src=".github/assets/tray.png" width="346" alt="菜单栏快捷面板：账号积分、切换、一键领取、主界面与设置" /></p>
-
-点击猫咪图标，先选择客户端，即可查看其最近使用的账号、切换账号，或打开主界面与设置。WorkBuddy 还可查看缓存积分及一键领取。macOS 可在菜单栏图标旁显示当前账号的积分数字；Windows 和 Linux 使用系统托盘。隐私遮罩默认隐藏面板中的账号昵称，截图展示的是关闭昵称遮罩后的演示效果。
-
-快捷键：`⌘ / Ctrl + K` 打开命令搜索，`⌘ / Ctrl + ,` 打开设置，`⌘ / Ctrl + 1` 显示主窗口，`⌘ / Ctrl + Shift + M` 打开快捷面板。
-
-## 下载与安装
-
-从 [GitHub Releases](https://github.com/koi128bit/WorkBuddy-Switch/releases/latest) 下载，校验清单为同页的 `SHA256SUMS.txt`。
-
-| 系统              | 1.9.5 安装包                                                                                                                                                                                                                                                                            |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Apple Silicon Mac | [覆盖安装 PKG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.9.5/WorkBuddy-Switch-1.9.5-mac-arm64.pkg) · [DMG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.9.5/WorkBuddy-Switch-1.9.5-mac-arm64.dmg)                                        |
-| Intel Mac         | [覆盖安装 PKG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.9.5/WorkBuddy-Switch-1.9.5-mac-x64.pkg) · [DMG](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.9.5/WorkBuddy-Switch-1.9.5-mac-x64.dmg)                                            |
-| Windows 10/11 x64 | [安装版 setup.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.9.5/WorkBuddy-Switch-1.9.5-windows-x64-setup.exe) · [便携版 portable.exe](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.9.5/WorkBuddy-Switch-1.9.5-windows-x64-portable.exe) |
-| Linux x64         | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.9.5/WorkBuddy-Switch-1.9.5-linux-x86_64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.9.5/WorkBuddy-Switch-1.9.5-linux-amd64.deb)                                  |
-| Linux ARM64       | [AppImage](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.9.5/WorkBuddy-Switch-1.9.5-linux-arm64.AppImage) · [DEB](https://github.com/koi128bit/WorkBuddy-Switch/releases/download/v1.9.5/WorkBuddy-Switch-1.9.5-linux-arm64.deb)                                   |
-
-Linux 需要桌面图形环境及已解锁的系统密钥环；AppImage 需要执行权限和对应系统的 FUSE 支持。WorkBuddy 国内版 Linux 由 UOS / 麒麟商店提供，其他客户端也以厂商当前发布的系统与架构版本为前提。自动发现失败时可手动选择应用及数据根目录。
-
-macOS 推荐双击 **PKG 覆盖安装包**，固定替换 `/Applications/WorkBuddy Switch.app`，安装前要求退出正在运行的旧版。DMG 中的应用从临时位置启动时也会提供安装并替换；检测到已安装更新版本时打开已安装版，不直接降级。账号、设置和记录继续使用原数据目录。
-
-Windows 推荐 **setup.exe 安装版**，自动使用原安装记录和位置覆盖升级，应用与卸载入口名称固定，不再选择另一个安装目录。便携版为独立可执行文件，需要自行覆盖原文件，不等同于覆盖安装。
-
-macOS 包使用 ad-hoc 签名，尚未做 Apple 公证；Windows 包尚未做 Authenticode 签名。首次打开可能提示未知发布者，处理方式见 [安装指南](https://github.com/koi128bit/WorkBuddy-Switch/wiki/安装与首次启动)。
-
-### 升级后只保留一个已安装应用
-
-新版沿用相同应用标识和数据目录。升级前先完成或停止正在执行的任务；从 1.5 起，应用会等待当前操作结束后再退出。安装不会删除账号库或设置，PKG 使用整包替换，移除应用包内的过时文件。
-
-若此前直接从 DMG、下载目录或构建目录运行，安装后从「应用程序」打开，并推出旧的 DMG。历史下载文件不会被当作已安装版本自动清理。开发构建的 `.app` 位于隐藏的 `.build/` 目录，公开 `dist/` 只收集最终安装包，减少启动台识别重复构建副本。
-
-### 第一个账号
-
-1. 安装并登录 WorkBuddy 桌面客户端。
-2. 打开 WorkBuddy Switch，点击底部状态栏的 **保存当前账号**。
-3. 需要查询或领取积分时，点击账号页的 **添加账号**，在官方网页授权同一账号。
-4. 点击 **刷新**，查询积分、签到与旅行状态。添加更多账号后，可多选领取或点击 **切换**。
-
-切换前会确认并正常关闭 WorkBuddy，请先结束正在运行的任务。官方网页登录添加账号不会改变客户端的当前登录身份。
-
-WorkBuddy 5.6 的部分凭据采用本机加密封装。应用原样保留该封装用于本机切换，不提取客户端内置密钥；官方网页登录授权用于积分、活动和密码加密的跨设备备份。
-
-从 0.x 升级的 macOS 用户，可在「设置 → 数据与备份」点击 **迁入旧版 macOS 账号**。原文件与钥匙串条目会保留。详见 [账号指南](https://github.com/koi128bit/WorkBuddy-Switch/wiki/账号保存与快速切换)。
-
-## 对话续接与备份
-
-跨账号继续或恢复回收站对话时，应用会先正常退出 WorkBuddy，创建包含 WAL 的完整 SQLite 备份，然后在事务中只修改选中记录的归属与删除标记。检查通过后使用当前账号打开对话。国际版暂不调用未经确认的对话深链接，恢复后在客户端对话列表继续。
-
-这是**本地对话归属迁移**：原账号不再拥有这条本地记录，不会生成副本，也不同步云端权限。项目目录与依赖仍需在本机可用。备份在应用数据目录的 `session-backups/`，默认保留最近 10 份，可在设置中调整。
-
-客户端退出失败、交互式 CLI 尚在运行或记录状态已变化时，会停止写入。账号切换后启动失败会尝试恢复原登录；对话写入检查失败只撤销本次记录修改。详见 [对话指南](https://github.com/koi128bit/WorkBuddy-Switch/wiki/恢复与跨账号继续对话)。
-
-## 用量口径
-
-<p align="center"><img src=".github/assets/analytics.png" width="1120" alt="Token 分项、模型用量、趋势与本地对话排行" /></p>
-
-- **官方积分**：优先读取精确小数字段，排除已到期积分包，显示最近有效到期时间。查询失败明确提示，缓存不会冒充新结果。
-- **本地 Token**：读取 `~/.workbuddy/projects/**/*.jsonl` 中 assistant 消息与工具调用的 usage，按记录 ID 去重。不同请求共用 trace ID 时仍分别计数，避免漏掉工具调用消耗。
-- **记录 Credits**：只统计日志明确记录的积分，不按 Token 换算费用。它可能低于官方消耗，缺失记录时也可能为零。
-- **时间与归属**：默认最近 7 天，可选择今天、30 天、全部或自定义日期；按本机时区和数据库中当前会话归属统计。迁移过的对话不会追溯原付费账号，无归属日志只计入「全部账号」。
+在 **API** 页选择已完成官方网页登录授权的 WorkBuddy 账号，保存设置并启动服务，点击 **复制 API Key** 获取密钥。
 
 ```text
-总 Token = 净输入 + 缓存读取 + 缓存写入 + 输出
-         = prompt + completion
-推理 Token 属于输出，不重复加入总量。
+Base URL：http://127.0.0.1:8317/v1
+API Key：从应用 API 页复制
 ```
 
-本地数据每 15 秒读取，官方积分默认每 5 分钟刷新，可关闭。详见 [Tokens、Credits 与额度](https://github.com/koi128bit/WorkBuddy-Switch/wiki/Tokens、Credits-与额度)。
+| 接口 | 用途 |
+| --- | --- |
+| `GET /v1/models` | 获取当前账号可见的模型目录与精确模型 ID |
+| `POST /v1/chat/completions` | OpenAI Chat Completions 兼容接口 |
+| `POST /v1/responses` | OpenAI Responses 兼容接口 |
+| `POST /v1/messages` | Anthropic Messages 兼容接口 |
+| `POST /v1/embeddings` | 官方向量接口，支持 `bge-m3` 与 `hunyuan-embedding` |
+| `POST /v1/tools/{agentic_search\|knowledge_search\|tempkey}` | 转发官方搜索与相关 Agent 工具接口 |
 
-## 设置与隐私
+支持流式回复、工具调用、图片输入和实际用量记录。模型目录优先读取当前 WorkBuddy 客户端使用的个人目录，点击获取模型会强制刷新；目录可见不代表所有账号都有调用权限。Trae / Qoder 账号不参与转发。
 
-<p align="center"><img src=".github/assets/dark-settings.png" width="1120" alt="统一原生风格的设置页：主题、紧凑布局和隐私遮罩" /></p>
+<p align="center"><img src=".github/assets/api.png" width="1120" alt="本机 API：账号池、模型目录、请求趋势与失败详情，演示数据" /></p>
 
-账号库使用系统 `safeStorage` 加密：macOS 由钥匙串保护，Windows 使用 DPAPI，Linux 使用 GNOME Keyring 或 KWallet。Linux 不接受 `basic_text` 降级，密钥环未解锁时拒绝保存和切换。Token 不传给界面，不写入操作日志。跨设备备份使用密码派生密钥与 AES-256-GCM；本机封装凭据需先通过官方网页登录重新授权，才能导出可移植备份。
+- **账号调度**：刚确认积分为零的账号自动跳过；明确积分不足且未生成内容时，可切换同地区已选账号。
+- **请求范围**：无额外本机并发或每分钟请求上限；消息上限 20000 条，请求体上限 32 MB。客户端指定的输出预算原样转发，未指定时使用官方默认值；实际仍受官方限流、模型上下文与账号权限约束。
+- **异常处理**：连接中断或半截回复不会自动重发。最近请求保留官方业务码、原始 HTTP 状态与请求规模，`11128` 渠道校验拒绝不会误报为授权 403；系统提示词兼容处理以 `systemGuard` 记录。
+- **统计与隐私**：API Token 用量按日、账号与模型并入用量页；服务仅监听本机，不记录对话正文。请求分析覆盖保留的最近 100 条，累计用量另列，未知用量不推算。
 
-本地历史与用量在设备上处理，应用不设置第三方统计或账号上传服务。启用并确认对话任务后，对话内容和该次已完成对话的活动记录发送到官方服务，用于回复与任务进度；完整文本不写入本机任务记录。其余网络用于官方登录、授权续期、积分与活动，以及手动检查本仓库 Releases。
+已用真实 OpenCode 验证部分模型的流式回复与工具调用闭环；其他 Agent、模型和账号组合需分别验证。配置示例、协议差异与使用范围见 **[本机 API 接入指南](docs/local-api.md)**。
 
-隐私遮罩默认开启，会遮罩账号 ID、缩短工作目录，并隐藏菜单栏与通知里的昵称；主窗口中的账号名称和对话标题仍显示。详见 [SECURITY.md](SECURITY.md) 和 [隐私指南](https://github.com/koi128bit/WorkBuddy-Switch/wiki/数据、备份与隐私)。
+## 对话续接与用量统计
+
+**跨账号继续对话**会先正常退出 WorkBuddy，创建包含 WAL 的完整 SQLite 备份，再在事务中修改选中记录的归属与删除标记。这会迁移本地记录，原账号不再拥有该记录，不会生成副本或同步云端权限；项目目录与依赖仍需在本机可用。
+
+备份位于应用数据目录的 `session-backups/`，默认保留最近 10 份，可在设置中调整。客户端退出失败、交互式 CLI 仍在运行或记录状态已变化时停止写入；检查失败会撤销本次修改。国际版恢复后从官方客户端对话列表继续。
+
+**用量页**提供日期筛选、Token 构成、模型排行、每日明细与 CSV 导出。官方积分、日志 Credits 和本地 Token 分别展示：
+
+- 官方积分直接查询官方服务，查询失败明确提示；缓存不会冒充新结果。
+- 本地 Token 读取客户端日志并按记录 ID 去重，同时合并本机 API 用量；缓存和推理 Token 不重复计算。
+- Credits 只统计日志明确记录的值，不按 Token 推算；缺失记录不代表没有发生费用。
+- 数据按本机时区与当前本地会话归属统计，迁移对话不会追溯原付费账号；无归属日志仅计入「全部账号」。
+
+<p align="center"><img src=".github/assets/analytics.png" width="1120" alt="用量分析：Token 构成、模型消耗与每日趋势，演示数据" /></p>
+
+本地数据每 15 秒读取，官方积分默认每 5 分钟刷新，可关闭。总览的积分汇总标明已查询账号数量；失败或未查询的数值保持未知。「建议先用」仅依据最近 6 小时内查询成功的临期积分，不会自动切换账号。
+
+## 桌面体验与隐私
+
+按 **`⌘ / Ctrl + K`** 打开命令搜索，**`⌘ / Ctrl + ,`** 打开设置，**`⌘ / Ctrl + 1`** 显示主窗口，**`⌘ / Ctrl + Shift + M`** 打开快捷面板。菜单栏 / 托盘可选择客户端、切换账号；WorkBuddy 还可查看缓存积分和快捷领奖。
+
+macOS 使用原生背景模糊，Windows 11 22H2 及以上使用 Acrylic，其他系统保留兼容外观。可在「设置 → 外观与隐私」关闭毛玻璃；系统减少透明度和高对比度设置优先。
+
+| 数据 | 处理方式 |
+| --- | --- |
+| **账号凭据** | 使用系统 `safeStorage`：macOS 钥匙串、Windows DPAPI、Linux GNOME Keyring / KWallet；Token 不传给界面，不写入操作日志 |
+| **Linux 密钥环** | 不接受 `basic_text` 降级，密钥环未解锁时拒绝保存和切换 |
+| **跨设备备份** | 密码派生密钥与 AES-256-GCM 加密，本机封装凭据需重新官方授权后才能导出可移植备份 |
+| **本地数据** | 历史与用量在设备上处理，不设置第三方统计或账号上传服务 |
+| **网络请求** | 官方登录、续期、积分与活动、API 转发，以及手动检查本仓库 Releases；确认执行的对话任务向官方发送对话与对应活动记录 |
+| **隐私遮罩** | 默认遮罩账号 ID、缩短工作目录、隐藏菜单栏及通知昵称；主窗口账号名称与对话标题仍显示 |
+
+详细边界见 [SECURITY.md](SECURITY.md) 与 [数据、备份与隐私](https://github.com/koi128bit/WorkBuddy-Switch/wiki/数据、备份与隐私)。
+
+## 文档与反馈
+
+| 文档 | 内容 |
+| --- | --- |
+| [使用指南](https://github.com/koi128bit/WorkBuddy-Switch/wiki) | 安装、账号管理、任务与日常使用 |
+| [账号保存与快速切换](https://github.com/koi128bit/WorkBuddy-Switch/wiki/账号保存与快速切换) | 授权、快照、路径与切换恢复 |
+| [恢复与跨账号继续对话](https://github.com/koi128bit/WorkBuddy-Switch/wiki/恢复与跨账号继续对话) | 对话迁移和备份 |
+| [Tokens、Credits 与额度](https://github.com/koi128bit/WorkBuddy-Switch/wiki/Tokens、Credits-与额度) | 用量和积分口径 |
+| [本机 API 接入](docs/local-api.md) | 接口、模型、OpenCode 配置与兼容范围 |
+| [更新日志](CHANGELOG.md) | 各版本变更 |
+| [功能与界面验收](design-qa.md) | 验收范围与验证记录 |
+
+反馈问题请到 [Issues](https://github.com/koi128bit/WorkBuddy-Switch/issues)，附应用版本、操作系统、客户端及地区、复现步骤和已脱敏的错误信息。请勿提交账号 Token、API Key、完整凭据或未脱敏的对话记录。
+
+## 来源标注与许可
+
+### 代码许可义务
+
+代码采用 **[MIT License](LICENSE)**，版权声明为 `Copyright (c) 2026 koi128bit`。复制、修改或分发本项目软件及其实质部分时，**必须保留原版权声明与 MIT 许可全文**，包括免责声明。涉及上游代码与第三方依赖时，也须保留相应版权和许可；本项目相关说明见 [NOTICE](NOTICE) 与 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+### 公开署名规范
+
+**我们要求实际复用或参考本项目的发布者，公开说明来源并附可点击的原项目链接。** 署名应便于用户找到，并说明具体复用或参考了哪些部分。
+
+| 使用方式 | 项目要求的来源说明 |
+| --- | --- |
+| **复制、修改或移植代码** | 在 README 或项目网站标明 WorkBuddy Switch、koi128bit、原仓库链接及复用模块，并保留代码许可声明 |
+| **借鉴功能方案或交互流程** | 在功能介绍或致谢中说明对应功能参考 WorkBuddy Switch，并附原项目链接 |
+| **复用界面、截图或文档** | 在使用位置或公开致谢中注明出处与原项目链接，并保留相关第三方权利声明 |
+| **Fork、改名或重新打包发布** | 在 README、发布说明或下载页面清晰说明衍生关系；有图形界面的衍生应用也请在「关于 / 致谢」保留来源入口 |
+
+仅标注“来源于网络”“参考某开源项目”或只保留无法点击的名称，不符合本项目提出的公开署名规范。改名、调整配色、重写部分代码或转为闭源分发，也请如实说明实际参考与复用范围。
+
+可直接采用以下模板，按实际情况填写具体模块或功能：
+
+```markdown
+本项目的【具体模块 / 功能 / 界面】基于或参考了
+[WorkBuddy Switch](https://github.com/koi128bit/WorkBuddy-Switch)，
+原作者为 [koi128bit](https://github.com/koi128bit)。
+复用范围与修改：【说明实际复用的部分及本项目的改动】。
+原项目代码采用 MIT License，相关版权与许可声明随附保留。
+```
+
+**许可边界：** MIT 强制要求保留版权和许可声明，但不强制在 README 或「关于」页附链接，也不因功能相似就当然要求署名。上面的公开链接、展示位置及功能借鉴说明，是维护者提出的署名规范，**不构成对 MIT 的附加许可限制**；代码授权以 [LICENSE](LICENSE) 原文为准。我们欢迎依规使用，也要求如实呈现实际来源，不将本项目或上游贡献冒充为独立原创。
+
+### 致谢与第三方来源
+
+本项目的本机 API 互操作层参考了以下项目的协议文档和实现，相关作者、来源链接与 MIT 许可已保留在 [NOTICE](NOTICE)：
+
+- [Sliverkiss / workbuddy2api](https://github.com/Sliverkiss/workbuddy2api)：NOTICE 记载的上游原项目。原始地址目前返回 404，仍保留原作者署名与来源记录。
+- [linguo2625469 / workbuddy2api-panel](https://github.com/linguo2625469/workbuddy2api-panel)：协议文档与实现参考。
+
+第三方依赖及许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。WorkBuddy、Trae、Qoder 的名称与相关商标归各自权利人所有，本项目与其官方没有隶属关系，也不代表官方背书。
 
 ## 本地开发
 
-需要 Node.js **22.16+**，调试客户端功能需要安装相应客户端。测试使用独立目录和模拟凭据。
+需要 **Node.js 22.16+**；调试客户端相关功能时，需安装对应官方客户端。测试使用独立目录与模拟凭据。
 
 ```bash
+git clone https://github.com/koi128bit/WorkBuddy-Switch.git
+cd WorkBuddy-Switch
 npm ci
 npm run dev
-
-npm test                 # 账号、签到、旅行、备份、用量和数据库
-npm run test:desktop     # Electron 自带 Node 的后端兼容性
-npm run build            # TypeScript 检查与界面构建
-npm run test:smoke       # 主窗口、快捷面板、IPC、系统加密和设置
-npx playwright install chromium
-npm run test:ui          # 五页面交互、奖励、多选、主题与最小窗口
-
-npm run dist:mac         # macOS 上构建 arm64 / x64 DMG 与 ZIP
-npm run dist:win         # Windows 上构建 x64 安装版与便携版
-npm run dist:linux       # Linux 上构建当前架构 AppImage 与 DEB
 ```
 
-[GitHub Actions](https://github.com/koi128bit/WorkBuddy-Switch/actions/workflows/desktop.yml) 在macOS、Windows、Linux x64 与 Linux ARM64 四个原生 runner 上测试并打包，版本标签发布 Release 和 SHA-256 清单。项目结构见 [本地构建与贡献](https://github.com/koi128bit/WorkBuddy-Switch/wiki/本地构建与贡献)，界面与功能验收见 [design-qa.md](design-qa.md)。
+```bash
+npm test                 # 账号、任务、备份、API、用量与数据库测试
+npm run test:desktop     # Electron 自带 Node 的后端兼容性
+npm run build            # TypeScript 检查、界面构建与依赖许可
+npm run test:smoke       # 原生窗口、托盘、IPC、系统加密与设置
+npx playwright install chromium
+npm run test:ui          # 页面交互、图表、奖励与窗口尺寸
 
-图标透明母版位于 `assets/icon-master.png`。修改后可在 macOS 执行 `npm run icons:mac`，重新裁切并生成应用 PNG、Dock PNG 和完整尺寸 ICNS；Windows / Linux 构建使用仓库内已生成的资源。
+npm run dist:mac         # 在 macOS 构建 arm64 / x64 安装包
+npm run dist:win         # 在 Windows 构建 x64 安装版与便携版
+npm run dist:linux       # 在 Linux 构建当前架构 AppImage 与 DEB
+```
 
-## 许可
+[GitHub Actions](https://github.com/koi128bit/WorkBuddy-Switch/actions/workflows/desktop.yml) 在 macOS、Windows、Linux x64 与 Linux ARM64 原生 runner 上测试并打包；版本标签触发 Release 与 SHA-256 清单发布。构建细节见 [本地构建与贡献](https://github.com/koi128bit/WorkBuddy-Switch/wiki/本地构建与贡献)。
 
-[MIT](LICENSE)。依赖许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。本项目是独立社区工具，与 WorkBuddy、Trae 或 Qoder 官方没有隶属关系。
+图标透明母版为 `assets/icon-master.png`，macOS 可执行 `npm run icons:mac` 生成图标资源。提交贡献前请完成相关检查；涉及来源、协议或第三方代码时同步保留署名与许可。
