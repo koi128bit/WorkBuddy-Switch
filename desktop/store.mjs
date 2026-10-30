@@ -378,12 +378,9 @@ export class Store {
           this.autoReplacement(previous?.id)?.profile.id !== id)
       )
         return null;
-      const record = this.records.find((r) => r.profile.id === id);
-      const target = record?.apiEncrypted
-        ? parseAuth(
-            this.vault.decrypt(Buffer.from(record.apiEncrypted, "base64")),
-          )
-        : this.document(id);
+      // The browser API credential is intentionally separate from the native
+      // session (which can contain device-bound encrypted fields).
+      const target = this.document(id);
       if (target.id !== id) throw new Error("目标凭据身份不一致，已停止切换。");
       if (previous?.id === id) {
         await this.controller.launch();
@@ -420,7 +417,12 @@ export class Store {
               : r,
           ),
         );
-        if (this.settings.restartAfterSwitch) await this.controller.launch();
+        if (this.settings.restartAfterSwitch) {
+          await this.controller.launch();
+          await this.controller.verifyAccount?.(() => this.active(), id);
+          if ((await this.active())?.id !== id)
+            throw new Error("客户端没有接受目标账号，已恢复原登录信息。");
+        }
         this.log(
           automatic
             ? "当前账号积分已耗尽，已自动切换到有积分的账号。"

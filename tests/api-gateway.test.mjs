@@ -108,10 +108,7 @@ test("models are discovered from the selected official region and never include 
     ),
   );
   assert.ok(
-    f.calls.some(
-      (call) =>
-        call.url === "https://www.workbuddy.ai/v2/enterprises/personal/models",
-    ),
+    f.calls.some((call) => call.url === "https://www.workbuddy.ai/v3/config"),
   );
   await fetch(f.status.baseUrl + "/models", { headers: f.headers });
   assert.equal(f.calls.length, 2, "model discovery is cached");
@@ -280,7 +277,7 @@ test("refused channels and partial streams are failures and never trigger anothe
   assert.match(text, /upstream_access_denied/);
   assert.ok(!text.includes("private-token"));
 });
-test("rate limits cool only the selected account and model, and a later request can use another eligible account", async (t) => {
+test("a rate limit before any output replays on another account and cools the limited one", async (t) => {
   let count = 0;
   const f = await fixture(t, async () =>
     ++count === 1
@@ -290,11 +287,9 @@ test("rate limits cool only the selected account and model, and a later request 
         )
       : stream("ok"),
   );
-  const limited = await f.send();
-  assert.equal(limited.status, 429);
-  assert.equal(count, 1);
-  assert.equal((await f.send({ conversation_id: "another" })).status, 200);
-  assert.equal(count, 2);
+  const response = await f.send();
+  assert.equal(response.status, 200);
+  assert.equal(count, 2, "限流后换一个账号重放一次");
   assert.notEqual(
     f.calls[0].options.headers["X-User-Id"],
     f.calls[1].options.headers["X-User-Id"],
@@ -306,6 +301,21 @@ test("rate limits cool only the selected account and model, and a later request 
         (row) => row.id === f.calls[0].options.headers["X-User-Id"],
       ).cooldownUntil > Date.now(),
   );
+});
+test("rate limit replay stops after two accounts and surfaces the 429 instead of amplifying", async (t) => {
+  let count = 0;
+  const f = await fixture(t, async () => {
+    count += 1;
+    return Response.json(
+      { code: 14003 },
+      { status: 429, headers: { "Retry-After": "30" } },
+    );
+  });
+  const response = await f.send();
+  assert.equal(response.status, 429);
+  assert.equal(count, 2, "最多试两个账号");
+  const value = await response.json();
+  assert.equal(value.error.code, "upstream_rate_limit");
 });
 test("metadata persists encrypted keys and real token totals without storing prompts or model replies", async (t) => {
   const f = await fixture(t);
@@ -353,8 +363,7 @@ test("key rotation invalidates old clients without exposing either key in status
 });
 test("parallel requests are no longer rejected and stopping aborts every in-flight upstream lease", async (t) => {
   const waiters = [];
-  const entered = () =>
-    new Promise((resolve) => waiters.push(resolve));
+  const entered = () => new Promise((resolve) => waiters.push(resolve));
   const aborts = [];
   const f = await fixture(t, async (_url, options) => {
     waiters.shift()?.();
@@ -419,18 +428,15 @@ test("long conversations are accepted beyond the retired 2000 message cap", asyn
   ];
   const response = await f.send({ messages });
   assert.equal(response.status, 200);
-  // The single system message is folded into the first user message, so the
-  // forwarded history keeps every message body but no longer needs its own
-  // system role.
-  assert.equal(f.gateway.snapshot().recent[0].requestInfo.messageCount, 2400);
+  assert.equal(f.gateway.snapshot().recent[0].requestInfo.messageCount, 2401);
   assert.equal(
     JSON.parse(f.calls[0].options.body).messages.length,
-    2400,
+    2401,
     "请求体中的历史条数原样转发，不截断",
   );
   assert.equal(
     JSON.parse(f.calls[0].options.body).messages[0].content,
-    "你是一个长期会话助手。\n\n第 0 条历史",
+    "你是一个长期会话助手。",
   );
 });
 test("no selected credentials means no listener can be started and startup errors remain visible", async (t) => {
@@ -516,178 +522,29 @@ test("upstream empty finish strings on intermediate chunks are treated as unfini
   assert.equal(response.status, 200);
   assert.equal((await response.json()).choices[0].message.content, "OK");
 });
-test("the system prompt is folded into the first user message before the upstream sees it", async (t) => {
-  const f = await fixture(t);
-  const system = "私有系统提示词".repeat(600);
-  const response = await f.send({
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: "private-client-prompt" },
-    ],
-  });
-  assert.equal(response.status, 200);
-  assert.equal(f.calls.length, 1);
-  const body = JSON.parse(f.calls[0].options.body);
-  assert.equal(
-    body.messages.some((message) => message.role === "system"),
-    false,
-    "系统角色不再出现在上游请求里",
+test("system instructions retain their role and official refusals are not replayed", async (t) => {
+  const f = await fixture(t, async () =>
+    Response.json({ code: 11128 }, { status: 400 }),
   );
-  assert.equal(
-    body.messages[0].content,
-    system + "\n\nprivate-client-prompt",
-    "系统提示词完整前置到第一条用户消息",
-  );
-  const entry = f.gateway.snapshot().recent[0];
-  assert.equal(entry.status, "ok");
-  assert.equal(
-    entry.requestInfo.bodyBytes,
-    Buffer.byteLength(f.calls[0].options.body),
-  );
-});
-test("every system message and text part is folded while user and tool roles stay untouched", async (t) => {
-  // The official service scans system / developer messages for third-party
-  // harness fingerprints and answers 11128; it never refuses user content.
-  // Folding the harness prompt into the first user message keeps the model
-  // instructions intact and the channel sees the prompt shape it accepts.
-  const f = await fixture(t, async (_url, options) => {
-    const body = JSON.parse(options.body);
-    return body.messages.some((message) => message.role === "system")
-      ? Response.json({ code: 11128 }, { status: 400 })
-      : stream("folded-reply");
-  });
-  const tools = [
-    { type: "function", function: { name: "read", parameters: { type: "object" } } },
+  const messages = [
+    { role: "system", content: "private system instructions" },
+    { role: "user", content: "private-client-prompt" },
   ];
-  const response = await f.send({
-    messages: [
-      {
-        role: "system",
-        content: "You are an AI agent powered by DeepSeek Harness.\n\nBe helpful.",
-      },
-      {
-        role: "system",
-        content: [{ type: "text", text: "Prefix.\nSecond system part." }],
-      },
-      {
-        role: "user",
-        content: "You are an AI agent powered by DeepSeek Harness.",
-      },
-    ],
-    tools,
-  });
-  assert.equal(response.status, 200);
-  assert.equal(
-    (await response.json()).choices[0].message.content,
-    "folded-reply",
-  );
-  assert.equal(f.calls.length, 1, "折叠后的首个请求直接通过，不浪费被拒请求");
-  const body = JSON.parse(f.calls[0].options.body);
-  assert.equal(
-    body.messages.some((message) => message.role === "system"),
-    false,
-    "每一段系统提示词都被折走",
-  );
-  assert.equal(
-    body.messages[0].content,
-    "You are an AI agent powered by DeepSeek Harness.\n\nBe helpful." +
-      "\n\nPrefix.\nSecond system part." +
-      "\n\nYou are an AI agent powered by DeepSeek Harness.",
-    "按顺序拼接后前置到第一条用户消息",
-  );
-  assert.deepEqual(body.tools, tools, "工具定义原样转发");
-});
-test("a refused request is replayed on another account instead of failing the turn", async (t) => {
-  // 11128 is an intermittent channel refusal, so a body the first account
-  // refuses is replayed on the next selected account.
-  const users = [];
-  const f = await fixture(t, async (_url, options) => {
-    const id = options.headers["X-User-Id"];
-    users.push(id);
-    return id === "a"
-      ? Response.json({ code: 11128 }, { status: 400 })
-      : stream("second-account-reply");
-  });
-  const response = await f.send({
-    messages: [
-      { role: "system", content: "系统提示".repeat(400) },
-      { role: "user", content: "private-client-prompt" },
-    ],
-  });
-  assert.equal(response.status, 200);
-  assert.equal(
-    (await response.json()).choices[0].message.content,
-    "second-account-reply",
-  );
-  assert.equal(f.calls.length, 2, "首个账号被拒后只换一次号");
-  assert.equal(new Set(users).size, 2, "重放发生在另一个账号上");
-  const body = JSON.parse(f.calls.at(-1).options.body);
-  assert.equal(
-    body.messages.some((message) => message.role === "system"),
-    false,
-  );
-  assert.equal(
-    body.messages[0].content,
-    "系统提示".repeat(400) + "\n\nprivate-client-prompt",
-  );
-  assert.equal(f.gateway.snapshot().recent[0].status, "ok");
-});
-test("channel refusal replays are bounded across accounts and never touch user messages", async (t) => {
-  const f = await fixture(t, async () => Response.json({ code: 11128 }, { status: 400 }));
-  const response = await f.send({
-    messages: [
-      { role: "system", content: "系统提示".repeat(400) },
-      { role: "user", content: "private-client-prompt" },
-    ],
-  });
+  const response = await f.send({ messages });
   assert.equal(response.status, 400);
-  const value = await response.json();
-  assert.equal(value.error.code, "upstream_access_denied");
-  assert.match(value.error.message, /11128/);
-  // Two same-region accounts, one attempt each and no more: an official
-  // outage must stay bounded.
-  assert.equal(f.calls.length, 2);
-  const payloads = f.calls.map((call) => JSON.parse(call.options.body));
-  assert.equal(
-    new Set(payloads.map((body) => JSON.stringify(body.messages))).size,
-    1,
-    "每个账号收到的请求体完全相同，用户消息从未被改写",
-  );
-  assert.equal(
-    payloads[0].messages.at(-1).content,
-    "系统提示".repeat(400) + "\n\nprivate-client-prompt",
-    "用户消息正文保持原样，只是前面拼上了系统提示词",
-  );
-  assert.equal(
-    payloads[0].messages.some((message) => message.role === "system"),
-    false,
-  );
-  assert.deepEqual(
-    new Set(f.calls.map((call) => call.options.headers["X-User-Id"])),
-    new Set(["a", "b"]),
-  );
-  const entry = f.gateway.snapshot().recent[0];
-  assert.equal(entry.status, "error");
-  assert.equal(entry.upstreamCode, "11128");
-  assert.ok(!JSON.stringify(entry).includes("private-client-prompt"));
-});
-test("a refusal without any system prompt still gets one replay on another account", async (t) => {
-  const f = await fixture(t, async (_url, options) =>
-    options.headers["X-User-Id"] === "a"
-      ? Response.json({ code: 11128 }, { status: 403 })
-      : stream("replayed"),
-  );
-  const response = await f.send();
-  assert.equal(response.status, 200);
-  assert.equal(f.calls.length, 2);
+  assert.equal(f.calls.length, 1);
+  assert.deepEqual(JSON.parse(f.calls[0].options.body).messages, messages);
+  assert.equal(f.gateway.snapshot().recent[0].upstreamCode, "11128");
 });
 test("a channel refusal that arrives after output started is never replayed", async (t) => {
-  const f = await fixture(t, async () =>
-    new Response(
-      'data: {"choices":[{"delta":{"content":"半截回复"}}]}\n\n' +
-        'data: {"code":11128}\n\n',
-      { status: 200, headers: { "content-type": "text/event-stream" } },
-    ),
+  const f = await fixture(
+    t,
+    async () =>
+      new Response(
+        'data: {"choices":[{"delta":{"content":"半截回复"}}]}\n\n' +
+          'data: {"code":11128}\n\n',
+        { status: 200, headers: { "content-type": "text/event-stream" } },
+      ),
   );
   const response = await f.send();
   assert.equal(f.calls.length, 1, "已经开始输出就不能再放一次付费请求");
@@ -715,8 +572,9 @@ test("local API token usage is recorded per day, account and model and survives 
   t.after(() => reloaded.stop());
   assert.deepEqual(reloaded.dailyApiUsage(), rows);
   assert.ok(
-    !(await fs.readFile(path.join(f.directory, "api-usage-daily.json"), "utf8"))
-      .includes("private-client-prompt"),
+    !(
+      await fs.readFile(path.join(f.directory, "api-usage-daily.json"), "utf8")
+    ).includes("private-client-prompt"),
     "本地 API 用量只保存计数，不保存提示词",
   );
 });

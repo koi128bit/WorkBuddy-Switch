@@ -2532,6 +2532,46 @@ body:has(.tray-panel) {
   overflow: auto;
   margin-top: 10px;
 }
+.api-realm-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.api-realm {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 0;
+}
+.api-realm + .api-realm {
+  border-left: 1px solid var(--line);
+  padding-left: 24px;
+}
+.api-realm code {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.api-realm small,
+.api-realm > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.api-client-region {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+@media (max-width: 1000px) {
+  .api-realm-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .api-realm + .api-realm {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 16px 0 0;
+  }
+}
 .api-config .api-account {
   display: flex;
   align-items: center;

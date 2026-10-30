@@ -26,7 +26,7 @@ test("masks phone and normalizes numeric identity", () => {
   assert.equal(parseAuth(auth(17)).id, "17");
   assert.equal(parseAuth(auth("a")).phoneHint, "138****5678");
 });
-test("switch merging retains local machine fields and combines account list", () => {
+test("switch merging retains machine fields and replaces identity-scoped account lists", () => {
   const merged = JSON.parse(
     mergeAuth(
       auth("a", {
@@ -43,7 +43,7 @@ test("switch merging retains local machine fields and combines account list", ()
   assert.equal(merged.account.uid, "b");
   assert.deepEqual(
     merged.allAccounts.map((x) => x.uid),
-    ["a", "b"],
+    ["b"],
   );
 });
 test("credential names cannot contain path traversal", () => {

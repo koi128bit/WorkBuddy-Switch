@@ -67,8 +67,8 @@ const links = {
   releases: "https://github.com/koi128bit/WorkBuddy-Switch/releases/latest",
   privacy:
     "https://github.com/koi128bit/WorkBuddy-Switch/blob/main/SECURITY.md",
-  license: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.6/LICENSE",
-  notices: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.6/NOTICE",
+  license: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.7/LICENSE",
+  notices: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.7/NOTICE",
   growth: "https://www.codebuddy.cn/profile/growth-center",
 };
 app.setName("WorkBuddy Switch");
@@ -201,7 +201,8 @@ function createApplicationMenu() {
     applicationVersion: app.getVersion(),
     copyright: "© koi128bit · WorkBuddy Switch Attribution License 1.0",
     website: links.github,
-    credits: "原作者 koi128bit · 历史 MIT 与上游许可保留，详见随附 LICENSE 和 NOTICE。",
+    credits:
+      "原作者 koi128bit · 历史 MIT 与上游许可保留，详见随附 LICENSE 和 NOTICE。",
     iconPath: path.join(root, "assets/icon.png"),
   });
   Menu.setApplicationMenu(
@@ -402,7 +403,7 @@ async function start() {
     { Login },
     { EditorStore },
     { EditorController, editorDefinition },
-    { clients, editorDefinitions },
+    { clients, editorDefinitions, workBuddySessionURL },
     { createSystemVault },
     { NativeCredentials },
     { EditorOAuth },
@@ -713,7 +714,10 @@ async function start() {
       diagnostics: () => target.diagnostics(),
       backups: () => target.backups(),
       backupSessions: () => target.backupSessions(),
-      resume: () => target.resumeSession(string(args[0], 200), async () => {}),
+      resume: () =>
+        target.resumeSession(string(args[0], 200), async (sessionId) =>
+          shell.openExternal(workBuddySessionURL(provider, sessionId)),
+        ),
       exportAccounts: async () => {
         const result = await dialog.showSaveDialog(mainWindow, {
           title: "导出国际版加密账号备份",
@@ -815,7 +819,7 @@ async function start() {
   handle("usage", (q) => usageWithApi("workbuddy", query(q)));
   handle("resume", (id) =>
     store.resumeSession(string(id, 200), async (sessionId) =>
-      shell.openExternal(`workbuddy://chat/${encodeURIComponent(sessionId)}`),
+      shell.openExternal(workBuddySessionURL("workbuddy", sessionId)),
     ),
   );
   handle("launch", () => store.exclusive(() => controller.launch()));

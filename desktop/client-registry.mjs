@@ -33,6 +33,7 @@ export const clients = Object.freeze({
     bundle: "com.workbuddy.workbuddy",
     data: ".workbuddy",
     authFile: "workbuddy-desktop.info",
+    scheme: "workbuddy",
     linuxNames: ["workbuddy"],
     linuxExecutables: [
       "/usr/bin/workbuddy",
@@ -55,6 +56,7 @@ export const clients = Object.freeze({
       bundle: "com.workbuddy.workbuddy-ai",
       data: ".workbuddy-ai",
       authFile: "workbuddy-desktop-ai.info",
+      scheme: "workbuddy-ai",
       linuxNames: ["workbuddy-ai"],
       linuxExecutables: [
         "/usr/bin/workbuddy-ai",
@@ -173,4 +175,16 @@ export const editorDefinitions = Object.freeze(
 );
 export function isWorkBuddy(id) {
   return clientDefinition(id).product === "workbuddy";
+}
+export function workBuddySessionURL(provider, id) {
+  const definition = clientDefinition(provider);
+  if (
+    definition.product !== "workbuddy" ||
+    typeof id !== "string" ||
+    !id ||
+    id.length > 200 ||
+    /[\x00-\x1f]/.test(id)
+  )
+    throw new Error("对话标识或客户端无效。");
+  return `${definition.scheme}://chat/${encodeURIComponent(id)}`;
 }

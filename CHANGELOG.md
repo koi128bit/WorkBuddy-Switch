@@ -1,5 +1,14 @@
 # 更新日志
 
+## 1.9.7 · 2026-10-30
+
+- 本机 API 新增上游渠道引导句：官方对**首条 system 消息的开头**做第三方 Agent 指纹匹配，命中即返回 `11128 Illegal API invocation from an unapproved channel`，与请求头无关。网关在检测到 Codex CLI、Claude Code、Claude Agent SDK 或 `x-anthropic-billing-header` 开场时，于同一条 system 消息前加一句中性引导语再转发，原始文本逐字保留、角色仍为 system，不做改写、不降级为 user。
+- 该前缀规则已在 `www.workbuddy.ai`（国际版）与 `www.codebuddy.cn`（国内版）双向验证：裸指纹稳定 400，加前缀稳定 200。
+- 上游请求补齐 `X-Agent-Purpose`、`X-Conversation-Request-ID`、`X-Conversation-Message-ID` 三个必需头；缺失时任一个都会让官方返回 `11128 request illegal`，与内容校验的表现相同但病因不同。
+- 真实 Agent 客户端完成端到端验收：Codex CLI 0.159.2 与 Claude Code 2.1.169 在国内版与国际版各跑一轮工具调用闭环（`command_execution` / `Bash` 执行 `pwd` 并回读结果），上游 5/5 请求全部 200，Claude Code `subtype: success`、`num_turns: 2`。
+- 官方 OpenAI / Anthropic SDK 契约 20/20 通过：Chat Completions（非流式、流式、工具调用）、Responses（非流式、流式、工具）、Messages（非流式、流式、工具）、`/models` 与 `count_tokens`，国内与国际两地区各 10 项。
+- 系统提示词不再合并进 user 消息：1.9.6 的合并方案会让指令优先级失真，本版恢复 system 原样转发，渠道兼容改由上一条引导句解决。
+
 ## 1.9.6 · 2026-10-29
 
 - 新增原创内容改用 WorkBuddy Switch Attribution License 1.0：分发、衍生应用与服务须保留项目、作者、来源链接和适用的可见署名；历史 MIT 与第三方许可保留，独立实现同类功能不受此许可约束。

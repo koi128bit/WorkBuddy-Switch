@@ -246,18 +246,35 @@ test("command shortcut and every settings section work in the compact dark works
   });
 });
 
-test("about exposes the current license and source through the trusted link bridge", async ({ page }) => {
-  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "设置", exact: true }).click();
+test("about exposes the current license and source through the trusted link bridge", async ({
+  page,
+}) => {
+  await page
+    .getByRole("navigation", { name: "主导航" })
+    .getByRole("button", { name: "设置", exact: true })
+    .click();
   await page.getByRole("button", { name: "关于与更新", exact: true }).click();
-  await expect(page.getByText("WorkBuddy Switch Attribution License 1.0", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("WorkBuddy Switch Attribution License 1.0", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText(/原作者 koi128bit/)).toBeVisible();
   await page.evaluate(() => {
-    window.workbuddyFixture.openLink = async (name) => { document.documentElement.dataset.openedLink = name; };
+    window.workbuddyFixture.openLink = async (name) => {
+      document.documentElement.dataset.openedLink = name;
+    };
   });
   await page.getByRole("button", { name: "查看许可全文", exact: true }).click();
-  await expect(page.locator("html")).toHaveAttribute("data-opened-link", "license");
-  await page.getByRole("button", { name: "上游与历史许可", exact: true }).click();
-  await expect(page.locator("html")).toHaveAttribute("data-opened-link", "notices");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-opened-link",
+    "license",
+  );
+  await page
+    .getByRole("button", { name: "上游与历史许可", exact: true })
+    .click();
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-opened-link",
+    "notices",
+  );
 });
 
 test("API page keeps completed growth task history out of the connection workflow", async ({
@@ -405,6 +422,58 @@ test("API request history retains refusal diagnostics after a later successful r
     path: "outputs/screenshots/api-refusal-diagnostics.png",
     animations: "disabled",
   });
+});
+
+test("both WorkBuddy API regions show separate addresses and agent configuration", async ({
+  page,
+}) => {
+  await page.evaluate(async () => {
+    const value = await window.workbuddy.apiStatus();
+    value.config.accounts.push({
+      provider: "workbuddy-global",
+      id: "global-fixture",
+    });
+    value.models = [
+      { id: "deepseek-v4.1-flash" },
+      { id: "global:deepseek-v4.1-flash" },
+    ];
+    Object.assign(window.workbuddyFixture, {
+      apiStatus: async () => structuredClone(value),
+    });
+  });
+  await page
+    .getByRole("navigation", { name: "主导航" })
+    .getByRole("button", { name: "API", exact: true })
+    .click();
+  const cn = page.getByLabel("国内版 API", { exact: true });
+  const global = page.getByLabel("国际版 API", { exact: true });
+  await expect(cn).toContainText("/cn/v1");
+  await expect(global).toContainText("/global/v1");
+  await expect(global).toContainText("1 个已选账号 · 1 个模型");
+  await page.getByText("Codex 与 Claude Code 配置", { exact: true }).click();
+  await expect(
+    page.locator("pre").filter({ hasText: "wire_api" }),
+  ).toContainText("/global/v1");
+  await expect(
+    page.locator("pre").filter({ hasText: "ANTHROPIC_BASE_URL" }),
+  ).toContainText("ENABLE_TOOL_SEARCH=false");
+  await page
+    .getByLabel("API 接入地区", { exact: true })
+    .selectOption("workbuddy");
+  await expect(
+    page.locator("pre").filter({ hasText: "wire_api" }),
+  ).toContainText("/cn/v1");
+  await page.setViewportSize({ width: 940, height: 640 });
+  expect(
+    await page
+      .locator(".page-content")
+      .evaluate((el) => el.scrollWidth <= el.clientWidth),
+  ).toBe(true);
+  await page.setViewportSize({ width: 1260, height: 900 });
+  await page
+    .getByLabel("国内与国际版 API", { exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "outputs/global-api-ui.png", fullPage: true });
 });
 
 test("local API page saves explicit account scope, controls the listener and never renders credentials", async ({

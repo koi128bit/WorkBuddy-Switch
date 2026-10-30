@@ -21,7 +21,11 @@ import {
   agentToolBody,
   openAgentTool,
 } from "./api-upstream.mjs";
-import { prepareProtocolRequest, ProtocolStream } from "./api-protocols.mjs";
+import {
+  prepareProtocolRequest,
+  ProtocolStream,
+  estimateMessageTokens,
+} from "./api-protocols.mjs";
 
 export const apiDefaults = Object.freeze({
   port: 8317,
@@ -34,6 +38,11 @@ export const apiDefaults = Object.freeze({
 // configurations that still carry these keys stay readable and are ignored.
 const retiredKeys = ["maxOutputTokens", "maxConcurrency", "requestsPerMinute"];
 export const REQUEST_BODY_LIMIT = 32 * 1024 * 1024;
+// An official rate limit (HTTP 429 / business code 14003 and its relatives) is
+// a "try again later", not a refusal of the request content: before any output
+// a different account may still serve the turn. Bounded to one replay so a
+// model-wide limit never turns into an amplification loop.
+const RATE_LIMIT_REPLAYS = 1;
 // Local API consumption is kept per day, account and model so the usage page can
 // add it to the token statistics without storing prompts or replies.
 const API_USAGE_DAYS = 120;
@@ -129,9 +138,6 @@ function restoreRequestInfo(value) {
     ].includes(value.reasoningEffort)
       ? value.reasoningEffort
       : null,
-    systemGuard: Number.isSafeInteger(value.systemGuard)
-      ? Math.max(0, value.systemGuard)
-      : 0,
   };
 }
 function restoreUpstreamInfo(value) {
@@ -202,6 +208,7 @@ export class ApiGateway {
   cursors = new Map();
   modelCache = new Map();
   modelPromises = new Map();
+  modelWarnings = [];
   apiDaily = new Map();
   renewals = new Map();
   writeTail = Promise.resolve();
@@ -410,6 +417,7 @@ export class ApiGateway {
     await this.writeConfig(config);
     this.config = config;
     this.modelCache.clear();
+    this.modelWarnings = [];
     this.sessions.clear();
     this.lastError = "";
     this.onChange();
@@ -463,6 +471,7 @@ export class ApiGateway {
       recent: this.recent,
       lastError: this.lastError,
       models: [...this.modelCache.values()].flatMap((cache) => cache.models),
+      modelWarnings: this.modelWarnings,
     });
   }
   candidates(provider, model = "", excluded = new Set()) {
@@ -538,7 +547,8 @@ export class ApiGateway {
         ? candidates[cursor % candidates.length]
         : this.config.strategy === "sequential"
           ? candidates.find(
-              (account) => ref(account) === this.cursors.get("selected:" + provider),
+              (account) =>
+                ref(account) === this.cursors.get("selected:" + provider),
             ) || candidates[0]
           : candidates[0];
     this.cursors.set(provider, cursor + 1);
@@ -644,58 +654,86 @@ export class ApiGateway {
       return operation(await renew());
     }
   }
-  async models(force = false) {
+  async models(force = false, region = null) {
     const result = [];
-    for (const provider of realms) {
+    const warnings = [];
+    let failure;
+    for (const provider of region ? [region] : realms) {
       if (
         !this.config.accounts.some((account) => account.provider === provider)
       )
         continue;
-      let cache = this.modelCache.get(provider);
-      if (force || !cache || cache.until < Date.now()) {
-        if (!this.modelPromises.has(provider)) {
-          const account = this.candidates(provider)[0];
-          if (!account)
-            throw new ApiError(
-              503,
-              "no_available_accounts",
-              "该地区没有可用于查询模型的账号。",
-            );
-          const pending = this.credential(account, (doc) =>
-            fetchApiModels(doc, this.request, AbortSignal.timeout(20000)),
-          )
-            .then((models) => {
-              const cache = {
-                until: Date.now() + 600000,
-                models: models.map((model) => ({
-                  ...model,
-                  id:
-                    (provider === "workbuddy-global" ? "global:" : "") +
-                    model.id,
-                  provider,
-                })),
-              };
-              this.modelCache.set(provider, cache);
-              return cache;
-            })
-            .finally(() => this.modelPromises.delete(provider));
-          this.modelPromises.set(provider, pending);
+      try {
+        let cache = this.modelCache.get(provider);
+        if (force || !cache || cache.until < Date.now()) {
+          if (!this.modelPromises.has(provider)) {
+            const account = this.candidates(provider)[0];
+            if (!account)
+              throw new ApiError(
+                503,
+                "no_available_accounts",
+                "该地区没有可用于查询模型的账号。",
+              );
+            const pending = this.credential(account, (doc) =>
+              fetchApiModels(doc, this.request, AbortSignal.timeout(20000)),
+            )
+              .then((models) => {
+                const cache = {
+                  until: Date.now() + 600000,
+                  models: models.map((model) => ({
+                    ...model,
+                    id:
+                      (provider === "workbuddy-global" ? "global:" : "") +
+                      model.id,
+                    provider,
+                  })),
+                };
+                this.modelCache.set(provider, cache);
+                return cache;
+              })
+              .finally(() => this.modelPromises.delete(provider));
+            this.modelPromises.set(provider, pending);
+          }
+          cache = await this.modelPromises.get(provider);
         }
-        cache = await this.modelPromises.get(provider);
+        result.push(...cache.models);
+      } catch (error) {
+        failure = error;
+        warnings.push({
+          provider,
+          code:
+            error instanceof ApiError ? error.code : "model_discovery_failed",
+          message:
+            error instanceof ApiError
+              ? error.message
+              : "该地区模型目录暂时无法读取。",
+        });
       }
-      result.push(...cache.models);
     }
+    this.modelWarnings = warnings;
     if (!result.length)
-      throw new ApiError(
-        503,
-        "no_selected_accounts",
-        "请先选择用于 API 的 WorkBuddy 账号。",
+      throw (
+        failure ??
+        new ApiError(
+          503,
+          "no_selected_accounts",
+          "请先选择用于 API 的 WorkBuddy 账号。",
+        )
       );
     // Vector models deliberately stay out of this chat catalog: clients pick a
     // default chat model from /v1/models, and listing an embedding model there
     // only produces "model not available" turns. They are documented on the API
     // page and accepted by /v1/embeddings only.
-    return { object: "list", data: result };
+    return {
+      object: "list",
+      data: region
+        ? result.map((model) => ({
+            ...model,
+            id: model.id.replace(/^global:/, ""),
+          }))
+        : result,
+      ...(warnings.length ? { warnings } : {}),
+    };
   }
   async start() {
     if (this.server) return this.snapshot();
@@ -842,11 +880,7 @@ export class ApiGateway {
     const limit = REQUEST_BODY_LIMIT;
     if (Number(req.headers["content-length"]) > limit) {
       req.resume();
-      throw new ApiError(
-        413,
-        "request_too_large",
-        "请求体最大为 32 MB。",
-      );
+      throw new ApiError(413, "request_too_large", "请求体最大为 32 MB。");
     }
     if (
       !req.headers["content-type"]?.toLowerCase().startsWith("application/json")
@@ -895,11 +929,19 @@ export class ApiGateway {
     let protocol = "chat";
     try {
       const url = new URL(req.url, "http://127.0.0.1");
-      const pathname = url.pathname
+      let pathname = url.pathname
         .replace(/^\/v1(?=\/|$)/, "")
         .replace(/\/$/, "");
+      const realm = pathname.match(/^\/(global|cn)(?=\/|$)/);
+      const region = realm
+        ? realm[1] === "global"
+          ? "workbuddy-global"
+          : "workbuddy"
+        : null;
+      if (realm)
+        pathname = pathname.slice(realm[0].length).replace(/^\/v1(?=\/|$)/, "");
       if (pathname === "/responses") protocol = "responses";
-      if (pathname === "/messages") protocol = "messages";
+      if (pathname.startsWith("/messages")) protocol = "messages";
       const port = this.server?.address()?.port;
       if (
         !["127.0.0.1:" + port, "localhost:" + port].includes(
@@ -926,16 +968,50 @@ export class ApiGateway {
         return this.json(
           res,
           200,
-          await this.models(url.searchParams.get("refresh") === "1"),
+          await this.models(url.searchParams.get("refresh") === "1", region),
         );
+      const scope = (raw) => {
+        if (!raw || typeof raw !== "object" || Array.isArray(raw))
+          throw new ApiError(400, "invalid_request", "请求须为 JSON 对象。");
+        if (!region) return raw;
+        const international =
+          typeof raw.model === "string" && raw.model.startsWith("global:");
+        if (region === "workbuddy" && international)
+          throw new ApiError(
+            400,
+            "region_mismatch",
+            "国内版地址不能使用国际版模型。",
+          );
+        return {
+          ...raw,
+          model:
+            region === "workbuddy-global" &&
+            typeof raw.model === "string" &&
+            !international
+              ? "global:" + raw.model
+              : raw.model,
+        };
+      };
+      if (req.method === "POST" && pathname === "/messages/count_tokens") {
+        const input_tokens = estimateMessageTokens(scope(await this.body(req)));
+        res.setHeader("X-Token-Count-Estimated", "true");
+        return this.json(res, 200, { input_tokens });
+      }
       if (req.method === "POST" && pathname === "/embeddings")
-        return await this.embedding(await this.body(req), res);
-      if (req.method === "POST" && pathname.startsWith("/tools/"))
+        return await this.embedding(scope(await this.body(req)), res);
+      if (req.method === "POST" && pathname.startsWith("/tools/")) {
+        if (region === "workbuddy-global")
+          throw new ApiError(
+            400,
+            "unsupported_region",
+            "官方工具接口目前仅支持国内版。",
+          );
         return await this.agentTool(
           pathname.slice("/tools/".length),
           await this.body(req),
           res,
         );
+      }
       if (
         req.method !== "POST" ||
         !["/chat/completions", "/responses", "/messages"].includes(pathname)
@@ -945,7 +1021,11 @@ export class ApiGateway {
           "not_found",
           "API 路径不存在，支持 /v1/models、/v1/embeddings、/v1/tools/{agentic_search|knowledge_search|tempkey}、/v1/chat/completions、/v1/responses 和 /v1/messages。",
         );
-      const prepared = prepareProtocolRequest(await this.body(req), protocol);
+      const prepared = prepareProtocolRequest(
+        scope(await this.body(req)),
+        protocol,
+      );
+      if (region) prepared.model = prepared.model.replace(/^global:/, "");
       await this.chat(prepared, req, res);
     } catch (error) {
       const safe =
@@ -965,7 +1045,7 @@ export class ApiGateway {
   }
   async chat(prepared, _req, res) {
     let account = this.pick(prepared);
-    let payload = prepared.payload;
+    const payload = prepared.payload;
     const requestId = "chatcmpl-" + randomUUID(),
       started = Date.now(),
       controller = new AbortController();
@@ -998,25 +1078,19 @@ export class ApiGateway {
         bodyBytes: Buffer.byteLength(JSON.stringify(payload)),
         maxOutputTokens: prepared.payload.max_tokens ?? null,
         reasoningEffort: prepared.payload.reasoning_effort ?? null,
-        systemGuard: 0,
       },
     };
     let usage,
-      outputStarted = false;
-    // Business code 11128 is an intermittent channel-validation refusal rather
-    // than a verdict on the request: the same body is accepted by another
-    // account, or by the same account moments later. A refused request is
-    // therefore retried on the other selected accounts, but the whole replay
-    // stays bounded so an official outage cannot multiply paid calls.
-    // Refusals cost no tokens because they land before any output exists.
-    const CHANNEL_REFUSAL_REPLAYS = 3;
-    let channelReplays = 0;
-    const refused = new Set();
+      outputStarted = false,
+      rateLimitReplays = 0;
     const attempted = new Set();
-    const basePayload = prepared.payload;
     const adapter =
       prepared.protocol !== "chat"
-        ? new ProtocolStream(prepared.protocol, prepared.model)
+        ? new ProtocolStream(
+            prepared.protocol,
+            prepared.model,
+            prepared.toolRegistry,
+          )
         : null;
     const write = async (text) => {
       if (controller.signal.aborted || res.destroyed)
@@ -1116,41 +1190,40 @@ export class ApiGateway {
               continue;
             }
           }
-          // The official channel refuses prompts it does not expect from its
-          // own client (business code 11128) before any output exists. Because
-          // the refusal is intermittent rather than a verdict on the body, hand
-          // the request to a different selected account before reporting it.
-          if (
-            error instanceof ApiError &&
-            error.code === "upstream_access_denied" &&
-            !outputStarted &&
-            !res.headersSent &&
-            !controller.signal.aborted
-          ) {
-            refused.add(ref(account));
-            if (channelReplays >= CHANNEL_REFUSAL_REPLAYS) throw error;
-            let next;
-            try {
-              next = this.pick(prepared, new Set([...attempted, ...refused]));
-            } catch {
-              throw error;
-            }
-            channelReplays++;
-            this.leases.delete(ref(account));
-            account = next;
-            this.leases.add(ref(account));
-            entry.accountId = account.id;
-            payload = basePayload;
-            entry.requestInfo.bodyBytes = Buffer.byteLength(
-              JSON.stringify(payload),
+          if (error instanceof ApiError && error.status === 429) {
+            this.cooldowns.set(
+              ref(account) + "|" + prepared.payload.model,
+              Date.now() + (error.retryAfter || 60) * 1000,
             );
-            continue;
+            // A rate limit only means "this account/model is hot right now".
+            // Replaying on another account is safe while nothing was written.
+            if (
+              !outputStarted &&
+              !res.headersSent &&
+              !controller.signal.aborted &&
+              rateLimitReplays < RATE_LIMIT_REPLAYS
+            ) {
+              attempted.add(ref(account));
+              let next;
+              try {
+                next = this.pick(prepared, attempted);
+              } catch {
+                throw error;
+              }
+              this.leases.delete(ref(account));
+              account = next;
+              this.leases.add(ref(account));
+              entry.accountId = account.id;
+              rateLimitReplays += 1;
+              continue;
+            }
           }
           throw error;
         }
       }
+      const finalEvents = adapter?.finish();
       if (prepared.stream) {
-        if (adapter) for (const event of adapter.finish()) await write(event);
+        if (adapter) for (const event of finalEvents) await write(event);
         res.end(adapter ? undefined : "data: [DONE]\n\n");
       } else {
         res.setHeader("X-Request-Id", requestId);
@@ -1320,7 +1393,8 @@ export class ApiGateway {
       entry.errorCode = safe.code;
       Object.assign(entry, restoreUpstreamInfo(safe));
       this.lastError = safe.message;
-      if (safe.retryAfter) res.setHeader("Retry-After", String(safe.retryAfter));
+      if (safe.retryAfter)
+        res.setHeader("Retry-After", String(safe.retryAfter));
       this.json(res, safe.status, this.errorBody(safe, "chat"));
     } finally {
       clearTimeout(timer);

@@ -1,15 +1,16 @@
-WorkBuddy Switch 1.9.6：正式启用新增原创内容的强制署名许可，并调整本机 API 兼容处理。
+WorkBuddy Switch 1.9.7：打通官方渠道校验，国内版与国际版都能直接接 Codex CLI 与 Claude Code。
 
-- 新增原创内容采用 WorkBuddy Switch Attribution License 1.0。对外分发、衍生应用或使用其提供服务时，须保留项目名 WorkBuddy Switch、原作者 koi128bit、可点击的原仓库链接及适用的「关于 / 致谢」署名。允许商业使用和闭源衍生分发，不要求公开源码。
-- 1.9.5 及以前版本与提交 bfa9b64 及以前已按 MIT 提供的内容继续保留原授权；第三方许可不变。独立实现同类功能不因功能相似受此许可约束。全文见随包 LICENSE，历史与上游声明见 LICENSES/MIT-legacy.txt、NOTICE 和 THIRD_PARTY_NOTICES.md。
-- README、应用「关于与更新」、系统关于面板和包许可字段同步更新，应用提供固定版本的许可全文与上游声明入口。
-- 本机 API 将 system / developer 文本合并到首条 user 消息，保留其文本、工具定义与其余历史；移除零宽分隔符和身份句改写，systemGuard 保留为 0。此处理会改变角色及指令优先级，不保证与原请求语义等价。
-- 官方明确返回 11128 且尚未产生任何输出时，最多改用账号池中的其他账号重试 3 次；已输出、权限、账号限制、上下文或工具记录错误不重发。实际可用性、限流、权限与计费以官方为准。
-- macOS 自构建可显式启用 WORKBUDDY_LOCAL_VAULT=1，使用随机密钥和 nonce 的 AES-256-GCM。原系统记录通过真实系统密钥环读取，保留已有本地密钥，损坏或缺失时停止操作；正式包仍默认使用 safeStorage，ASAR 完整性验证保持开启。
+- 定位并修复官方 `11128 Illegal API invocation from an unapproved channel`：官方只检查**首条 system 消息的开头几个字符**，命中 Codex CLI、Claude Code、Claude Agent SDK 或 `x-anthropic-billing-header` 等第三方 Agent 指纹即拒绝，与请求头无关。网关在同一条 system 消息前补一句中性引导语后再转发，原始提示词逐字保留、角色仍是 system，不改写也不降级为 user。
+- 前缀规则在 `www.workbuddy.ai` 与 `www.codebuddy.cn` 双向验证：裸指纹稳定 400，加引导语稳定 200。
+- 上游请求补齐 `X-Agent-Purpose`、`X-Conversation-Request-ID`、`X-Conversation-Message-ID` 三个必需头；缺任一个都会得到 `11128 request illegal`。
+- 真实 Agent 端到端验收通过：Codex CLI 0.159.2 与 Claude Code 2.1.169 在国内版与国际版各跑一轮工具调用闭环（执行 `pwd` 并回读结果），上游 5/5 请求 200，Claude Code 返回 `subtype: success`、`num_turns: 2`。
+- 官方 OpenAI / Anthropic SDK 契约 20/20 通过：Chat Completions 非流式/流式/工具、Responses 非流式/流式/工具、Messages 非流式/流式/工具、`/models`、`count_tokens`，国内与国际各 10 项。
+- 系统提示词恢复按 system 原样转发；1.9.6 中合并到 user 消息的做法会让指令优先级失真，本版不再使用。
+- API 页按地区给出地址：OpenAI / Codex 用 `http://127.0.0.1:8317/cn/v1` 与 `/global/v1`，Claude Code 用 `/cn` 与 `/global` 根地址；原 `/v1` 继续支持 `global:` 前缀。
 
 提供 Mac Apple Silicon / Intel、Windows x64、Linux x64 / ARM64 安装包，附 SHA256SUMS.txt。
 
 macOS 使用 ad-hoc 签名，未做 Apple 公证；Windows 尚未做 Authenticode 签名。
 
-许可全文：https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.6/LICENSE
+许可全文：https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.7/LICENSE
 原项目：https://github.com/koi128bit/WorkBuddy-Switch

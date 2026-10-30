@@ -17,6 +17,69 @@
 
 三种对话格式均支持文本、图片、本地函数工具、完整历史、流式与非流式响应。工具在调用客户端执行。本机 Responses 为无状态模式：设置 `store:false` 并发送完整 `input` 历史；不提供 `previous_response_id`、后台任务、托管网页搜索或服务端 shell。Messages 不伪造推理签名；外部服务的加密推理块不能转入本服务。
 
+## 国内与国际版并行
+
+API 页同时显示两个地区；分别勾选已完成官方网页登录授权的账号，停止服务后保存，再启动。新增账号不会自动加入转发范围。
+
+| 地区 | OpenAI / Codex Base URL | Claude Code Base URL |
+| --- | --- | --- |
+| 国内版 | `http://127.0.0.1:8317/cn/v1` | `http://127.0.0.1:8317/cn` |
+| 国际版 | `http://127.0.0.1:8317/global/v1` | `http://127.0.0.1:8317/global` |
+
+地区地址均使用原始模型 ID，例如 `deepseek-v4.1-flash`。原 `/v1` 统一地址仍用 `global:deepseek-v4.1-flash` 选择国际版。两个地区共用密钥，但账号调度、模型目录与会话亲和绑定独立；国内地址会拒绝国际版前缀。切换工作台左侧客户端不会改变其他 Agent 正在使用的 API 地区。
+
+### Codex
+
+把密钥设置为 `WORKBUDDY_API_KEY` 环境变量，再合并以下配置；不覆盖现有其他 provider。模型使用所选地区目录返回的原始 ID。
+
+```toml
+model = "deepseek-v4.1-flash"
+model_provider = "workbuddy_global"
+web_search = "disabled"
+
+[model_providers.workbuddy_global]
+name = "WorkBuddy 国际版"
+base_url = "http://127.0.0.1:8317/global/v1"
+env_key = "WORKBUDDY_API_KEY"
+wire_api = "responses"
+requires_openai_auth = false
+supports_websockets = false
+```
+
+支持 Responses 的 `function`、`namespace`、`custom` 工具及其结果历史：命名空间和自由文本输入转换为上游函数格式，响应恢复原名称、命名空间、工具类型和原始输入。自定义工具参数会在完成后验证并恢复；工具始终由 Codex 执行。暂不支持服务端托管工具和 WebSocket。
+
+参考 [Codex provider 配置](https://developers.openai.com/codex/config-advanced) 与 [OpenAI 函数及自定义工具协议](https://developers.openai.com/api/docs/guides/function-calling)。
+
+### Claude Code
+
+```bash
+ANTHROPIC_BASE_URL='http://127.0.0.1:8317/global' \
+ANTHROPIC_API_KEY="$WORKBUDDY_API_KEY" \
+ANTHROPIC_AUTH_TOKEN="$WORKBUDDY_API_KEY" \
+ANTHROPIC_MODEL='deepseek-v4.1-flash' \
+ANTHROPIC_DEFAULT_HAIKU_MODEL='deepseek-v4.1-flash' \
+ANTHROPIC_DEFAULT_SONNET_MODEL='deepseek-v4.1-flash' \
+ANTHROPIC_DEFAULT_OPUS_MODEL='deepseek-v4.1-flash' \
+ENABLE_TOOL_SEARCH=false \
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 claude
+```
+
+使用 Messages 协议；支持本地函数、工具结果和图片工具结果。官方托管工具搜索须关闭。若原配置含 `ANTHROPIC_CUSTOM_HEADERS`、其他 OAuth token 或 apiKeyHelper，需避免它们覆盖本次密钥；同时发送 Bearer 和 x-api-key 时必须一致。`POST /global/v1/messages/count_tokens` 可供客户端做预算预估，无需发送 AI 对话；响应头 `X-Token-Count-Estimated: true` 表示它是按请求字节数得到的本机估算，不是官方 tokenizer、实际用量或计费依据，不影响原请求输出预算。
+
+参考 [Claude Code 网关说明](https://code.claude.com/docs/en/llm-gateway)。协议兼容与官方账号是否接受 API 调用分别验收；自 1.9.7 起两者均已通过：官方 OpenAI / Anthropic SDK 契约 20/20（国内与国际各 10 项），Codex CLI 0.159.2 与 Claude Code 2.1.169 在国内版、国际版各跑通一轮工具调用闭环，上游请求全部 200。
+
+## 上游渠道校验（`11128`）
+
+官方 `11128` 有三种不同成因，处理方式互不相同：
+
+| 上游 msg | 触发条件 | 本机处理 |
+| --- | --- | --- |
+| `first message is not system prompt` | 首条消息不是 system 角色 | 请求形状错误，直接返回 |
+| `request illegal` | 缺 `X-Agent-Purpose`、`X-Conversation-Request-ID` 或 `X-Conversation-Message-ID` | 网关按请求补齐三个头，并每次使用新的 UUID |
+| `Illegal API invocation from an unapproved channel` | **首条 system 消息的开头**匹配到第三方 Agent 指纹 | 在同一条 system 消息前加一句中性引导语，原文逐字保留、角色仍为 system |
+
+指纹锚点严格按位置判定，与请求长度、tools 数量、消息条数无关；同一段文本放在任何中性前缀之后都会被接受。当前识别的指纹：`x-anthropic-billing-header:`、`You are Claude Code`、`You are a Claude agent, built on Anthropic's Claude Agent SDK`、`You are a coding agent running in the Codex CLI`。其余 CLI 身份（Gemini CLI、GitHub Copilot、Cursor 等中性表述）不受影响，普通系统提示词原样转发。
+
 ## OpenCode
 
 选择 **OpenAI Compatible**（`@ai-sdk/openai-compatible`），使用 `/v1` 地址。示例合并到现有配置，保留其他 provider；不要把真实密钥提交到仓库。
@@ -43,18 +106,18 @@
 
 其他模型使用 **获取模型** 返回的精确 ID，`global:` 前缀仅使用国际版账号。修改 OpenCode 的 provider 配置后，必要时重启该客户端以清除其已缓存的连接配置。配置格式参考 [OpenCode 官方说明](https://opencode.ai/docs/providers/#custom-provider)。
 
-1.9 已兼容 OpenCode 实际请求中的 `promptCacheKey`、48 个工具注册，以及 SDK 附带的元数据。最多支持 128 个函数定义。`promptCacheKey` / `prompt_cache_key` 仅作为兼容提示接收，不作为凭据转发或写入历史。
+1.9 已兼容 OpenCode 实际请求中的 `promptCacheKey`、48 个工具注册，以及 SDK 附带的元数据。本机最多支持 1024 个展开后的函数定义，适配带较多插件的 Codex；官方接受的工具数量仍由上游决定。`promptCacheKey` / `prompt_cache_key` 仅作为兼容提示接收，不作为凭据转发或写入历史。
 
 1.9.1 起不再设置本机输出 Token 上限。客户端的 `max_tokens` / `max_completion_tokens` / `max_output_tokens` 原样转换并转发；未指定时不注入默认值。客户端自身配置的输出预算仍由客户端决定。
 
 ## 模型与积分调度
 
-- 按账号地区访问 WorkBuddy 官方主入口，优先读取当前客户端使用的 `/v2/enterprises/personal/models`，必要时回退到个人配置与兼容目录。按官方 CLI 可用列表过滤历史、禁用及图片 / 视频生成模型，不从模型名称猜测权限或添加虚构模型。
+- 按账号地区访问 WorkBuddy 官方主入口。国内优先读取 `/v2/enterprises/personal/models`；国际优先读取桌面客户端当前使用的 `/v3/config`，旧个人目录仅作回退。排除禁用及图片 / 视频生成模型，保留官方显式账号可用范围；不再用国际版 CLI 的快捷别名子集过滤整个桌面目录。
 - 模型目录缓存 10 分钟；页面 **获取模型** 和 `GET /v1/models?refresh=1` 强制回源。模型查询不发送 AI 对话。
 - GLM-5.1 要求显式思考档位；未指定时自动使用官方默认 `medium`，避免上游 `400 / 11150`。显式指定的档位保留；该模型不支持关闭思考，其他模型不会被自动开启思考。
 - 仅使用勾选的账号，支持轮询、顺序和优先使用临期积分；相同会话尽量固定账号。新账号不自动加入，国内与国际版不混用。
 - 刚查询成功且积分为 0 的账号会被跳过。收到明确的积分不足拒绝、且尚未输出任何响应时，会转到同地区下一个所选账号；账号耗尽或全部不可用时返回错误。未知余额和过期余额仍由官方核验。
-- 余额不足会短暂冷却；余额刷新确认充值后可重新使用。模型限流、权限拒绝、连接中断和半截回复不会自动重发。
+- 余额不足会短暂冷却；余额刷新确认充值后可重新使用。模型限流（HTTP 429 / 官方 14003 等）在尚未输出任何内容时，会先把该账号与模型冷却，再换用同地区下一个所选账号重放一次；第二个账号仍被限流则把 429 原样返回客户端，不再继续换号，避免把模型级限流放大成重试风暴。权限拒绝、连接中断和半截回复不会自动重发。
 - **设置 → 常规 → 积分为 0 自动切换账号** 是桌面 WorkBuddy 的独立开关，默认关闭。启用后每 30–60 秒查询所选地区账号，使用已确认的余额，并按正常切换流程退出、备份及恢复登录。API 执行中或一键任务运行时延后切换；不会跨地区换号。
 
 ## 限额、安全与记录
@@ -73,13 +136,13 @@ API 页面展示近 7 / 30 天请求与 Token 趋势、成功率、P50 / P95 延
 
 | 官方业务码        | 含义与处理                                                                                                                                                                          |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `11128` | 官方渠道校验未通过。1.9.6 起转发前把全部 system / developer 文本按顺序合并到首条 user 消息，保留工具定义与其余历史；这保留文本，但改变角色和指令优先级，不保证原语义等价。移除零宽分隔符与身份句改写，`systemGuard` 保留为 0。仅在官方明确拒绝且尚未产生任何输出时，最多换号重试 3 次；仍被拒则返回官方状态。不能据此保证特定 Agent 的完整会话可用或断言重试不计费。 |
+| `11128` | 官方渠道校验未通过，保留原始状态与业务码。网关已按上节补齐三头并对第三方 Agent 系统提示词加中性引导语；仍被拒绝时不换号、不改写提示词，请在官方客户端核对本次请求与授权。 |
 | `11136` / `11140` | 分别为模型使用权限与账号限制，请在官方客户端查看权限或反馈。                                                                                                                        |
 | `11115`           | 输入与历史超过模型上下文上限，请在调用客户端压缩历史或新建会话。                                                                                                                    |
 | `11148` / `11149` | 工具记录缺失或重复，请检查调用客户端保存的工具历史。                                                                                                                                |
 | `12153`           | 授权过期。先尝试在同一账号续期一次，失败后重新登录。                                                                                                                                |
 
-没有业务码的 HTML 403 只能确认 HTTP 请求被拒绝，不能直接判断账号被封禁。权限与账号限制拒绝（`11136` / `11140`）不会自动换号或重发；渠道校验（`11128`）只在尚未产生任何输出时按上表换号重放。短文本测试成功也不代表某个 Agent 的完整请求已通过验证。
+没有业务码的 HTML 403 只能确认 HTTP 请求被拒绝，不能直接判断账号被封禁。渠道、权限与账号限制拒绝不会自动换号或重发。短文本测试成功也不代表某个 Agent 的完整请求已通过验证。
 
 ```bash
 curl http://127.0.0.1:8317/v1/chat/completions \

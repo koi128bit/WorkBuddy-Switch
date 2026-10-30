@@ -68,20 +68,21 @@ export function mergeAuth(currentRaw, targetRaw) {
     account: target.root.account,
     auth: target.root.auth,
   };
-  if (
-    Array.isArray(current.root.allAccounts) ||
-    Array.isArray(target.root.allAccounts)
-  ) {
+  // These are the selected login's enterprise/personal identities, not the
+  // switcher's saved account pool. Mixing the prior login's list back in lets
+  // the official client restore an unrelated lastLogin identity on startup.
+  for (const field of ["accounts", "allAccounts"]) {
+    if (
+      !Array.isArray(current.root[field]) &&
+      !Array.isArray(target.root[field])
+    )
+      continue;
     const accounts = new Map();
-    for (const item of [
-      ...(current.root.allAccounts || []),
-      ...(target.root.allAccounts || []),
-      target.root.account,
-    ]) {
+    for (const item of [...(target.root[field] || []), target.root.account]) {
       const id = text(item?.uid);
-      if (id) accounts.set(id, item);
+      if (id && !accounts.has(id)) accounts.set(id, item);
     }
-    root.allAccounts = [...accounts.values()];
+    root[field] = [...accounts.values()];
   }
   return JSON.stringify(root);
 }

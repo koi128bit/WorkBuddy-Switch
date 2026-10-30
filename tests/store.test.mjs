@@ -167,6 +167,38 @@ test("switch saves source account and honors disabled automatic restart", async 
   assert.equal(f.store.records.length, 2);
   assert.equal((await f.controller.status()).running, false);
 });
+
+test("switching keeps the native encrypted snapshot separate from its browser API credential", async (t) => {
+  const f = await fixture(t);
+  const native = JSON.parse(auth("b"));
+  native.auth.accessToken = {
+    $wbEncrypted: 1,
+    envelope: "fixture-device-token",
+  };
+  native.accounts = [{ uid: "b", lastLogin: true }];
+  await f.store.capture(parseAuth(JSON.stringify(native)));
+  f.store.records[0].apiEncrypted = f.store.encrypt(auth("b"));
+  const previous = JSON.parse(auth("a"));
+  previous.accounts = [{ uid: "a", lastLogin: true }];
+  await fs.writeFile(f.store.paths.auth, JSON.stringify(previous));
+  await f.store.switchAccount("b");
+  const written = JSON.parse(await fs.readFile(f.store.paths.auth, "utf8"));
+  assert.deepEqual(written.auth.accessToken, native.auth.accessToken);
+  assert.deepEqual(written.accounts, native.accounts);
+});
+
+test("client identity restoration failure is detected after launch and rolls back", async (t) => {
+  const f = await fixture(t);
+  await f.store.capture(parseAuth(auth("b")));
+  await fs.writeFile(f.store.paths.auth, auth("a"));
+  f.controller.verifyAccount = async (readActive) => {
+    assert.equal((await readActive()).id, "b");
+    await fs.writeFile(f.store.paths.auth, auth("a"));
+    throw new Error("客户端没有接受目标账号");
+  };
+  await assert.rejects(f.store.switchAccount("b"), /没有接受目标账号/);
+  assert.equal((await f.store.active()).id, "a");
+});
 test("account name and settings persist after reload", async (t) => {
   const f = await fixture(t);
   await fs.writeFile(f.store.paths.auth, auth("a"));

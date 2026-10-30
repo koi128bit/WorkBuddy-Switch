@@ -397,18 +397,21 @@ test("current account catalog excludes historical and media models and explicit 
   const f = await fixture(t, async (url) =>
     Response.json({
       code: 0,
-      data: url.endsWith("/v2/enterprises/personal/models")
-        ? {
-            agents: [
-              { name: "cli", models: ["new-" + version, "video-model"] },
-            ],
-            models: [
-              { id: "new-" + version, maxOutputTokens: 131072 },
-              { id: "old-model" },
-              { id: "video-model", tags: ["text-to-video"] },
-            ],
-          }
-        : { models: [{ id: "old-model" }] },
+      data:
+        url.endsWith("/v2/enterprises/personal/models") ||
+        url === "https://www.workbuddy.ai/v3/config"
+          ? {
+              availableModels: ["new-" + version, "video-model"],
+              agents: [
+                { name: "cli", models: ["new-" + version, "video-model"] },
+              ],
+              models: [
+                { id: "new-" + version, maxOutputTokens: 131072 },
+                { id: "old-model" },
+                { id: "video-model", tags: ["text-to-video"] },
+              ],
+            }
+          : { models: [{ id: "old-model" }] },
     }),
   );
   let r = await f.gateway.models();
@@ -454,13 +457,9 @@ test("Responses accepts full-history agent input, instructions and function resu
   assert.equal(j.output[0].content[0].text, "private-reply");
   assert.equal(j.usage.input_tokens, 7);
   const sent = JSON.parse(f.calls[0].options.body);
-  assert.equal(
-    sent.messages[0].role,
-    "user",
-    "instructions are folded into the first user message for the official channel",
-  );
-  assert.deepEqual(sent.messages[0].content, [
-    { type: "text", text: "help" },
+  assert.equal(sent.messages[0].role, "system");
+  assert.equal(sent.messages[0].content, "help");
+  assert.deepEqual(sent.messages[1].content, [
     { type: "text", text: "lookup" },
   ]);
   assert.equal(sent.messages.at(-1).tool_call_id, "call_prior");

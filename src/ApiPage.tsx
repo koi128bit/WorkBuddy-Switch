@@ -9,7 +9,7 @@ import {
   number,
   SectionHeader,
 } from "./components";
-import type { ApiConfig, ApiStatus } from "./types";
+import type { ApiConfig, ApiStatus, WorkBuddyProvider } from "./types";
 import { ApiAnalytics } from "./ApiAnalytics";
 
 export function ApiPage({ privacy }: { privacy: boolean }) {
@@ -21,9 +21,14 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
     [error, setError] = useState(""),
     [message, setMessage] = useState(""),
     [rotate, setRotate] = useState(false);
-  const [models, setModels] = useState<{ id: string; name?: string }[]>([]),
+  const [models, setModels] = useState<
+      { id: string; name?: string; credit_multiplier?: number }[]
+    >([]),
     [model, setModel] = useState("auto"),
     [reply, setReply] = useState("");
+  const [region, setRegion] = useState<WorkBuddyProvider>("workbuddy-global");
+  const [modelWarnings, setModelWarnings] =
+    useState<ApiStatus["modelWarnings"]>();
   useEffect(() => {
     let alive = true,
       version = 0;
@@ -79,6 +84,9 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
     );
   const dirty = JSON.stringify(draft) !== JSON.stringify(status.config),
     locked = status.running || !!busy;
+  const rootUrl = status.baseUrl.replace(/\/v1$/, "");
+  const connectionUrl =
+    rootUrl + (region === "workbuddy-global" ? "/global" : "/cn");
   const update = <K extends keyof ApiConfig>(key: K, value: ApiConfig[K]) =>
     setDraft({ ...draft, [key]: value });
   const copy = (kind: "key" | "baseUrl" | "curl") =>
@@ -186,6 +194,55 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
           随应用退出停止。调用会消耗所选账号积分，实际计费由官方确定。
         </p>
       </section>
+      <section
+        className="settings-card api-realms"
+        aria-label="国内与国际版 API"
+      >
+        <SectionHeader
+          title="国内版与国际版"
+          detail="共用本机服务和密钥，账号、模型和会话分别路由。"
+        />
+        <div className="api-realm-grid">
+          {(["workbuddy", "workbuddy-global"] as const).map((provider) => {
+            const selected = status.config.accounts.filter(
+              (account) => account.provider === provider,
+            ).length;
+            const catalog = models.length ? models : status.models;
+            const count = catalog.filter(
+              (item) =>
+                item.id.startsWith("global:") ===
+                (provider === "workbuddy-global"),
+            ).length;
+            const base =
+              rootUrl + (provider === "workbuddy-global" ? "/global" : "/cn");
+            return (
+              <div
+                className="api-realm"
+                key={provider}
+                aria-label={
+                  provider === "workbuddy-global" ? "国际版 API" : "国内版 API"
+                }
+              >
+                <strong>
+                  {provider === "workbuddy-global"
+                    ? "WorkBuddy 国际版"
+                    : "WorkBuddy 国内版"}
+                </strong>
+                <small>
+                  {selected
+                    ? `${selected} 个已选账号 · ${count ? count + " 个模型" : "模型待同步"}`
+                    : "未选择账号，请在下方勾选并保存"}
+                </small>
+                <span>OpenAI / Codex</span>
+                <code>{base}/v1</code>
+                <span>Claude Code</span>
+                <code>{base}</code>
+                <small>此地址使用原始模型 ID，无需 global: 前缀。</small>
+              </div>
+            );
+          })}
+        </div>
+      </section>
       {error && (
         <p className="api-notice red" role="alert">
           {error}
@@ -201,6 +258,12 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
           {message}
         </p>
       )}
+      {(modelWarnings ?? status.modelWarnings)?.map((warning) => (
+        <p className="api-notice" role="alert" key={warning.provider}>
+          {warning.provider === "workbuddy-global" ? "国际版" : "国内版"}
+          模型同步失败：{warning.message} 其他地区仍可使用。
+        </p>
+      ))}
       <div className="api-stats" aria-label="API 累计用量">
         {[
           ["请求", status.totals.requests],
@@ -364,6 +427,47 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
               获取模型后选择模型；国际版使用 <code>global:</code> 前缀。
             </li>
           </ol>
+          <label className="api-client-region">
+            接入地区
+            <select
+              aria-label="API 接入地区"
+              value={region}
+              onChange={(event) =>
+                setRegion(event.target.value as WorkBuddyProvider)
+              }
+            >
+              <option value="workbuddy-global">WorkBuddy 国际版</option>
+              <option value="workbuddy">WorkBuddy 国内版</option>
+            </select>
+          </label>
+          <details className="api-example">
+            <summary>Codex 与 Claude Code 配置</summary>
+            <p>
+              先把复制的密钥保存为环境变量 <code>WORKBUDDY_API_KEY</code>，将
+              MODEL_ID 替换为下方模型的原始 ID。
+            </p>
+            <p>Codex 配置示例（独立 provider，Responses 协议）：</p>
+            <pre>{`model = "MODEL_ID"\nmodel_provider = "workbuddy"\nweb_search = "disabled"\n\n[model_providers.workbuddy]\nname = "WorkBuddy"\nbase_url = "${connectionUrl}/v1"\nenv_key = "WORKBUDDY_API_KEY"\nwire_api = "responses"\nrequires_openai_auth = false\nsupports_websockets = false`}</pre>
+            <p>Claude Code 使用所选模型，关闭官方托管工具搜索：</p>
+            <pre>
+              {[
+                `ANTHROPIC_BASE_URL='${connectionUrl}'`,
+                'ANTHROPIC_API_KEY="$WORKBUDDY_API_KEY"',
+                'ANTHROPIC_AUTH_TOKEN="$WORKBUDDY_API_KEY"',
+                "ANTHROPIC_MODEL='MODEL_ID'",
+                "ANTHROPIC_DEFAULT_HAIKU_MODEL='MODEL_ID'",
+                "ANTHROPIC_DEFAULT_SONNET_MODEL='MODEL_ID'",
+                "ANTHROPIC_DEFAULT_OPUS_MODEL='MODEL_ID'",
+                "ENABLE_TOOL_SEARCH=false",
+                "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 claude",
+              ].join(" \\\n")}
+            </pre>
+            <p>
+              支持本地函数、命名空间与自定义工具。托管搜索、WebSocket
+              和服务端会话存储暂不支持；Claude 的 token
+              预估为本机估算值，计费用量以官方响应为准。
+            </p>
+          </details>
           <div className="api-test-model">
             <label>
               测试模型
@@ -377,6 +481,7 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
                     {item.name && item.name !== item.id
                       ? `${item.name} · ${item.id}`
                       : item.id}
+                    {item.credit_multiplier === 0 ? " · 当前免费" : ""}
                   </option>
                 ))}
               </select>
@@ -389,6 +494,7 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
                   () => api.apiModels(),
                   (value) => {
                     setModels(value.data);
+                    setModelWarnings(value.warnings ?? []);
                     if (!value.data.some((item) => item.id === model))
                       setModel(value.data[0]?.id || "auto");
                     setMessage(
@@ -398,7 +504,7 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
                           "/v2/enterprises/personal/models",
                       )
                         ? "已同步官方个人模型目录，读取 "
-                        : "已读取官方兼容目录，读取 ") +
+                        : "已同步官方模型目录（含国际版桌面配置），读取 ") +
                         value.data.length +
                         " 个模型；实际可用性以账号权限为准。",
                     );
@@ -469,12 +575,13 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
             <p>
               向量：请求 <code>{status.baseUrl}/embeddings</code>，模型为{" "}
               <code>bge-m3</code> 或 <code>hunyuan-embedding</code>（1024 维）。
-              单条文本最长 8188 字符，请先切块；<code>encoding_format</code> 仅支持{" "}
-              <code>float</code>。
+              单条文本最长 8188 字符，请先切块；<code>encoding_format</code>{" "}
+              仅支持 <code>float</code>。
             </p>
             <p>
-              官方工具：请求 <code>{status.baseUrl}/tools/agentic_search</code>、
-              <code>/tools/knowledge_search</code> 或 <code>/tools/tempkey</code>
+              官方工具：请求 <code>{status.baseUrl}/tools/agentic_search</code>
+              、<code>/tools/knowledge_search</code> 或{" "}
+              <code>/tools/tempkey</code>
               ，请求体与官方客户端一致。结果由官方服务生成，计费与权限由官方决定。
             </p>
           </details>

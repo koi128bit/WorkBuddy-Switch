@@ -356,7 +356,9 @@ export interface Bridge {
       catalog_source?: string;
       context_window?: number;
       max_output_tokens?: number;
+      credit_multiplier?: number;
     }[];
+    warnings?: { provider: WorkBuddyProvider; code: string; message: string }[];
   }>;
   apiTest(model: string): Promise<{ model: string; message: string }>;
   prepareTasks(ids: string[] | null, options: TaskOptions): Promise<TaskPlan>;
@@ -432,7 +434,14 @@ export interface Bridge {
   exportUsage(query: UsageQuery): Promise<boolean>;
   checkUpdate(): Promise<{ available: boolean; version: string }>;
   openLink(
-    name: "github" | "wiki" | "releases" | "privacy" | "growth" | "license" | "notices",
+    name:
+      | "github"
+      | "wiki"
+      | "releases"
+      | "privacy"
+      | "growth"
+      | "license"
+      | "notices",
   ): Promise<void>;
   launchClient(): Promise<void>;
   onChange(callback: () => void): () => void;
@@ -490,11 +499,15 @@ export interface ApiStatus {
       bodyBytes: number;
       maxOutputTokens: number | null;
       reasoningEffort: string | null;
-      systemGuard?: number;
     };
   }[];
   lastError: string;
-  models: { id: string; name?: string }[];
+  models: { id: string; name?: string; credit_multiplier?: number }[];
+  modelWarnings?: {
+    provider: WorkBuddyProvider;
+    code: string;
+    message: string;
+  }[];
 }
 declare global {
   interface Window {

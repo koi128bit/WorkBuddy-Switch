@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { ApiError, prepareApiRequest, MESSAGE_LIMIT } from "./api-upstream.mjs";
+import { ResponseTools } from "./api-tools.mjs";
 
 const object = (v) => v && typeof v === "object" && !Array.isArray(v);
 const invalid = (message) => {
@@ -48,7 +49,7 @@ function image(part, protocol) {
     };
   invalid("图片来源格式无效。");
 }
-function responsesInput(raw) {
+function responsesInput(raw, registry) {
   if (raw.previous_response_id)
     unsupported(
       "本机 Responses 使用无状态模式，请发送完整 input 历史并设置 store:false。",
@@ -66,28 +67,21 @@ function responsesInput(raw) {
       : list(raw.input, "input");
   for (const item of input) {
     if (!object(item)) invalid("input 消息格式无效。");
-    if (item.type === "function_call") {
+    if (["function_call", "custom_tool_call"].includes(item.type)) {
+      const call = registry.call(item);
       const prior = messages.at(-1);
-      if (prior?.role === "assistant" && prior.tool_calls) {
-        prior.tool_calls.push({
-          id: item.call_id,
-          type: "function",
-          function: { name: item.name, arguments: item.arguments },
-        });
+      if (prior?.role === "assistant") {
+        (prior.tool_calls ??= []).push(call);
         continue;
       }
       messages.push({
         role: "assistant",
         content: null,
-        tool_calls: [
-          {
-            id: item.call_id,
-            type: "function",
-            function: { name: item.name, arguments: item.arguments },
-          },
-        ],
+        tool_calls: [call],
       });
-    } else if (item.type === "function_call_output") {
+    } else if (
+      ["function_call_output", "custom_tool_call_output"].includes(item.type)
+    ) {
       const content =
         typeof item.output === "string"
           ? item.output
@@ -135,24 +129,7 @@ function responsesInput(raw) {
       messages.push({ role: item.role, content });
     }
   }
-  const tools =
-    raw.tools === undefined
-      ? undefined
-      : list(raw.tools, "tools").map((tool) => {
-          if (tool?.type !== "function")
-            unsupported(
-              "请使用客户端本地函数工具；本机 API 不执行 web_search、shell 等服务端托管工具。",
-            );
-          return {
-            type: "function",
-            function: {
-              name: tool.name,
-              description: tool.description,
-              parameters: tool.parameters,
-              strict: tool.strict,
-            },
-          };
-        });
+  const tools = raw.tools === undefined ? undefined : registry.definitions();
   const format = raw.text?.format;
   return {
     model: raw.model,
@@ -160,9 +137,7 @@ function responsesInput(raw) {
     stream: raw.stream,
     max_tokens: raw.max_output_tokens,
     tools,
-    tool_choice: object(raw.tool_choice)
-      ? { type: "function", function: { name: raw.tool_choice.name } }
-      : raw.tool_choice,
+    tool_choice: registry.choice(raw.tool_choice),
     parallel_tool_calls: raw.parallel_tool_calls,
     temperature: raw.temperature,
     top_p: raw.top_p,
@@ -228,12 +203,24 @@ function messagesInput(raw) {
           function: { name: part.name, arguments: JSON.stringify(part.input) },
         });
       else if (part?.type === "tool_result" && message.role === "user") {
-        flush();
+        const parts =
+          typeof part.content === "string" || part.content == null
+            ? [{ type: "text", text: part.content ?? "" }]
+            : list(part.content, "tool_result.content");
+        const texts = [],
+          images = [];
+        for (const p of parts) {
+          if (p?.type === "text" && typeof p.text === "string")
+            texts.push(p.text);
+          else if (p?.type === "image") images.push(image(p, "messages"));
+          else unsupported("工具结果目前支持文本与图片。");
+        }
         messages.push({
           role: "tool",
           tool_call_id: part.tool_use_id,
-          content: textBlocks(part.content ?? ""),
+          content: texts.join("\n"),
         });
+        content.push(...images);
       } else unsupported("Messages 目前支持文本、图片和本地函数工具。");
     }
     flush();
@@ -287,21 +274,37 @@ function messagesInput(raw) {
 }
 export function prepareProtocolRequest(raw, protocol) {
   if (!object(raw)) invalid("请求须为 JSON 对象。");
+  const toolRegistry =
+    protocol === "responses" ? new ResponseTools(raw.tools) : undefined;
   const normalized =
     protocol === "responses"
-      ? responsesInput(raw)
+      ? responsesInput(raw, toolRegistry)
       : protocol === "messages"
         ? messagesInput(raw)
         : raw;
-  return { ...prepareApiRequest(normalized), protocol };
+  return { ...prepareApiRequest(normalized), protocol, toolRegistry };
+}
+
+export function estimateMessageTokens(raw) {
+  const prepared = prepareProtocolRequest(raw, "messages");
+  const { messages, tools } = prepared.payload;
+  // A local compatibility estimate, not an official tokenizer or a billing
+  // measurement. Count no response tokens and make no paid upstream request.
+  return Math.max(
+    1,
+    Math.ceil(
+      Buffer.byteLength(JSON.stringify({ messages, tools }), "utf8") / 3,
+    ),
+  );
 }
 
 // Both adapters consume verified Chat frames. Tools run in the calling client;
 // conversation content is never retained between requests or written to disk.
 export class ProtocolStream {
-  constructor(protocol, model) {
+  constructor(protocol, model, toolRegistry) {
     this.protocol = protocol;
     this.model = model;
+    this.toolRegistry = toolRegistry;
     this.id =
       (protocol === "responses" ? "resp_" : "msg_") +
       randomUUID().replaceAll("-", "");
@@ -407,12 +410,25 @@ export class ProtocolStream {
   }
   responseItem(item, status) {
     const state = status === "in_progress" ? "in_progress" : "completed";
+    const tool =
+      item.kind === "tool" ? this.toolRegistry?.output(item.name) : null;
+    if (tool?.type === "custom")
+      return {
+        type: "custom_tool_call",
+        id: item.id,
+        call_id: item.call_id,
+        name: tool.name,
+        ...(tool.namespace ? { namespace: tool.namespace } : {}),
+        input: status === "in_progress" ? "" : this.customInput(item),
+        status: state,
+      };
     return item.kind === "tool"
       ? {
           type: "function_call",
           id: item.id,
           call_id: item.call_id,
-          name: item.name,
+          name: tool?.name ?? item.name,
+          ...(tool?.namespace ? { namespace: tool.namespace } : {}),
           arguments: item.arguments,
           status: state,
         }
@@ -433,6 +449,16 @@ export class ProtocolStream {
                   },
                 ],
         };
+  }
+  customInput(item) {
+    const value = this.toolInput(item);
+    if (typeof value.input !== "string")
+      throw new ApiError(
+        502,
+        "invalid_tool_arguments",
+        "自定义工具缺少原始 input 文本。",
+      );
+    return value.input;
   }
   startItem(item) {
     this.items.push(item);
@@ -531,11 +557,15 @@ export class ProtocolStream {
           arguments: "",
         };
         this.tools.set(fragment.index, item);
-        events.push(...this.startItem(item));
+        if (this.protocol === "responses") events.push(...this.startItem(item));
       } else item.name += fragment.function?.name ?? "";
       const args = fragment.function?.arguments ?? "";
       item.arguments += args;
-      if (args)
+      if (
+        args &&
+        this.protocol === "responses" &&
+        this.toolRegistry?.output(item.name)?.type !== "custom"
+      )
         events.push(
           this.protocol === "responses"
             ? this.event("response.function_call_arguments.delta", {
@@ -553,10 +583,33 @@ export class ProtocolStream {
   }
   finish() {
     const events = [];
-    if (this.protocol === "messages")
-      for (const item of this.tools.values()) this.toolInput(item);
+    if (this.protocol === "messages") {
+      for (const item of this.tools.values()) {
+        this.toolInput(item);
+        item.index = this.items.length;
+        this.items.push(item);
+      }
+    }
+    if (this.tools.size && this.finishReason === "stop")
+      this.finishReason = "tool_calls";
     for (const item of this.items) {
       if (this.protocol === "messages") {
+        if (item.kind === "tool")
+          events.push(
+            this.event("content_block_start", {
+              index: item.index,
+              content_block: {
+                type: "tool_use",
+                id: item.call_id,
+                name: item.name,
+                input: {},
+              },
+            }),
+            this.event("content_block_delta", {
+              index: item.index,
+              delta: { type: "input_json_delta", partial_json: item.arguments },
+            }),
+          );
         events.push(this.event("content_block_stop", { index: item.index }));
         continue;
       }
@@ -579,6 +632,19 @@ export class ProtocolStream {
               annotations: [],
               logprobs: [],
             },
+          }),
+        );
+      else if (this.toolRegistry?.output(item.name)?.type === "custom")
+        events.push(
+          this.event("response.custom_tool_call_input.delta", {
+            item_id: item.id,
+            output_index: item.index,
+            delta: this.customInput(item),
+          }),
+          this.event("response.custom_tool_call_input.done", {
+            item_id: item.id,
+            output_index: item.index,
+            input: this.customInput(item),
           }),
         );
       else
