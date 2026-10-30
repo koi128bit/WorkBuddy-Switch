@@ -447,7 +447,11 @@ test("third-party agent system prompts keep their wording but move off the chann
     "You are a coding agent running in the Codex CLI, a terminal-based coding assistant.";
   const claudeSystem =
     "x-anthropic-billing-header: cc_version=2.1.169.5c0; cc_entrypoint=sdk-cli; cch=0330b;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK.";
-  for (const system of [codexSystem, claudeSystem]) {
+  // DeepSeek Harness ships this exact sentence as its `harness:identity`
+  // section; upstream rejects it, so the structural rule must cover it too.
+  const deepseekHarnessSystem =
+    "You are an AI agent powered by DeepSeek Harness.";
+  for (const system of [codexSystem, claudeSystem, deepseekHarnessSystem]) {
     const response = await f.send({
       messages: [
         { role: "system", content: system },
@@ -462,7 +466,7 @@ test("third-party agent system prompts keep their wording but move off the chann
       "原始 system 文本逐字保留在末段",
     );
     assert.ok(
-      !/^(x-anthropic-billing-header|You are Claude Code|You are a Claude agent|You are a coding agent running in the Codex CLI)/i.test(
+      !/^(x-anthropic-billing-header|You are Claude Code|You are a Claude agent|You are a coding agent running in the Codex CLI|You are an AI agent powered by DeepSeek Harness)/i.test(
         forwarded[0].content,
       ),
       "第三方 CLI 指纹不再位于首字符锚点",

@@ -1,5 +1,11 @@
 # 更新日志
 
+## 1.9.8 · 2026-10-30
+
+- 渠道指纹匹配改为结构化规则：1.9.7 只列了 Codex CLI、Claude Code、Claude Agent SDK 与 `x-anthropic-billing-header` 四条前缀，DeepSeek Harness 的 `You are an AI agent powered by DeepSeek Harness.` 仍被官方拦成 `11128`。现在按「自报身份的 Agent 开场」这一族匹配（`You are <Product> Code|CLI`、`You are a/an … agent/assistant … powered by / built on / running in / running on / based on …`、含 `official CLI`），新出现的 Agent 客户端不用等发版就能通过。
+- 规则已对官方接口逐条对照：`You are an AI agent powered by DeepSeek Harness.` 裸发 400、加引导句 200；`You are an AI agent`、`You are DeepSeek Harness.`、`You are a helpful assistant.` 等非第三方身份开场仍原样转发，不加任何前缀。
+- 引导句本身不变，仍只加在**首条 system 消息**之前，原文逐字保留、角色仍为 system。
+
 ## 1.9.7 · 2026-10-30
 
 - 本机 API 新增上游渠道引导句：官方对**首条 system 消息的开头**做第三方 Agent 指纹匹配，命中即返回 `11128 Illegal API invocation from an unapproved channel`，与请求头无关。网关在检测到 Codex CLI、Claude Code、Claude Agent SDK 或 `x-anthropic-billing-header` 开场时，于同一条 system 消息前加一句中性引导语再转发，原始文本逐字保留、角色仍为 system，不做改写、不降级为 user。

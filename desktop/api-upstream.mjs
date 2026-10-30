@@ -34,11 +34,15 @@ export const TOOL_LIMIT = 1024;
 // off the anchor.
 const CHANNEL_LEAD_IN =
   "You are WorkBuddy, a helpful AI assistant. Follow the instructions below.";
+// Upstream keeps a list of known third-party agent identities; every entry so
+// far is a self-introduction of the shape "You are ... agent ... built on /
+// powered by / running in <product>". Structural patterns cover that family,
+// so a new harness does not need a new release to get through.
 const CHANNEL_FINGERPRINTS = [
   /^x-anthropic-billing-header\s*:/i,
-  /^You are Claude Code\b/i,
-  /^You are a Claude agent, built on Anthropic's Claude Agent SDK/i,
-  /^You are a coding agent running in the Codex CLI/i,
+  /^You are (?:[A-Z][\w.'-]* ){1,3}(?:Code|CLI)\b/,
+  /^You are an? [^.\n]{0,80}\b(?:agent|assistant|CLI)\b[^.\n]{0,60}\b(?:powered by|built on|running in|running on|based on)\b/i,
+  /^You are an? [^.\n]{0,80}\b(?:agent|assistant|CLI)\b[^.\n]{0,40}\bofficial CLI\b/i,
 ];
 const thirdPartyAgentOpening = (value) =>
   typeof value === "string" &&

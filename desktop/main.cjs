@@ -67,8 +67,8 @@ const links = {
   releases: "https://github.com/koi128bit/WorkBuddy-Switch/releases/latest",
   privacy:
     "https://github.com/koi128bit/WorkBuddy-Switch/blob/main/SECURITY.md",
-  license: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.7/LICENSE",
-  notices: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.7/NOTICE",
+  license: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.8/LICENSE",
+  notices: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.8/NOTICE",
   growth: "https://www.codebuddy.cn/profile/growth-center",
 };
 app.setName("WorkBuddy Switch");

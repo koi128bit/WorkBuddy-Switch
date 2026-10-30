@@ -1,5 +1,7 @@
-WorkBuddy Switch 1.9.7：打通官方渠道校验，国内版与国际版都能直接接 Codex CLI 与 Claude Code。
+WorkBuddy Switch 1.9.8：渠道指纹改成结构化匹配，Codex CLI、Claude Code、DeepSeek Harness 等第三方 Agent 都能直连。
 
+- 1.9.7 的指纹是硬编码清单，DeepSeek Harness 的 `You are an AI agent powered by DeepSeek Harness.` 仍被官方拦成 `11128`。本版改为按「自报身份的 Agent 开场」整族匹配（`You are <Product> Code|CLI`、`You are a/an … agent/assistant … powered by / built on / running in / running on / based on …`、含 `official CLI`），新出现的 Agent 客户端无需等发版即可通过。
+- 规则已逐条对照官方接口：该句裸发 400、加引导语 200；`You are an AI agent`、`You are DeepSeek Harness.`、`You are a helpful assistant.` 等非第三方身份开场仍原样转发，不加任何前缀。
 - 定位并修复官方 `11128 Illegal API invocation from an unapproved channel`：官方只检查**首条 system 消息的开头几个字符**，命中 Codex CLI、Claude Code、Claude Agent SDK 或 `x-anthropic-billing-header` 等第三方 Agent 指纹即拒绝，与请求头无关。网关在同一条 system 消息前补一句中性引导语后再转发，原始提示词逐字保留、角色仍是 system，不改写也不降级为 user。
 - 前缀规则在 `www.workbuddy.ai` 与 `www.codebuddy.cn` 双向验证：裸指纹稳定 400，加引导语稳定 200。
 - 上游请求补齐 `X-Agent-Purpose`、`X-Conversation-Request-ID`、`X-Conversation-Message-ID` 三个必需头；缺任一个都会得到 `11128 request illegal`。

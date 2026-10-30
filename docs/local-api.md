@@ -78,7 +78,18 @@ CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 claude
 | `request illegal` | 缺 `X-Agent-Purpose`、`X-Conversation-Request-ID` 或 `X-Conversation-Message-ID` | 网关按请求补齐三个头，并每次使用新的 UUID |
 | `Illegal API invocation from an unapproved channel` | **首条 system 消息的开头**匹配到第三方 Agent 指纹 | 在同一条 system 消息前加一句中性引导语，原文逐字保留、角色仍为 system |
 
-指纹锚点严格按位置判定，与请求长度、tools 数量、消息条数无关；同一段文本放在任何中性前缀之后都会被接受。当前识别的指纹：`x-anthropic-billing-header:`、`You are Claude Code`、`You are a Claude agent, built on Anthropic's Claude Agent SDK`、`You are a coding agent running in the Codex CLI`。其余 CLI 身份（Gemini CLI、GitHub Copilot、Cursor 等中性表述）不受影响，普通系统提示词原样转发。
+指纹锚点严格按位置判定，与请求长度、tools 数量、消息条数无关；同一段文本放在任何中性前缀之后都会被接受。
+
+第一条 system 消息以「自报身份的 Agent 开场」出现时，网关匹配下面这一族：
+
+| 形态 | 例子 |
+| --- | --- |
+| `x-anthropic-billing-header:` 开头 | Claude Code 的 billing 头 |
+| `You are <Product> Code\|CLI` | `You are Claude Code`、`You are Codex CLI` |
+| `You are a/an … agent\|assistant … powered by / built on / running in / running on / based on …` | `You are a coding agent running in the Codex CLI`、`You are a Claude agent, built on Anthropic's Claude Agent SDK`、`You are an AI agent powered by DeepSeek Harness.` |
+| 上述句式末尾带 `official CLI` | `You are Claude Code, Anthropic's official CLI for Claude.` |
+
+规则按族匹配而不是按产品名硬编码，新出现的 Agent 客户端不用等网关发版。普通系统提示词（含 `You are a helpful assistant.`、`You are an AI agent.`、`You are DeepSeek Harness.` 这类非第三方身份开场，以及 Gemini CLI、GitHub Copilot、Cursor 等中性表述）原样转发，不加任何前缀。
 
 ## OpenCode
 
@@ -136,7 +147,7 @@ API 页面展示近 7 / 30 天请求与 Token 趋势、成功率、P50 / P95 延
 
 | 官方业务码        | 含义与处理                                                                                                                                                                          |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `11128` | 官方渠道校验未通过，保留原始状态与业务码。网关已按上节补齐三头并对第三方 Agent 系统提示词加中性引导语；仍被拒绝时不换号、不改写提示词，请在官方客户端核对本次请求与授权。 |
+| `11128` | 官方渠道校验未通过，保留原始状态与业务码。网关已按上节补齐三头，并对第三方 Agent 身份开场加中性引导语；仍被拒绝时不换号、不改写提示词，请在官方客户端核对本次请求与授权。 |
 | `11136` / `11140` | 分别为模型使用权限与账号限制，请在官方客户端查看权限或反馈。                                                                                                                        |
 | `11115`           | 输入与历史超过模型上下文上限，请在调用客户端压缩历史或新建会话。                                                                                                                    |
 | `11148` / `11149` | 工具记录缺失或重复，请检查调用客户端保存的工具历史。                                                                                                                                |
