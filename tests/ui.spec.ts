@@ -5,7 +5,7 @@ import {
   fixtureUsage,
   fixtureApi,
 } from "./fixtures";
-import type { TaskRun } from "../src/types";
+import type { TaskRun, UpdateState } from "../src/types";
 
 declare global {
   interface Window {
@@ -277,6 +277,101 @@ test("about exposes the current license and source through the trusted link brid
   );
 });
 
+test("about page walks the whole in-app update from check to install", async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    const state: UpdateState = {
+      phase: "idle",
+      currentVersion: "1.9.9",
+      version: "",
+      notes: "",
+      htmlUrl: "",
+      source: "",
+      mirror: "auto",
+      packaged: true,
+      asset: null,
+      received: 0,
+      total: 0,
+      percent: 0,
+      verified: false,
+      error: "",
+    };
+    let listener: ((value: UpdateState) => void) | undefined;
+    let installed = false;
+    const publish = (patch: Partial<UpdateState>) => {
+      Object.assign(state, patch);
+      listener?.({ ...state });
+      return { ...state };
+    };
+    Object.assign(window.workbuddyFixture, {
+      checkUpdate: async () =>
+        publish({
+          phase: "available",
+          version: "2.0.0",
+          notes: "局域网访问与应用内更新。",
+          source:
+            "https://gh-proxy.com/https://api.github.com/repos/koi128bit/WorkBuddy-Switch/releases/latest",
+          asset: {
+            name: "WorkBuddy-Switch-2.0.0-mac-arm64.pkg",
+            size: 133820720,
+            target: "pkg",
+          },
+          total: 133820720,
+        }),
+      downloadUpdate: async () =>
+        publish({
+          phase: "ready",
+          percent: 100,
+          received: 133820720,
+          verified: true,
+        }),
+      installUpdate: async () => {
+        installed = true;
+        return publish({ phase: "installing" });
+      },
+      revealUpdate: async () => "fixture",
+      onUpdate: (callback: (value: UpdateState) => void) => {
+        listener = callback;
+        return () => {
+          listener = undefined;
+        };
+      },
+    });
+    (window as unknown as { updateInstalled: () => boolean }).updateInstalled =
+      () => installed;
+  });
+  await page
+    .getByRole("navigation", { name: "主导航" })
+    .getByRole("button", { name: "设置", exact: true })
+    .click();
+  await page.getByRole("button", { name: "关于与更新", exact: true }).click();
+  await expect(
+    page.getByText("尚未检查", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "检查更新", exact: true }).click();
+  await expect(page.getByText("有新版本可用", { exact: true })).toBeVisible();
+  await expect(page.getByText("当前 1.9.9 → 2.0.0", { exact: true })).toBeVisible();
+  await expect(page.getByText(/WorkBuddy-Switch-2\.0\.0-mac-arm64\.pkg/)).toHaveCount(1);
+  await page.getByRole("button", { name: "下载更新", exact: true }).click();
+  await expect(page.getByText("安装包已就绪", { exact: true })).toBeVisible();
+  await expect(page.getByText(/SHA256 已校验/)).toBeVisible();
+  await page.getByRole("button", { name: "打开下载目录", exact: true }).click();
+  await page
+    .getByRole("button", { name: "安装并重启", exact: true })
+    .click();
+  await expect(page.getByText("正在安装并重启", { exact: true })).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { updateInstalled: () => boolean }).updateInstalled(),
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "outputs/screenshots/v2.0-settings-update.png",
+    animations: "disabled",
+  });
+});
+
 test("API page keeps completed growth task history out of the connection workflow", async ({
   page,
 }) => {
@@ -500,8 +595,9 @@ test("local API page saves explicit account scope, controls the listener and nev
       config: {
         port: 8317,
         autoStart: false,
+        lan: false,
         accounts: [] as { provider: string; id: string }[],
-        strategy: "round_robin",
+        strategy: "round_robin" as const,
       },
       accounts: snapshot.accounts.map((account) => ({
         provider: "workbuddy",
@@ -561,6 +657,7 @@ test("local API page saves explicit account scope, controls the listener and nev
     .check();
   await page.getByLabel("监听端口", { exact: true }).fill("8319");
   await page.getByLabel("账号调度", { exact: true }).selectOption("expiring");
+  await page.getByRole("switch", { name: "允许局域网访问", exact: true }).click();
   await page
     .getByRole("button", { name: "保存 API 设置", exact: true })
     .click();
@@ -570,6 +667,12 @@ test("local API page saves explicit account scope, controls the listener and nev
   await expect(
     page.getByText("http://127.0.0.1:8319/v1", { exact: true }),
   ).toBeVisible();
+  expect(
+    await page.evaluate(
+      async () =>
+        (await window.workbuddy.apiStatus()).config.lan,
+    ),
+  ).toBe(true);
   await page.getByRole("button", { name: "复制 API Key", exact: true }).click();
   expect(
     await page.evaluate(
@@ -886,6 +989,22 @@ test.beforeEach(async ({ page }) => {
       const unconfiguredApi = async () => {
         throw new Error("API test handler has not been configured");
       };
+      const idleUpdateState = () => ({
+        phase: "idle" as const,
+        currentVersion: snapshot.version,
+        version: "",
+        notes: "",
+        htmlUrl: "",
+        source: "",
+        mirror: "auto",
+        packaged: true,
+        asset: null,
+        received: 0,
+        total: 0,
+        percent: 0,
+        verified: false,
+        error: "",
+      });
       const bridge = {
         snapshot: async () => structuredClone(snapshot),
         apiStatus: async () => structuredClone(apiStatus),
@@ -1199,7 +1318,13 @@ test.beforeEach(async ({ page }) => {
         importAccounts: async () => 1,
         importLegacy: async () => ({ imported: 1, skipped: 0 }),
         exportUsage: async () => true,
-        checkUpdate: async () => ({ available: false, version: "1.0.0" }),
+        checkUpdate: async () => idleUpdateState(),
+        updateState: async () => idleUpdateState(),
+        downloadUpdate: async () => idleUpdateState(),
+        cancelUpdate: async () => true,
+        installUpdate: async () => idleUpdateState(),
+        revealUpdate: async () => "fixture",
+        onUpdate: () => () => {},
         openLink: async () => {},
         launchClient: async () => {},
         resume: async () => {},

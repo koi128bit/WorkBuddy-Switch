@@ -55,6 +55,11 @@ contextBridge.exposeInMainWorld("workbuddy", {
   importLegacy: call("legacy"),
   exportUsage: call("export-usage"),
   checkUpdate: call("update"),
+  updateState: call("update-state"),
+  downloadUpdate: call("update-download"),
+  cancelUpdate: call("update-cancel"),
+  installUpdate: call("update-install"),
+  revealUpdate: call("update-reveal"),
   openLink: call("link"),
   launchClient: call("launch"),
   startLogin: call("login-start"),
@@ -70,5 +75,10 @@ contextBridge.exposeInMainWorld("workbuddy", {
     const listener = (_event, page) => callback(page);
     ipcRenderer.on("wb:navigate", listener);
     return () => ipcRenderer.removeListener("wb:navigate", listener);
+  },
+  onUpdate(callback) {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on("wb:update", listener);
+    return () => ipcRenderer.removeListener("wb:update", listener);
   },
 });

@@ -1,5 +1,33 @@
 # 更新日志
 
+## 2.0.0 · 2026-10-31
+
+本版两条主线：本机 API 可选开放局域网访问，以及应用内完成更新全流程。
+
+### 本机 API 支持局域网访问
+
+- 新增 `lan` 开关（默认 `false`）：关闭时行为与 1.9.9 完全一致，仍只 `listen("127.0.0.1")`；打开后改绑 `0.0.0.0`，同一网段的手机、另一台电脑或本机容器 / 虚拟机可以直接调用 `http://<局域网 IP>:8317/v1`。
+- `Host` 白名单随开关放宽：始终接受 `127.0.0.1`、`localhost` 与 `[::1]`；开启后额外接受本机各网卡的 IPv4 地址、主机名与 `*.local` 名（含端口）。其它 Host 仍返回 `403 local_clients_only`，错误文案按开关区分。
+- 跨站防护不变：带 `Origin` 或 `Sec-Fetch-Site: cross-site` 的浏览器请求一律拒绝，API Key 校验、限流与调度逻辑不变。局域网模式不会让网页变成可以直连的入口。
+- 状态快照新增 `lanUrl` / `lanUrls`（未开启时为空），API 页在「账号与调度」新增 **允许局域网访问** 开关与只读的 **局域网地址** 行，并提供「复制局域网地址」；`api-copy` 的 `kind` 增加 `lanUrl`。
+- `validateApiConfig` 只接受布尔型 `lan`；配置文件里缺少该字段时按 `false` 处理，1.9.x 的配置无需迁移。
+- `docs/local-api.md`、README 与 Wiki 的本机 API 页补充局域网章节、防火墙提示与安全边界。
+
+### 应用内更新（检测 → 下载 → 安装 → 重启）
+
+- 新增 `desktop/updater.mjs`（纯逻辑、无 Electron 依赖）：多源探测 Release、按平台与架构选包、流式下载、`SHA256SUMS.txt` 校验、安装描述符生成。新增 `desktop/update-installer.mjs` 负责把安装描述符落成真正的执行脚本。
+- 探测线路可切换：`auto` 默认按 `gh-proxy.com` → `ghproxy.net` → `ghfast.top` → 直连依次回退，单个源 9 秒超时，直连放最后，避免国内网络下先卡满超时才失败；也可固定为某一线路或填写自定义镜像前缀。下载与校验同样走选择后的线路。
+- 下载流式落盘到应用数据目录的 `updates/`，边下边算 SHA-256，与官方 `SHA256SUMS.txt` 比对一致才允许安装；不一致时删除半成品并提示重试。进度、已收字节、总字节、百分比与错误都通过 `wb:update` 事件推送到界面。
+- 安装按平台分发：macOS `pkg` 走管理员授权 `installer`，`dmg` / `zip` 走挂载或解压后替换 `.app`；Windows `setup.exe` 静默安装、`portable.exe` 覆盖替换；Linux `AppImage` 就地替换（失败回退 `pkexec`）、`deb` 走 `pkexec dpkg -i`。脚本先等待当前进程退出，安装完成后自动重新启动应用；失败时弹窗提示并保留 `update-install.log`。
+- 安装前先停止本机 API 服务并设置 `installingUpdate` 绕过退出确认，避免覆盖安装被"正在执行任务"拦住。
+- 关于页的「检查新版本」升级为完整更新面板：更新线路选择、启动时自动检查、检查 / 下载 / 取消下载 / 安装并重启、进度条、版本对比、Release 说明、错误与线路诊断、「打开下载目录」。开发模式下明确提示需在安装后的应用内执行更新。
+- 设置新增 `updateMirror`（默认 `auto`）与 `autoCheckUpdate`（默认 `true`）；自动检查只在打包后的应用启动 6 秒后触发，失败只写操作日志，不打断界面。
+
+### 其他
+
+- 新增 `tests/api-lan.test.mjs`（5 项）、`tests/updater.test.mjs`（22 项）、`tests/update-installer.test.mjs`（14 项），覆盖绑定地址、Host 白名单、版本比较、三平台选包与回退、校验和、安装脚本生成；Playwright 增加更新面板的完整流程用例，并让 API 页用例覆盖局域网开关。
+- 版本号升至 2.0.0；`links.license` / `links.notices` 指向 `v2.0.0` 标签。
+
 ## 1.9.9 · 2026-10-30
 
 - 修复第二类 `11128 Illegal API invocation from an unapproved channel`：官方除了看首条 system 的开头，还会对 system 角色做**语义筛查**——一份内容正常、但读起来像第三方 Agent 运行时（编排、委托、harness 身份、teammate 交接）的系统提示词，即使开头加了中性引导语、请求头齐全，仍会被拒。实测同一段文字放到 user 角色后立刻通过。

@@ -29,6 +29,8 @@ export const defaults = Object.freeze({
   checkinMinute: 0,
   menuBarBalance: true,
   activeProvider: "workbuddy",
+  updateMirror: "auto",
+  autoCheckUpdate: true,
   traeDataPath: "",
   traeExecutablePath: "",
   qoderDataPath: "",
@@ -53,6 +55,14 @@ export function validateSettings(value) {
       throw new Error("设置值类型无效。");
     if (key === "theme" && !["system", "light", "dark"].includes(raw))
       throw new Error("主题设置无效。");
+    if (key === "updateMirror") {
+      const mirror = String(raw ?? "").trim();
+      if (
+        mirror.length > 300 ||
+        !/^(auto|direct|gh-proxy|ghproxy|ghfast|https?:\/\/\S+)$/i.test(mirror)
+      )
+        throw new Error("更新线路无效。");
+    }
     if (key === "activeProvider") {
       try {
         clientDefinition(raw);

@@ -1,5 +1,6 @@
 import http from "node:http";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import {
   createHash,
@@ -30,9 +31,53 @@ import {
 export const apiDefaults = Object.freeze({
   port: 8317,
   autoStart: false,
+  // Loopback stays the default: the service is reachable from other devices on
+  // the same network only after the user turns this on in the API page.
+  lan: false,
   accounts: [],
   strategy: "round_robin",
 });
+// A LAN bind answers on every interface, so the accepted Host header has to be
+// pinned to an address this machine actually owns. Any other name is rejected
+// the same way a DNS-rebinding attempt is, even with the switch on.
+const networkAddresses = () => {
+  const result = [];
+  let interfaces = {};
+  try {
+    interfaces = os.networkInterfaces();
+  } catch {
+    return result;
+  }
+  for (const rows of Object.values(interfaces))
+    for (const row of rows ?? [])
+      if (
+        row &&
+        !row.internal &&
+        (row.family === "IPv4" || row.family === 4) &&
+        typeof row.address === "string"
+      )
+        result.push(row.address);
+  return result;
+};
+export function lanAddresses() {
+  const names = [];
+  const hostname = os.hostname().toLowerCase();
+  if (hostname) {
+    names.push(hostname);
+    if (!hostname.endsWith(".local")) names.push(hostname + ".local");
+  }
+  for (const address of networkAddresses()) names.push(address);
+  return [...new Set(names)];
+}
+export function allowedHosts(port, lan = false) {
+  const hosts = new Set([
+    "127.0.0.1:" + port,
+    "localhost:" + port,
+    "[::1]:" + port,
+  ]);
+  if (lan) for (const name of lanAddresses()) hosts.add(name + ":" + port);
+  return hosts;
+}
 // Local request limits were removed in 1.9.4: the selected accounts, the
 // official rate limiting and the model context decide what can run. Old saved
 // configurations that still carry these keys stay readable and are ignored.
@@ -94,6 +139,7 @@ export function validateApiConfig(value) {
     throw new Error("API 设置 port 不在支持范围内。");
   if (
     typeof config.autoStart !== "boolean" ||
+    typeof config.lan !== "boolean" ||
     !["round_robin", "sequential", "expiring"].includes(config.strategy) ||
     !Array.isArray(config.accounts) ||
     config.accounts.length > 100
@@ -460,9 +506,17 @@ export class ApiGateway {
   }
   snapshot() {
     const port = this.server?.address()?.port ?? this.config.port;
+    const lan = !!this.config.lan;
+    // Other devices cannot reach 127.0.0.1, so LAN mode leads with a real
+    // address while loopback stays the first (and only) local answer.
+    const lanUrls = lan
+      ? networkAddresses().map((address) => "http://" + address + ":" + port)
+      : [];
     return structuredClone({
       running: !!this.server?.listening && !this.draining,
       baseUrl: "http://127.0.0.1:" + port + "/v1",
+      lanUrls: lanUrls.map((url) => url + "/v1"),
+      lanUrl: lanUrls.length ? lanUrls[0] + "/v1" : "",
       activeRequests: this.active.size,
       hasKey: !!this.secret,
       config: this.config,
@@ -767,7 +821,10 @@ export class ApiGateway {
           server.off("error", failure);
           resolve();
         });
-        server.listen(this.listenPort ?? this.config.port, "127.0.0.1");
+        server.listen(
+          this.listenPort ?? this.config.port,
+          this.config.lan ? "0.0.0.0" : "127.0.0.1",
+        );
       });
     } catch (error) {
       this.server = null;
@@ -944,8 +1001,8 @@ export class ApiGateway {
       if (pathname.startsWith("/messages")) protocol = "messages";
       const port = this.server?.address()?.port;
       if (
-        !["127.0.0.1:" + port, "localhost:" + port].includes(
-          req.headers.host,
+        !allowedHosts(port, !!this.config.lan).has(
+          String(req.headers.host ?? "").toLowerCase(),
         ) ||
         req.headers.origin ||
         req.headers["sec-fetch-site"] === "cross-site"
@@ -953,7 +1010,9 @@ export class ApiGateway {
         throw new ApiError(
           403,
           "local_clients_only",
-          "API 仅供已授权的本机工具调用。",
+          this.config.lan
+            ? "API 仅接受来自本机或本机网卡地址的调用，请使用界面显示的局域网地址。"
+            : "API 仅供已授权的本机工具调用。",
         );
       if (this.draining)
         throw new ApiError(503, "service_stopping", "API 服务正在停止。");

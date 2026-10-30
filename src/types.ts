@@ -7,6 +7,39 @@ export type Provider =
   | "qoder-cn"
   | "qoder-global";
 export type EditorProvider = Exclude<Provider, WorkBuddyProvider>;
+export type UpdatePhase =
+  | "idle"
+  | "checking"
+  | "available"
+  | "latest"
+  | "downloading"
+  | "ready"
+  | "installing"
+  | "error";
+
+export interface UpdateAsset {
+  name: string;
+  size: number;
+  target: string;
+}
+
+export interface UpdateState {
+  phase: UpdatePhase;
+  currentVersion: string;
+  version: string;
+  notes: string;
+  htmlUrl: string;
+  source: string;
+  mirror: string;
+  packaged: boolean;
+  asset: UpdateAsset | null;
+  received: number;
+  total: number;
+  percent: number;
+  verified: boolean;
+  error: string;
+}
+
 export interface Settings {
   theme: Theme;
   privacyMode: boolean;
@@ -33,6 +66,8 @@ export interface Settings {
   checkinMinute: number;
   menuBarBalance: boolean;
   activeProvider: Provider;
+  updateMirror: string;
+  autoCheckUpdate: boolean;
   traeDataPath: string;
   traeExecutablePath: string;
   qoderDataPath: string;
@@ -347,7 +382,7 @@ export interface Bridge {
   apiStart(): Promise<ApiStatus>;
   apiStop(): Promise<ApiStatus>;
   apiRotate(): Promise<ApiStatus>;
-  apiCopy(kind: "key" | "baseUrl" | "curl"): Promise<void>;
+  apiCopy(kind: "key" | "baseUrl" | "lanUrl" | "curl"): Promise<void>;
   apiModels(): Promise<{
     object: string;
     data: {
@@ -432,7 +467,13 @@ export interface Bridge {
   importAccounts(password: string): Promise<number | null>;
   importLegacy(): Promise<{ imported: number; skipped: number }>;
   exportUsage(query: UsageQuery): Promise<boolean>;
-  checkUpdate(): Promise<{ available: boolean; version: string }>;
+  checkUpdate(): Promise<UpdateState>;
+  updateState(): Promise<UpdateState>;
+  downloadUpdate(): Promise<UpdateState>;
+  cancelUpdate(): Promise<boolean>;
+  installUpdate(): Promise<UpdateState>;
+  revealUpdate(): Promise<string>;
+  onUpdate(callback: (state: UpdateState) => void): () => void;
   openLink(
     name:
       | "github"
@@ -453,12 +494,15 @@ export interface Bridge {
 export interface ApiConfig {
   port: number;
   autoStart: boolean;
+  lan: boolean;
   accounts: { provider: WorkBuddyProvider; id: string }[];
   strategy: "round_robin" | "sequential" | "expiring";
 }
 export interface ApiStatus {
   running: boolean;
   baseUrl: string;
+  lanUrl?: string;
+  lanUrls?: string[];
   activeRequests: number;
   hasKey: boolean;
   config: ApiConfig;

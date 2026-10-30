@@ -47,6 +47,10 @@ import {
   Command,
   ChevronRight,
   LayoutDashboard,
+  CircleAlert,
+  CircleCheck,
+  RefreshCcw,
+  Rocket,
 } from "lucide-react";
 import type {
   Account,
@@ -60,6 +64,7 @@ import type {
   Provider,
   TaskPlan,
   TaskOptions,
+  UpdateState,
 } from "./types";
 import {
   Button,
@@ -1631,6 +1636,245 @@ function TransferModal({
   );
 }
 
+const updatePhaseLabel: Record<UpdateState["phase"], string> = {
+  idle: "尚未检查",
+  checking: "正在检查更新",
+  available: "有新版本可用",
+  latest: "已是最新版本",
+  downloading: "正在下载安装包",
+  ready: "安装包已就绪",
+  installing: "正在安装并重启",
+  error: "更新未完成",
+};
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let size = value;
+  let index = 0;
+  while (size >= 1024 && index < units.length - 1) {
+    size /= 1024;
+    index++;
+  }
+  return `${size >= 100 || index === 0 ? Math.round(size) : size.toFixed(1)} ${units[index]}`;
+}
+
+function UpdatePanel({
+  disabled,
+  run,
+  settings,
+  change,
+  fallback,
+  setFallback,
+}: {
+  disabled: boolean;
+  run: (label: string, action: () => Promise<unknown>, success?: string) => void;
+  settings: Settings;
+  change: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
+  fallback: string;
+  setFallback: (value: string) => void;
+}) {
+  const api = window.workbuddy;
+  const [state, setState] = useState<UpdateState | null>(null);
+  const [checking, setChecking] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void api
+      .updateState()
+      .then((value) => {
+        if (active) setState(value);
+      })
+      .catch(() => {});
+    const dispose = api.onUpdate((value) => {
+      if (active) setState(value);
+    });
+    return () => {
+      active = false;
+      dispose();
+    };
+  }, []);
+  const phase = state?.phase ?? "idle";
+  const busy = phase === "checking" || phase === "downloading" || phase === "installing";
+  const stale = Boolean(state && state.currentVersion !== "");
+  const downloadLabel =
+    phase === "downloading"
+      ? `下载中 ${state?.percent ?? 0}%`
+      : phase === "ready"
+        ? "重新下载"
+        : "下载更新";
+  return (
+    <>
+      <div className="setting-row">
+        <div>
+          <div className="setting-label">更新线路</div>
+          <div className="setting-description">
+            国内网络默认走镜像；直连仅在镜像不可用时作为兜底。
+          </div>
+        </div>
+        <select
+          aria-label="更新线路"
+          disabled={disabled}
+          value={settings.updateMirror}
+          onChange={(event) => change("updateMirror", event.target.value)}
+        >
+          <option value="auto">自动（优先国内镜像）</option>
+          <option value="gh-proxy">gh-proxy.com</option>
+          <option value="ghproxy">ghproxy.net</option>
+          <option value="ghfast">ghfast.top</option>
+          <option value="direct">直连 GitHub</option>
+        </select>
+      </div>
+      <Toggle
+        label="启动时检查更新"
+        description="应用启动后静默检查一次，只提示，不自动下载或安装。"
+        checked={settings.autoCheckUpdate}
+        disabled={disabled}
+        onChange={(value) => change("autoCheckUpdate", value)}
+      />
+      <div className="setting-row">
+        <div>
+          <div className="setting-label">应用内更新</div>
+          <div className="setting-description">
+            检查、下载、校验、安装与重启都在应用内完成，无需前往 GitHub。
+          </div>
+        </div>
+        <div className="update-actions">
+          <Button
+            icon={RefreshCw}
+            disabled={disabled || busy}
+            onClick={() =>
+              void run("检查更新", async () => {
+                setChecking(true);
+                try {
+                  const result = await api.checkUpdate();
+                  setState(result);
+                  setFallback("");
+                } finally {
+                  setChecking(false);
+                }
+              })
+            }
+          >
+            {checking ? "检查中…" : "检查更新"}
+          </Button>
+          {(phase === "available" || phase === "ready") && (
+            <Button
+              icon={Download}
+              disabled={disabled || busy}
+              onClick={() =>
+                void run("下载更新", async () => {
+                  const result = await api.downloadUpdate();
+                  setState(result);
+                })
+              }
+            >
+              {downloadLabel}
+            </Button>
+          )}
+          {phase === "downloading" && (
+            <Button
+              icon={X}
+              danger
+              disabled={disabled}
+              onClick={() => void api.cancelUpdate()}
+            >
+              取消下载
+            </Button>
+          )}
+          {phase === "ready" && (
+            <Button
+              icon={Rocket}
+              primary
+              disabled={disabled || !state?.packaged}
+              onClick={() =>
+                void run("安装更新", async () => {
+                  const result = await api.installUpdate();
+                  setState(result);
+                })
+              }
+            >
+              安装并重启
+            </Button>
+          )}
+          {(phase === "ready" || phase === "error") && (
+            <Button
+              icon={FolderOpen}
+              disabled={disabled}
+              onClick={() => void run("打开下载目录", () => api.revealUpdate())}
+            >
+              打开下载目录
+            </Button>
+          )}
+        </div>
+      </div>
+      <div className={`update-status update-status-${phase}`}>
+        <div className="update-status-head">
+          {phase === "error" ? (
+            <CircleAlert size={16} />
+          ) : phase === "ready" || phase === "latest" ? (
+            <CircleCheck size={16} />
+          ) : (
+            <RefreshCcw size={16} className={busy ? "spin" : ""} />
+          )}
+          <strong>{updatePhaseLabel[phase]}</strong>
+          {stale && (
+            <span className="update-current">
+              当前 {state?.currentVersion}
+              {state?.version && phase !== "latest" ? ` → ${state.version}` : ""}
+            </span>
+          )}
+        </div>
+        {phase === "downloading" && (
+          <div className="update-progress" role="progressbar" aria-valuenow={state?.percent ?? 0} aria-valuemin={0} aria-valuemax={100}>
+            <span style={{ width: `${state?.percent ?? 0}%` }} />
+          </div>
+        )}
+        {phase === "downloading" && (
+          <div className="update-meta">
+            {formatBytes(state?.received ?? 0)} / {formatBytes(state?.total ?? 0)}
+          </div>
+        )}
+        {phase === "available" && state?.asset && (
+          <div className="update-meta">
+            将下载 {state.asset.name} · {formatBytes(state.asset.size)}
+          </div>
+        )}
+        {phase === "ready" && (
+          <div className="update-meta">
+            {state?.asset?.name}
+            {state?.verified ? " · SHA256 已校验" : " · 未取得校验文件"}
+            {state?.packaged ? "" : " · 开发模式下不支持自动安装"}
+          </div>
+        )}
+        {(state?.notes ?? "").trim() !== "" && (phase === "available" || phase === "ready") && (
+          <pre className="update-notes">{state?.notes}</pre>
+        )}
+        {phase === "error" && state?.error && (
+          <div className="update-meta">{state.error}</div>
+        )}
+        {(phase === "available" || phase === "ready" || phase === "downloading") && (
+          <div className="update-meta">
+            线路 {state?.source ? new URL(state.source).host : state?.mirror || "auto"}
+            {phase !== "downloading" && state?.htmlUrl ? " · 也可在下载页面手动安装" : ""}
+          </div>
+        )}
+      </div>
+      {!state?.packaged && phase === "ready" && (
+        <div className="notice info">
+          <Info size={16} />
+          当前是开发模式，安装包已下载但无法自动安装。
+        </div>
+      )}
+      {fallback && (
+        <div className="notice info">
+          <Info size={16} />
+          {fallback}
+        </div>
+      )}
+    </>
+  );
+}
+
 function SettingsPage({
   state,
   disabled,
@@ -2349,36 +2593,14 @@ function SettingsPage({
                   </div>
                   <span className="badge">三种产品 · 六个客户端</span>
                 </div>
-                <div className="setting-row">
-                  <div>
-                    <div className="setting-label">检查新版本</div>
-                    <div className="setting-description">
-                      从本项目 GitHub Releases 查询，下载后手动安装。
-                    </div>
-                  </div>
-                  <Button
-                    icon={RefreshCw}
-                    disabled={disabled}
-                    onClick={() =>
-                      void run("检查更新", async () => {
-                        const result = await api.checkUpdate();
-                        setUpdate(
-                          result.available
-                            ? `发现新版本 ${result.version}，请前往下载页面安装。`
-                            : "当前已经是最新正式版本。",
-                        );
-                      })
-                    }
-                  >
-                    检查更新
-                  </Button>
-                </div>
-                {update && (
-                  <div className="notice info">
-                    <Info size={16} />
-                    {update}
-                  </div>
-                )}
+                <UpdatePanel
+                  disabled={disabled}
+                  run={run}
+                  settings={settings}
+                  change={change}
+                  fallback={update}
+                  setFallback={setUpdate}
+                />
                 <div className="about-links">
                   <Button
                     icon={ExternalLink}

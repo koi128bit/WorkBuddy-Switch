@@ -2750,3 +2750,84 @@ body:has(.tray-panel) {
   padding: 4px 8px;
   min-height: 28px;
 }
+
+/* 应用内更新面板 */
+.update-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.update-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 11px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+.update-status-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+.update-status-head strong {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.update-status-error {
+  border-color: rgba(214, 69, 69, 0.35);
+}
+.update-status-error .update-status-head {
+  color: var(--red);
+}
+.update-status-ready {
+  border-color: rgba(46, 160, 96, 0.35);
+}
+.update-status-ready .update-status-head {
+  color: var(--success);
+}
+.update-current {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.update-progress {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.update-progress span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: var(--chart-blue);
+  transition: width 0.18s ease-out;
+}
+.update-meta {
+  font-size: 11.5px;
+  color: var(--muted);
+  word-break: break-all;
+}
+.update-notes {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 190px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  font-family: inherit;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

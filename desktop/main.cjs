@@ -22,7 +22,7 @@ const { windowMaterial } = require("./window-material.cjs");
 const { configureIcons } = require("./icons.cjs");
 const fs = require("node:fs/promises");
 const { pathToFileURL } = require("node:url");
-const { execFile } = require("node:child_process");
+const { execFile, spawn } = require("node:child_process");
 const { promisify } = require("node:util");
 const exec = promisify(execFile);
 let mainWindow,
@@ -37,6 +37,23 @@ let mainWindow,
   automationTimer,
   tickBusy = false;
 let quitGate, apiGateway, applicationIcons;
+let installingUpdate = false;
+let updateController = null;
+let updateRelease = null;
+let updateFile = "";
+let updateState = {
+  phase: "idle",
+  version: "",
+  notes: "",
+  htmlUrl: "",
+  source: "",
+  asset: null,
+  received: 0,
+  total: 0,
+  percent: 0,
+  verified: false,
+  error: "",
+};
 const noticeKeys = new Map();
 const workbuddyStores = new Map();
 let clientDefinitions = {};
@@ -67,8 +84,8 @@ const links = {
   releases: "https://github.com/koi128bit/WorkBuddy-Switch/releases/latest",
   privacy:
     "https://github.com/koi128bit/WorkBuddy-Switch/blob/main/SECURITY.md",
-  license: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.9/LICENSE",
-  notices: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.9/NOTICE",
+  license: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v2.0.0/LICENSE",
+  notices: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v2.0.0/NOTICE",
   growth: "https://www.codebuddy.cn/profile/growth-center",
 };
 app.setName("WorkBuddy Switch");
@@ -123,7 +140,7 @@ else {
 }
 app.on("before-quit", (event) => {
   if (!apiGateway?.draining) apiGateway?.beginShutdown();
-  if (quitGate && !quitGate.request(event)) return;
+  if (!installingUpdate && quitGate && !quitGate.request(event)) return;
   editorOAuth?.close();
   quitting = true;
   clearInterval(refreshTimer);
@@ -518,10 +535,12 @@ async function start() {
   apiHandle("api-models", () => apiGateway.models(true));
   apiHandle("api-test", (model) => apiGateway.testChat(string(model, 180)));
   apiHandle("api-copy", (kind) => {
-    const base = apiGateway.snapshot().baseUrl;
+    const status = apiGateway.snapshot();
+    const base = status.baseUrl;
     const values = {
       key: () => apiGateway.getKey(),
       baseUrl: () => base,
+      lanUrl: () => status.lanUrl || base,
       curl: () =>
         `curl '${base}/chat/completions' -H "Authorization: Bearer $WORKBUDDY_API_KEY" -H 'Content-Type: application/json' -d '{"model":"auto","messages":[{"role":"user","content":"你好"}]}'`,
     };
@@ -1018,7 +1037,12 @@ async function start() {
     if (!Object.hasOwn(links, name)) throw new Error("链接无效。");
     return shell.openExternal(links[name]);
   });
-  handle("update", checkUpdate);
+  handle("update", checkUpdate, true);
+  handle("update-state", () => updateSnapshot(), true);
+  handle("update-download", downloadUpdate, true);
+  handle("update-cancel", cancelUpdate, true);
+  handle("update-install", installUpdate, true);
+  handle("update-reveal", revealUpdate, true);
   createWindow();
   createTray();
   createTrayWindow();
@@ -1028,6 +1052,10 @@ async function start() {
   });
   createApplicationMenu();
   scheduleRefresh();
+  if (store.settings.autoCheckUpdate && app.isPackaged)
+    setTimeout(() => {
+      checkUpdate().catch((error) => store.log(safeMessage(error), "info"));
+    }, 6000);
   if (store.settings.autoCapture) {
     try {
       await store.captureCurrent();
@@ -1285,33 +1313,164 @@ function notifyBalances() {
     }).show();
   }
 }
+const updater = () => import("./updater.mjs");
+function updateMirror() {
+  const value = store?.settings?.updateMirror;
+  return typeof value === "string" && value.trim() ? value.trim() : "auto";
+}
+function updateTarget() {
+  return { platform: process.platform, arch: process.arch };
+}
+function updateSnapshot() {
+  return {
+    ...updateState,
+    currentVersion: app.getVersion(),
+    mirror: updateMirror(),
+    packaged: app.isPackaged,
+  };
+}
+function publishUpdate(patch) {
+  updateState = { ...updateState, ...patch };
+  const payload = updateSnapshot();
+  for (const window of [mainWindow, trayWindow]) {
+    if (window && !window.isDestroyed())
+      window.webContents.send("wb:update", payload);
+  }
+  return payload;
+}
 async function checkUpdate() {
-  let response;
+  const { fetchRelease, isNewer, selectAsset, releaseSources } =
+    await updater();
+  publishUpdate({ phase: "checking", error: "", percent: 0, received: 0 });
+  let release;
   try {
-    response = await net.fetch(
-      "https://api.github.com/repos/koi128bit/WorkBuddy-Switch/releases/latest",
-      {
-        headers: { Accept: "application/vnd.github+json" },
-        signal: AbortSignal.timeout(12000),
-        redirect: "error",
-      },
-    );
-  } catch {
-    throw new Error("更新检查失败，请检查网络后重试。");
+    release = await fetchRelease({
+      request: (url, options) => net.fetch(url, options),
+      sources: releaseSources({ mirror: updateMirror() }),
+      currentVersion: app.getVersion(),
+      timeoutMs: 9000,
+    });
+  } catch (error) {
+    publishUpdate({ phase: "error", error: safeMessage(error) });
+    throw error;
   }
-  if (!response.ok)
-    throw new Error(`更新服务暂不可用（HTTP ${response.status}）。`);
-  const data = await response.json();
-  const match = String(data.tag_name).match(/^v?(\d+)\.(\d+)\.(\d+)$/);
-  if (!match) throw new Error("未找到有效的正式版本。");
-  const remote = match.slice(1).map(Number),
-    local = app.getVersion().split(".").map(Number);
-  let available = false;
-  for (let i = 0; i < 3; i++) {
-    if (remote[i] !== local[i]) {
-      available = remote[i] > local[i];
-      break;
-    }
+  updateRelease = release;
+  updateFile = "";
+  const available = isNewer(release.version, app.getVersion());
+  const asset = available
+    ? selectAsset(release.assets, updateTarget())
+    : null;
+  return publishUpdate({
+    phase: available ? "available" : "latest",
+    version: release.version,
+    notes: release.notes.slice(0, 4000),
+    htmlUrl: release.htmlUrl,
+    source: release.source,
+    asset: asset
+      ? { name: asset.name, size: asset.size, target: asset.target }
+      : null,
+    verified: false,
+    total: asset?.size ?? 0,
+  });
+}
+async function downloadUpdate() {
+  const { downloadUpdate: fetchPackage, updateDirectory, selectAsset } =
+    await updater();
+  if (!updateRelease) throw new Error("请先检查更新，再下载安装包。");
+  if (updateController) throw new Error("安装包正在下载，请稍候。");
+  const asset = selectAsset(updateRelease.assets, updateTarget());
+  if (!asset) throw new Error("未找到适用于当前系统的安装包。");
+  const directory = updateDirectory(app.getPath("userData"));
+  await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+  updateController = new AbortController();
+  publishUpdate({
+    phase: "downloading",
+    error: "",
+    percent: 0,
+    received: 0,
+    total: asset.size || 0,
+  });
+  try {
+    const result = await fetchPackage({
+      request: (url, options) => net.fetch(url, options),
+      release: updateRelease,
+      target: updateTarget(),
+      mirror: updateMirror(),
+      directory,
+      signal: updateController.signal,
+      onProgress: ({ received, total, percent }) =>
+        publishUpdate({ received, total, percent }),
+    });
+    updateFile = result.file;
+    return publishUpdate({
+      phase: "ready",
+      percent: 100,
+      verified: Boolean(result.verified),
+      total: result.size,
+      error: "",
+    });
+  } catch (error) {
+    updateFile = "";
+    publishUpdate({
+      phase: error?.name === "AbortError" ? "available" : "error",
+      error: error?.name === "AbortError" ? "" : safeMessage(error),
+    });
+    throw error;
+  } finally {
+    updateController = null;
   }
-  return { available, version: match[0].replace(/^v/, "") };
+}
+function cancelUpdate() {
+  if (!updateController) return false;
+  updateController.abort();
+  return true;
+}
+async function revealUpdate() {
+  const { updateDirectory } = await updater();
+  const directory = updateDirectory(app.getPath("userData"));
+  if (updateFile) {
+    shell.showItemInFolder(updateFile);
+    return updateFile;
+  }
+  await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+  await shell.openPath(directory);
+  return directory;
+}
+async function installUpdate() {
+  if (!updateFile) throw new Error("请先下载安装包。");
+  if (!app.isPackaged)
+    throw new Error("当前是开发模式，请在安装后的应用里执行更新。");
+  const { selectAsset, updateDirectory } = await updater();
+  const installer = await import("./update-installer.mjs");
+  const asset =
+    updateRelease && selectAsset(updateRelease.assets, updateTarget());
+  const kind = installer.installKindFor({
+    platform: process.platform,
+    target: asset?.target ?? "",
+  });
+  const directory = updateDirectory(app.getPath("userData"));
+  const script = installer.installScript({
+    platform: process.platform,
+    kind,
+    file: updateFile,
+    appPath: process.execPath,
+    pid: process.pid,
+    directory,
+    logFile: path.join(directory, "update-install.log"),
+  });
+  await fs.writeFile(script.file, script.content, { mode: 0o700 });
+  await fs.chmod(script.file, 0o700).catch(() => {});
+  publishUpdate({ phase: "installing", percent: 100, error: "" });
+  installingUpdate = true;
+  try {
+    await apiGateway?.stop?.();
+  } catch {}
+  const child = spawn(script.command, script.args, {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  child.unref();
+  setTimeout(() => app.quit(), 250);
+  return updateSnapshot();
 }

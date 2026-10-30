@@ -89,7 +89,7 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
     rootUrl + (region === "workbuddy-global" ? "/global" : "/cn");
   const update = <K extends keyof ApiConfig>(key: K, value: ApiConfig[K]) =>
     setDraft({ ...draft, [key]: value });
-  const copy = (kind: "key" | "baseUrl" | "curl") =>
+  const copy = (kind: "key" | "baseUrl" | "lanUrl" | "curl") =>
     void run(
       "复制",
       () => api.apiCopy(kind),
@@ -99,7 +99,9 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
             ? "API Key 已复制。"
             : kind === "baseUrl"
               ? "Base URL 已复制。"
-              : "调用示例已复制。",
+              : kind === "lanUrl"
+                ? "局域网地址已复制。"
+                : "调用示例已复制。",
         ),
     );
   return (
@@ -190,9 +192,27 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
           </div>
         </div>
         <p className="quiet-note">
-          OpenAI / Anthropic 兼容 · 仅监听 127.0.0.1 ·
-          随应用退出停止。调用会消耗所选账号积分，实际计费由官方确定。
+          OpenAI / Anthropic 兼容 ·{" "}
+          {status.config.lan
+            ? "本机回环与局域网地址同时可用"
+            : "仅监听 127.0.0.1"}{" "}
+          · 随应用退出停止。调用会消耗所选账号积分，实际计费由官方确定。
         </p>
+        {status.config.lan && (
+          <div className="api-connection-row">
+            <div>
+              <small>局域网地址</small>
+              <code>{status.lanUrl || "未检测到可用的局域网地址"}</code>
+            </div>
+            <Button
+              icon={Copy}
+              disabled={!!busy || !status.lanUrl}
+              onClick={() => copy("lanUrl")}
+            >
+              复制局域网地址
+            </Button>
+          </div>
+        )}
       </section>
       <section
         className="settings-card api-realms"
@@ -323,6 +343,13 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
               checked={draft.autoStart}
               disabled={locked}
               onChange={(value) => update("autoStart", value)}
+            />
+            <Toggle
+              label="允许局域网访问"
+              description="同一网段的设备、本机容器或虚拟机可用局域网地址调用；仍需 API Key，并继续拒绝浏览器跨站请求。关闭时只监听 127.0.0.1。"
+              checked={draft.lan}
+              disabled={locked}
+              onChange={(value) => update("lan", value)}
             />
             <div className="api-account-list" aria-label="API 账号范围">
               {status.accounts.map((account) => {

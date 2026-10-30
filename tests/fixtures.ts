@@ -28,6 +28,8 @@ export function fixtureState(): Snapshot {
     checkinMinute: 0,
     menuBarBalance: true,
     activeProvider: "workbuddy" as const,
+    updateMirror: "auto",
+    autoCheckUpdate: true,
     traeDataPath: "",
     traeExecutablePath: "",
     qoderDataPath: "",
@@ -310,6 +312,7 @@ export function fixtureApi(): ApiStatus {
     config: {
       port: 8317,
       autoStart: false,
+      lan: false,
       accounts: [{ provider: "workbuddy", id: "wb-sample-001" }],
       strategy: "round_robin",
     },
