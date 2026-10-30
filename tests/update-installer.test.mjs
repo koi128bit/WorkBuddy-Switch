@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import path from "node:path";
 import {
   appStartTarget,
   installKindFor,
@@ -42,7 +43,9 @@ test("appStartTarget 在 macOS 优先使用 .app 包", () => {
 });
 
 test("updateDirectory 落在 userData/updates", () => {
-  assert.equal(updateDirectory("/tmp/data"), "/tmp/data/updates");
+  // 用原生 path 计算期望值，Windows 上同样是合法的断言。
+  assert.equal(updateDirectory("/tmp/data"), path.join("/tmp/data", "updates"));
+  assert.match(updateDirectory("/tmp/data"), /updates$/);
   assert.throws(() => updateDirectory(""));
 });
 
@@ -105,8 +108,9 @@ test("macOS pkg 安装脚本等待进程退出后走管理员授权并重启", (
     directory: "/tmp/u",
   });
   assert.equal(script.command, "/bin/sh");
-  assert.deepEqual(script.args, ["/tmp/u/apply-update.sh"]);
-  assert.equal(script.file, "/tmp/u/apply-update.sh");
+  const scriptPath = path.join("/tmp/u", "apply-update.sh");
+  assert.deepEqual(script.args, [scriptPath]);
+  assert.equal(script.file, scriptPath);
   assert.match(script.content, /^#!\/bin\/sh\n/);
   assert.match(script.content, /while kill -0 4321 /);
   assert.match(script.content, /with administrator privileges/);
