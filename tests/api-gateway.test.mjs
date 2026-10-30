@@ -522,7 +522,7 @@ test("upstream empty finish strings on intermediate chunks are treated as unfini
   assert.equal(response.status, 200);
   assert.equal((await response.json()).choices[0].message.content, "OK");
 });
-test("system instructions retain their role and official refusals are not replayed", async (t) => {
+test("a channel refusal relocates the system role exactly once", async (t) => {
   const f = await fixture(t, async () =>
     Response.json({ code: 11128 }, { status: 400 }),
   );
@@ -532,9 +532,33 @@ test("system instructions retain their role and official refusals are not replay
   ];
   const response = await f.send({ messages });
   assert.equal(response.status, 400);
-  assert.equal(f.calls.length, 1);
-  assert.deepEqual(JSON.parse(f.calls[0].options.body).messages, messages);
+  assert.equal(f.calls.length, 2, "只允许一次搬运重试");
+  const first = JSON.parse(f.calls[0].options.body).messages;
+  assert.deepEqual(first, messages, "首次转发必须逐字保留 system 角色");
+  const retried = JSON.parse(f.calls[1].options.body).messages;
+  assert.equal(retried[0].role, "system");
+  assert.match(retried[0].content, /^You are WorkBuddy/);
+  assert.equal(retried[1].role, "user");
+  assert.match(retried[1].content, /private system instructions$/);
+  assert.equal(
+    retried.filter((message) => message.role === "system").length,
+    1,
+    "重试后只能剩一条中性 system",
+  );
   assert.equal(f.gateway.snapshot().recent[0].upstreamCode, "11128");
+});
+test("only the channel refusal is retried; other official errors are not replayed", async (t) => {
+  const f = await fixture(t, async () =>
+    Response.json({ code: 11136 }, { status: 403 }),
+  );
+  const response = await f.send({
+    messages: [
+      { role: "system", content: "private system instructions" },
+      { role: "user", content: "private-client-prompt" },
+    ],
+  });
+  assert.equal(response.status, 403);
+  assert.equal(f.calls.length, 1, "非渠道拒绝不得重放");
 });
 test("a channel refusal that arrives after output started is never replayed", async (t) => {
   const f = await fixture(

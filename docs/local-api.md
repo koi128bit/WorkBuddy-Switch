@@ -89,7 +89,10 @@ CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 claude
 | `You are a/an … agent\|assistant … powered by / built on / running in / running on / based on …` | `You are a coding agent running in the Codex CLI`、`You are a Claude agent, built on Anthropic's Claude Agent SDK`、`You are an AI agent powered by DeepSeek Harness.` |
 | 上述句式末尾带 `official CLI` | `You are Claude Code, Anthropic's official CLI for Claude.` |
 
-规则按族匹配而不是按产品名硬编码，新出现的 Agent 客户端不用等网关发版。普通系统提示词（含 `You are a helpful assistant.`、`You are an AI agent.`、`You are DeepSeek Harness.` 这类非第三方身份开场，以及 Gemini CLI、GitHub Copilot、Cursor 等中性表述）原样转发，不加任何前缀。
+规则按族匹配而不是按产品名硬编码，新出现的 Agent 客户端不用等网关发版。
+
+除开头匹配之外，官方还会对 system 角色做语义筛查：一份内容正常、但读起来像第三方 Agent 运行时的系统提示词（例如同时出现 teammate 交接与工具编排说明）会被同样拒成 `11128`，此时开头加引导语也没用，而把同一段文字放进 user 角色就能通过。网关因此把这条拒绝做成可恢复路径：命中 `11128` 且请求带 system 消息时，自动改成「中性 system 引导句 + 原 system 原文作为首条 user」重发一次。只重试一次、只对 `11128` 重试，原文逐字保留；其它错误码（`11136`、`12153`、额度类）不重放，流式已开始输出后的拒绝也不重放。
+普通系统提示词（含 `You are a helpful assistant.`、`You are an AI agent.`、`You are DeepSeek Harness.` 这类非第三方身份开场，以及 Gemini CLI、GitHub Copilot、Cursor 等中性表述）原样转发，不加任何前缀。
 
 ## OpenCode
 

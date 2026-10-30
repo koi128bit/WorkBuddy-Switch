@@ -1,5 +1,12 @@
 # 更新日志
 
+## 1.9.9 · 2026-10-30
+
+- 修复第二类 `11128 Illegal API invocation from an unapproved channel`：官方除了看首条 system 的开头，还会对 system 角色做**语义筛查**——一份内容正常、但读起来像第三方 Agent 运行时（编排、委托、harness 身份、teammate 交接）的系统提示词，即使开头加了中性引导语、请求头齐全，仍会被拒。实测同一段文字放到 user 角色后立刻通过。
+- 网关现在把渠道拒绝变成**可恢复**：收到 11128 且请求里有 system 消息时，自动重排为「中性 system + 原 system 原文转 user」再发一次，只重试一次、只对 11128 重试；原文逐字保留，不做改写、不做删减。其它官方错误码（如 11136、12153、额度类）一律不重放，避免重复计费。
+- 已经开始输出后再出现的渠道拒绝仍然不重放（流式场景保持原行为）。
+- 该路径由真实抓包驱动：从 DSH（DeepSeek Harness）会话抓到 148 KB、5 条消息、53 个工具的真实请求，逐段二分定位到 system 内容触发，并把修复验证到 200。
+
 ## 1.9.8 · 2026-10-30
 
 - 渠道指纹匹配改为结构化规则：1.9.7 只列了 Codex CLI、Claude Code、Claude Agent SDK 与 `x-anthropic-billing-header` 四条前缀，DeepSeek Harness 的 `You are an AI agent powered by DeepSeek Harness.` 仍被官方拦成 `11128`。现在按「自报身份的 Agent 开场」这一族匹配（`You are <Product> Code|CLI`、`You are a/an … agent/assistant … powered by / built on / running in / running on / based on …`、含 `official CLI`），新出现的 Agent 客户端不用等发版就能通过。

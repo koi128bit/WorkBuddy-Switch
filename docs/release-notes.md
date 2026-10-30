@@ -1,18 +1,10 @@
-WorkBuddy Switch 1.9.8：渠道指纹改成结构化匹配，Codex CLI、Claude Code、DeepSeek Harness 等第三方 Agent 都能直连。
+WorkBuddy Switch 1.9.9：官方对 system 角色的语义筛查也能过了，DSH / DeepSeek Harness 这类长系统提示词会话不再被 11128 拦。
 
-- 1.9.7 的指纹是硬编码清单，DeepSeek Harness 的 `You are an AI agent powered by DeepSeek Harness.` 仍被官方拦成 `11128`。本版改为按「自报身份的 Agent 开场」整族匹配（`You are <Product> Code|CLI`、`You are a/an … agent/assistant … powered by / built on / running in / running on / based on …`、含 `official CLI`），新出现的 Agent 客户端无需等发版即可通过。
-- 规则已逐条对照官方接口：该句裸发 400、加引导语 200；`You are an AI agent`、`You are DeepSeek Harness.`、`You are a helpful assistant.` 等非第三方身份开场仍原样转发，不加任何前缀。
-- 定位并修复官方 `11128 Illegal API invocation from an unapproved channel`：官方只检查**首条 system 消息的开头几个字符**，命中 Codex CLI、Claude Code、Claude Agent SDK 或 `x-anthropic-billing-header` 等第三方 Agent 指纹即拒绝，与请求头无关。网关在同一条 system 消息前补一句中性引导语后再转发，原始提示词逐字保留、角色仍是 system，不改写也不降级为 user。
-- 前缀规则在 `www.workbuddy.ai` 与 `www.codebuddy.cn` 双向验证：裸指纹稳定 400，加引导语稳定 200。
-- 上游请求补齐 `X-Agent-Purpose`、`X-Conversation-Request-ID`、`X-Conversation-Message-ID` 三个必需头；缺任一个都会得到 `11128 request illegal`。
-- 真实 Agent 端到端验收通过：Codex CLI 0.159.2 与 Claude Code 2.1.169 在国内版与国际版各跑一轮工具调用闭环（执行 `pwd` 并回读结果），上游 5/5 请求 200，Claude Code 返回 `subtype: success`、`num_turns: 2`。
-- 官方 OpenAI / Anthropic SDK 契约 20/20 通过：Chat Completions 非流式/流式/工具、Responses 非流式/流式/工具、Messages 非流式/流式/工具、`/models`、`count_tokens`，国内与国际各 10 项。
-- 系统提示词恢复按 system 原样转发；1.9.6 中合并到 user 消息的做法会让指令优先级失真，本版不再使用。
-- API 页按地区给出地址：OpenAI / Codex 用 `http://127.0.0.1:8317/cn/v1` 与 `/global/v1`，Claude Code 用 `/cn` 与 `/global` 根地址；原 `/v1` 继续支持 `global:` 前缀。
+- 1.9.8 之后仍有一类 `11128 Illegal API invocation from an unapproved channel`：官方除检查首条 system 的开头，还会对 system 角色做语义筛查——内容正常、但读起来像第三方 Agent 运行时（编排、委托、harness 身份、teammate 交接）的系统提示词会被拒，哪怕开头加了中性引导语、三个必需头都在。实测把同一段文字挪到 user 角色后立刻 200。
+- 网关把这条拒绝变成可恢复：命中 11128 且请求里带 system 消息时，自动重排成「中性 system 引导句 + 原 system 原文作为首条 user」重发一次。只重试一次、只对 11128 重试，原文逐字保留、不删改，其它错误码（11136 / 12153 / 额度类）不重放，避免重复计费；流式已开始输出后的拒绝仍然不重放。
+- 定位过程用的是真实抓包：从 DSH 会话抓到 148 KB、5 条消息、53 个工具的真实上行请求，逐段二分把触发点收敛到 system 内容，再把修复验到 200。
+- 1.9.8 的结构化渠道指纹（`You are <Product> Code|CLI`、`You are … agent/assistant … powered by / built on / running in …`）继续保留，两类拒绝互补。
+- 上游请求仍带 `X-Agent-Purpose`、`X-Conversation-Request-ID`、`X-Conversation-Message-ID` 三个必需头。
+- 官方 OpenAI / Anthropic SDK 契约 20/20 通过，Codex CLI 与 Claude Code 在国内版与国际版的工具闭环继续通过。
 
 提供 Mac Apple Silicon / Intel、Windows x64、Linux x64 / ARM64 安装包，附 SHA256SUMS.txt。
-
-macOS 使用 ad-hoc 签名，未做 Apple 公证；Windows 尚未做 Authenticode 签名。
-
-许可全文：https://github.com/koi128bit/WorkBuddy-Switch/blob/v1.9.7/LICENSE
-原项目：https://github.com/koi128bit/WorkBuddy-Switch
