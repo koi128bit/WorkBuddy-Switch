@@ -43,7 +43,7 @@ WorkBuddy 国际版账号单独保存在 `workbuddy-global/`，导入与读取�
 1. WorkBuddy：`www.codebuddy.cn` / `www.workbuddy.cn` 的国内接口，以及 `www.workbuddy.ai` 的国际接口。确认真实对话任务后，使用固定官方 `copilot.tencent.com/v2/chat/completions` 接口，并向国内活动接口记录该次真实完成的对话。
 2. Trae：`www.trae.cn` / `www.trae.ai` 官方授权页、`api.trae.cn` / `grow-normal.trae.ai` 对应地区授权接口。Qoder：`qoder.com.cn` / `qoder.com` 官方授权页、`openapi.qoder.com.cn` / `openapi.qoder.sh` 对应地区授权及资料接口。
 3. 用户打开官方授权页时，由系统浏览器完成登录。
-4. 用户检查新版本时访问本仓库 GitHub Releases API；打开仓库、Wiki、下载与安全说明使用固定 GitHub 地址。
+4. 用户检查更新、下载更新包时访问本仓库 GitHub Releases API 与安装包地址。默认线路经第三方 GitHub 代理（`gh-proxy.com`、`ghproxy.net`、`ghfast.top`）转发同一份仓库地址，只在代理不可用时回落直连；可在设置里固定线路或填写自定义镜像。下载完成后用官方 `SHA256SUMS.txt` 校验。打开仓库、Wiki、下载与安全说明使用固定 GitHub 地址。
 
 请求禁用自动跨站重定向，登录 URL 校验协议、主机、用户信息和端口。浏览器授权请求在主进程内存中保存，5 分钟过期，可取消。网络使用 Electron 系统代理。
 
@@ -91,7 +91,7 @@ Mac PKG 固定替换应用程序目录中的同标识应用，不更改用户数
 
 ## 本机 API 服务
 
-仅监听 IPv4 回环地址，默认关闭。所有 HTTP 路由验证独立随机 Bearer Key，并校验 Host，拒绝 Origin 跨站请求。配置与密钥不经 HTTP 管理接口暴露；密钥只由可信主窗口请求复制到系统剪贴板，托盘及子框架无权复制或变更 API 设置。
+默认关闭，且默认只监听 IPv4 回环地址。2.0.0 起提供 **允许局域网访问** 开关：用户显式打开并重启服务后改绑 `0.0.0.0`，额外接受本机各网卡地址、主机名与 `*.local` 作为 Host；回环地址继续可用，其余主机名仍返回 `403 local_clients_only`。所有 HTTP 路由验证独立随机 Bearer Key，拒绝 Origin 与 `Sec-Fetch-Site: cross-site` 请求；局域网模式不改变这条跨站边界。配置与密钥不经 HTTP 管理接口暴露；密钥只由可信主窗口请求复制到系统剪贴板，托盘及子框架无权复制或变更 API 设置。
 
 密钥由现有系统加密服务保护；密钥环暂时不可用时保留原文件，不自动轮换或降级明文。账号只来自明确选择的 WorkBuddy 地区账号库。请求禁用重定向，固定发往对应官方域名，不转发任意目标或调用者的鉴权头。流响应中途失败不重新发送付费请求。
 

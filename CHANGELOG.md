@@ -1,5 +1,14 @@
 # 更新日志
 
+## 2.0.1 · 2026-10-31
+
+- 修复 Codex 经 CC Switch 等客户端接入时必定失败的 `400 仅支持客户端 function、custom 和 namespace 工具，托管工具须在客户端关闭。`。Codex 走 `wire_api="responses"` 时默认会挂 `{"type":"web_search","external_web_access":false}`，此前网关在解析工具列表阶段直接拒绝，整轮对话连一条消息都发不出去。
+- 托管工具改为**静默忽略**而不是报错：`web_search`、`web_extraction`、`file_search`、`local_shell`、`shell`、`code_interpreter`、`code_execution`、`image_generation`、`computer`、`mcp`、`memory`、`text_editor`、`bash`、`apply_patch` 全部跳过，客户端自己声明的 `function` / `custom` / `namespace` 工具照旧展开并转发。若一轮请求里除托管工具外没有别的工具，`tools` 字段整体省略，避免向上游发送空数组。
+- Responses 历史里的托管工具条目（`web_search_call`、`file_search_call`、`local_shell_call`、`image_generation_call`、`mcp_call` 等）同样跳过，不再中断续聊。
+- Messages 协议同步放宽：`web_search_20250305`、`bash_20250124`、`text_editor_20250728`、`computer_20250124`、`code_execution_*` 等托管工具与 `server_tool_use` / `*_tool_result` 历史块被忽略，不必再在 Claude Code 侧手动关掉托管工具。
+- 用真实 Codex CLI 0.159.2 抓到的原始 58 KB 载荷（含 `namespace multi_agent_v1`、7 个 `function`、1 个 `web_search`）回归：改动前 400 `unsupported_tool`，改动后上游 200，`codex exec` 端到端输出 `CODEX_OK`，`turn.completed` 用量 14802 输入 / 3 输出。
+- `tests/` 新增 3 条用例覆盖托管工具剔除、纯托管工具下 `tools` 省略、托管工具历史跳过；原先断言"托管工具必须 400"的两条旧用例按新行为改写。全量 368 项通过。
+
 ## 2.0.0 · 2026-10-31
 
 本版两条主线：本机 API 可选开放局域网访问，以及应用内完成更新全流程。

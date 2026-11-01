@@ -15,7 +15,7 @@
 
 也支持无 `/v1` 前缀和尾部斜杠。使用同一密钥，支持 `Authorization: Bearer …` 或 `x-api-key`；同时发送两者时必须一致。
 
-三种对话格式均支持文本、图片、本地函数工具、完整历史、流式与非流式响应。工具在调用客户端执行。本机 Responses 为无状态模式：设置 `store:false` 并发送完整 `input` 历史；不提供 `previous_response_id`、后台任务、托管网页搜索或服务端 shell。Messages 不伪造推理签名；外部服务的加密推理块不能转入本服务。
+三种对话格式均支持文本、图片、本地函数工具、完整历史、流式与非流式响应。工具在调用客户端执行。本机 Responses 为无状态模式：设置 `store:false` 并发送完整 `input` 历史；不提供 `previous_response_id`、后台任务或服务端 shell。客户端附带的托管工具（`web_search`、`file_search`、`local_shell`、`code_interpreter`、`image_generation`、`mcp` 等，以及历史里的 `web_search_call` 一类条目）会被静默忽略而不是让整轮请求失败——Codex 默认就挂 `web_search`，因此可以直接接入，无需先在客户端关闭托管工具。Messages 不伪造推理签名；外部服务的加密推理块不能转入本服务。
 
 ## 局域网访问（可选）
 
@@ -64,7 +64,7 @@ requires_openai_auth = false
 supports_websockets = false
 ```
 
-支持 Responses 的 `function`、`namespace`、`custom` 工具及其结果历史：命名空间和自由文本输入转换为上游函数格式，响应恢复原名称、命名空间、工具类型和原始输入。自定义工具参数会在完成后验证并恢复；工具始终由 Codex 执行。暂不支持服务端托管工具和 WebSocket。
+支持 Responses 的 `function`、`namespace`、`custom` 工具及其结果历史：命名空间和自由文本输入转换为上游函数格式，响应恢复原名称、命名空间、工具类型和原始输入。自定义工具参数会在完成后验证并恢复；工具始终由 Codex 执行。服务端托管工具不在本机执行，会被忽略而不是报错；暂不支持 WebSocket。
 
 参考 [Codex provider 配置](https://developers.openai.com/codex/config-advanced) 与 [OpenAI 函数及自定义工具协议](https://developers.openai.com/api/docs/guides/function-calling)。
 
@@ -82,7 +82,7 @@ ENABLE_TOOL_SEARCH=false \
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 claude
 ```
 
-使用 Messages 协议；支持本地函数、工具结果和图片工具结果。官方托管工具搜索须关闭。若原配置含 `ANTHROPIC_CUSTOM_HEADERS`、其他 OAuth token 或 apiKeyHelper，需避免它们覆盖本次密钥；同时发送 Bearer 和 x-api-key 时必须一致。`POST /global/v1/messages/count_tokens` 可供客户端做预算预估，无需发送 AI 对话；响应头 `X-Token-Count-Estimated: true` 表示它是按请求字节数得到的本机估算，不是官方 tokenizer、实际用量或计费依据，不影响原请求输出预算。
+使用 Messages 协议；支持本地函数、工具结果和图片工具结果。Anthropic 的托管工具（`web_search_20250305`、`bash_20250124`、`text_editor_20250728`、`computer_20250124`、`code_execution_*`）与历史里的 `server_tool_use` / `*_tool_result` 会被忽略，不需要在客户端手动关闭。若原配置含 `ANTHROPIC_CUSTOM_HEADERS`、其他 OAuth token 或 apiKeyHelper，需避免它们覆盖本次密钥；同时发送 Bearer 和 x-api-key 时必须一致。`POST /global/v1/messages/count_tokens` 可供客户端做预算预估，无需发送 AI 对话；响应头 `X-Token-Count-Estimated: true` 表示它是按请求字节数得到的本机估算，不是官方 tokenizer、实际用量或计费依据，不影响原请求输出预算。
 
 参考 [Claude Code 网关说明](https://code.claude.com/docs/en/llm-gateway)。协议兼容与官方账号是否接受 API 调用分别验收；自 1.9.7 起两者均已通过：官方 OpenAI / Anthropic SDK 契约 20/20（国内与国际各 10 项），Codex CLI 0.159.2 与 Claude Code 2.1.169 在国内版、国际版各跑通一轮工具调用闭环，上游请求全部 200。
 

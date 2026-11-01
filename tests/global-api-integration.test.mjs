@@ -47,15 +47,57 @@ test("a Codex plugin toolset can exceed 128 tools without dropping definitions",
     "responses",
   );
   assert.equal(prepared.payload.tools.length, 300);
-  assert.throws(
-    () =>
-      prepareProtocolRequest(
-        { model: "fast-model", input: "hi", tools: [{ type: "web_search" }] },
-        "responses",
-      ),
-    /托管工具/,
+});
+
+test("a stock Codex request keeps working when it carries hosted tools", () => {
+  // Codex always attaches web_search; the previous behaviour rejected the whole
+  // conversation with 400 "托管工具须在客户端关闭", so a real Codex client could
+  // not complete a single turn.
+  const prepared = prepareProtocolRequest(
+    {
+      model: "fast-model",
+      input: "hi",
+      tools: [
+        { type: "web_search", external_web_access: false },
+        { type: "local_shell" },
+        { type: "file_search", vector_store_ids: [] },
+        { type: "function", name: "lookup", parameters: { type: "object" } },
+      ],
+    },
+    "responses",
+  );
+  assert.deepEqual(
+    prepared.payload.tools.map((tool) => tool.function.name),
+    ["lookup"],
+  );
+  assert.deepEqual(
+    [...prepared.toolRegistry.hosted].sort(),
+    ["file_search", "local_shell", "web_search"],
   );
 });
+
+test("hosted tool history entries are skipped instead of failing the turn", () => {
+  const prepared = prepareProtocolRequest(
+    {
+      model: "fast-model",
+      input: [
+        { role: "user", content: [{ type: "input_text", text: "search" }] },
+        { type: "web_search_call", id: "ws_1", status: "completed" },
+        { type: "file_search_call", id: "fs_1", queries: ["x"] },
+        { type: "local_shell_call", id: "sh_1", status: "completed" },
+        { role: "assistant", content: [{ type: "output_text", text: "ok" }] },
+      ],
+      tools: [{ type: "web_search" }],
+    },
+    "responses",
+  );
+  assert.deepEqual(
+    prepared.payload.messages.map((message) => message.role),
+    ["user", "assistant"],
+  );
+  assert.equal(prepared.payload.tools, undefined);
+});
+
 
 test("global desktop catalog includes Flash even when the CLI alias list omits it", async () => {
   const models = await fetchApiModels(globalDocument, async () =>

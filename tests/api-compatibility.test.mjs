@@ -584,7 +584,7 @@ test("Messages streams tool-use block lifecycle and usage accepted by Anthropic 
   assert.match(s, /tool_use/);
   assert.ok(!s.includes("[DONE]"));
 });
-test("all protocols reject conflicting keys, unsafe images and unsupported hosted tools without upstream requests", async (t) => {
+test("all protocols reject conflicting keys and unsafe images without upstream requests", async (t) => {
   const f = await fixture(t);
   assert.equal(
     (
@@ -609,15 +609,22 @@ test("all protocols reject conflicting keys, unsafe images and unsupported hoste
       (await post(f, "/responses", { model: "fast-model", input })).status,
       400,
     );
-  assert.equal(
-    (
-      await post(f, "/responses", {
-        model: "fast-model",
-        input: "hi",
-        tools: [{ type: "web_search" }],
-      })
-    ).status,
-    400,
-  );
   assert.equal(f.calls.length, 0);
+});
+test("hosted tools are dropped so a stock Codex turn still reaches the upstream", async (t) => {
+  const f = await fixture(t);
+  const r = await post(f, "/responses", {
+    model: "fast-model",
+    input: "hi",
+    tools: [
+      { type: "web_search", external_web_access: false },
+      { type: "function", name: "lookup", parameters: { type: "object" } },
+    ],
+  });
+  assert.equal(r.status, 200);
+  const sent = JSON.parse(f.calls[0].options.body);
+  assert.deepEqual(
+    sent.tools.map((tool) => tool.function.name),
+    ["lookup"],
+  );
 });

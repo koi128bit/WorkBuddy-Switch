@@ -7,21 +7,39 @@ const invalid = (message) => {
 };
 const key = (namespace, name) => JSON.stringify([namespace || "", name]);
 
+// Hosted tools run on the provider side and never reach the calling client, so
+// this gateway cannot honour them: the upstream only accepts function tools.
+// Dropping one is the only behaviour that keeps a stock Codex/Responses client
+// working, because those clients always attach `web_search` (and sometimes
+// `local_shell`, `file_search`, `code_interpreter`, `image_generation`, `mcp`).
+// Rejecting the request instead would break every conversation at turn one.
+const HOSTED_TOOL =
+  /^(web_search|web_extraction|file_search|computer|code_interpreter|code_execution|image_generation|local_shell|mcp|memory|text_editor|bash|apply_patch|shell)/;
+export const isHostedTool = (type) =>
+  typeof type === "string" && type !== "function" && HOSTED_TOOL.test(type);
+const hosted = isHostedTool;
+
 // Namespaces and freeform tools belong to the client. Only their wire format
 // changes; this registry never executes a tool or retains data across requests.
 export class ResponseTools {
   byIdentity = new Map();
   byWire = new Map();
+  hosted = new Set();
   constructor(tools) {
     if (tools === undefined) return;
     if (!Array.isArray(tools)) invalid("tools 应为数组。");
     const add = (tool, namespace, namespaceDescription) => {
-      if (!["function", "custom"].includes(tool?.type))
+      if (!["function", "custom"].includes(tool?.type)) {
+        if (hosted(tool?.type)) {
+          this.hosted.add(tool.type);
+          return;
+        }
         throw new ApiError(
           400,
           "unsupported_tool",
           "仅支持客户端 function、custom 和 namespace 工具，托管工具须在客户端关闭。",
         );
+      }
       if (
         typeof tool.name !== "string" ||
         !/^[A-Za-z0-9_-]{1,128}$/.test(tool.name)

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { ApiError, prepareApiRequest, MESSAGE_LIMIT } from "./api-upstream.mjs";
-import { ResponseTools } from "./api-tools.mjs";
+import { ResponseTools, isHostedTool } from "./api-tools.mjs";
 
 const object = (v) => v && typeof v === "object" && !Array.isArray(v);
 const invalid = (message) => {
@@ -112,8 +112,13 @@ function responsesInput(raw, registry) {
           reasoning_content: summary,
         });
     } else {
+      // Hosted tool calls in the history (web_search_call, file_search_call,
+      // local_shell_call, image_generation_call, mcp_call…) were produced by
+      // the provider, not by this client, and cannot be replayed upstream.
+      // Skipping them keeps the surrounding conversation usable.
+      if (isHostedTool(item.type)) continue;
       if (item.type && item.type !== "message")
-        unsupported("input 包含不支持的托管工具或文件类型。");
+        unsupported("input 包含不支持的类型。");
       const content =
         typeof item.content === "string"
           ? item.content
@@ -129,7 +134,10 @@ function responsesInput(raw, registry) {
       messages.push({ role: item.role, content });
     }
   }
-  const tools = raw.tools === undefined ? undefined : registry.definitions();
+  // When every tool the client sent was hosted, there is nothing left to
+  // forward; omit the field instead of sending an empty array upstream.
+  const declared = raw.tools === undefined ? undefined : registry.definitions();
+  const tools = declared?.length ? declared : undefined;
   const format = raw.text?.format;
   return {
     model: raw.model,
@@ -221,7 +229,15 @@ function messagesInput(raw) {
           content: texts.join("\n"),
         });
         content.push(...images);
-      } else unsupported("Messages 目前支持文本、图片和本地函数工具。");
+      } else if (
+        // Server-side tool traffic recorded by another backend:
+        // server_tool_use, web_search_tool_result, bash_code_execution_tool_result,
+        // code_execution_tool_result, text_editor_code_execution_tool_result…
+        part?.type === "server_tool_use" ||
+        /_tool_result$/.test(part?.type ?? "")
+      )
+        continue;
+      else unsupported("Messages 目前支持文本、图片和本地函数工具。");
     }
     flush();
   }
@@ -238,17 +254,24 @@ function messagesInput(raw) {
     tools:
       raw.tools === undefined
         ? undefined
-        : list(raw.tools, "tools").map((tool) => {
+        : list(raw.tools, "tools").flatMap((tool) => {
+            // Anthropic hosted tools (web_search_20250305, bash_20250124,
+            // text_editor_20250728, computer_20250124, code_execution_*) run
+            // server-side; the upstream has no equivalent, so they are
+            // dropped instead of failing the whole conversation.
+            if (isHostedTool(tool?.type)) return [];
             if (!object(tool) || (tool.type && tool.type !== "custom"))
               unsupported("Messages 仅支持客户端函数工具。");
-            return {
-              type: "function",
-              function: {
-                name: tool.name,
-                description: tool.description,
-                parameters: tool.input_schema,
+            return [
+              {
+                type: "function",
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: tool.input_schema,
+                },
               },
-            };
+            ];
           }),
     tool_choice:
       choice?.type === "tool"
