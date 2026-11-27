@@ -2,7 +2,7 @@
   <img src="assets/icon.png" width="96" height="96" alt="WorkBuddy Switch 猫咪图标" />
   <h1>WorkBuddy Switch</h1>
   <p><strong>把账号、积分、对话和本机 API，放进一个桌面工作台。</strong></p>
-  <p>WorkBuddy · Trae · Qoder ｜ 国内版与国际版 ｜ macOS · Windows · Linux</p>
+  <p>WorkBuddy · Trae · Qoder · 千问办公 ｜ macOS · Windows · Linux</p>
   <p>
     <a href="https://github.com/koi128bit/WorkBuddy-Switch/releases/latest">下载最新版</a> ·
     <a href="https://github.com/koi128bit/WorkBuddy-Switch/wiki">使用指南</a> ·
@@ -25,7 +25,7 @@
 
 <p align="center"><img src=".github/assets/overview.png" width="1120" alt="总览工作台：积分、Token 趋势、账号分布、任务状态与本机 API，演示数据" /></p>
 
-WorkBuddy Switch 是由 [koi128bit](https://github.com/koi128bit) 维护的独立社区桌面工具。统一的 Raycast Dark 工作台提供账号切换、积分任务、对话续接、用量分析和本机 API 转发，支持三个产品、两个地区的六个独立客户端入口。
+WorkBuddy Switch 是由 [koi128bit](https://github.com/koi128bit) 维护的独立社区桌面工具。统一的 Raycast Dark 工作台提供账号切换、积分任务、对话续接、用量分析和本机 API 转发，支持四种产品的七个客户端入口。
 
 截图均为演示账号与模拟数据。功能以所下载版本的 [发布说明](https://github.com/koi128bit/WorkBuddy-Switch/releases) 为准；官方积分、奖励、模型权限和任务资格以官方服务返回为准。
 
@@ -50,6 +50,7 @@ WorkBuddy Switch 是由 [koi128bit](https://github.com/koi128bit) 维护的独�
 | **WorkBuddy 国际版** | 独立账号库、官方授权、切换、加密备份 | 独立本地对话、用量与 API 转发；活动不调用国内版接口 |
 | **Trae CN / 国际版** | 真实 UID 识别、网页登录、续期、完整登录快照切换 | 备注、收藏、搜索、托盘切换与失败恢复 |
 | **Qoder CN / 国际版** | 真实 UID 识别、网页登录、续期、完整登录快照切换 | 备注、收藏、搜索、托盘切换与失败恢复 |
+| **千问办公（QwenWork 国内版）** | 客户端登录、本机加密快照、切换与失败恢复 | 通过本机 qwenwork2api 转发模型请求，或直连开放平台云端会话接口 |
 
 产品、地区和操作系统分别适配，账号库、授权域名、应用标识与数据目录隔离。支持范围是桌面客户端；Qoder IDE 插件、独立 CLI 和 Trae SOLO 使用不同的程序与登录目录。
 
@@ -101,6 +102,14 @@ macOS 包使用 ad-hoc 签名，尚未做 Apple 公证；Windows 包尚未做 Au
 <p align="center"><img src=".github/assets/trae-cn.png" width="1120" alt="Trae CN 登录快照管理，演示账号" /></p>
 
 Trae / Qoder 的切换测试使用隔离文件、模拟接口与原生主机，尚未使用用户真实账号逐项验收；本机恢复检查通过不代表官方服务已确认登录。
+
+### 千问办公
+
+在侧栏选择 **千问办公**。在官方桌面客户端登录第一个账号，点击 **保存当前账号** 并取一个容易辨认的名称。登录第二个账号并再次保存后，即可通过账号列表或托盘切换。切换前先结束千问办公中正在运行的任务。
+
+Windows 默认识别 `%APPDATA%\QwenWorkCN`。工具按原样保存客户端的加密登录文件，切换时保留本机设置和工作记录。如果千问办公提示登录已失效，请在官方客户端重新登录并保存快照。
+
+在 **千问办公 → API** 配置上游并启动服务。OpenAI 兼容模式需要在本机运行 qwenwork2api，并填写其签发的 API Key。开放平台模式可直连官方云端会话服务，使用应用用户访问令牌。模型工具使用页面上复制的本机地址和密钥。[千问办公 API 接入说明](docs/local-api.md#千问办公)
 
 ## 积分、任务与猫猫旅行
 
@@ -250,7 +259,7 @@ macOS 使用原生背景模糊，Windows 11 22H2 及以上使用 Acrylic，其�
 - [Sliverkiss / workbuddy2api](https://github.com/Sliverkiss/workbuddy2api)：NOTICE 记载的上游原项目。原始地址目前返回 404，仍保留原作者署名与来源记录。
 - [linguo2625469 / workbuddy2api-panel](https://github.com/linguo2625469/workbuddy2api-panel)：协议文档与实现参考。
 
-第三方依赖及许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。WorkBuddy、Trae、Qoder 的名称与商标归各自权利人所有，本项目与其官方没有隶属关系，也不代表官方背书。
+第三方依赖及许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。WorkBuddy、Trae、Qoder 和千问办公的名称与商标归各自权利人所有，本项目与其官方没有隶属关系，也不代表官方背书。
 
 ## 本地开发
 

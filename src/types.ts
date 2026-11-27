@@ -4,6 +4,7 @@ export type Provider =
   | WorkBuddyProvider
   | "trae-cn"
   | "trae-global"
+  | "qwenwork-cn"
   | "qoder-cn"
   | "qoder-global";
 export type EditorProvider = Exclude<Provider, WorkBuddyProvider>;
@@ -72,6 +73,8 @@ export interface Settings {
   traeExecutablePath: string;
   qoderDataPath: string;
   qoderExecutablePath: string;
+  qwenworkDataPath: string;
+  qwenworkExecutablePath: string;
   workbuddyGlobalAuthPath: string;
   workbuddyGlobalDataPath: string;
   workbuddyGlobalExecutablePath: string;
@@ -379,10 +382,12 @@ export interface BackupFile {
 export interface Bridge {
   apiStatus(): Promise<ApiStatus>;
   apiSave(config: ApiConfig): Promise<ApiStatus>;
+  apiSaveQwenWork(value: { mode: QwenWorkApiMode; port: number; key: string } | null): Promise<ApiStatus>;
+  qwenworkCatalog(): Promise<string[]>;
   apiStart(): Promise<ApiStatus>;
   apiStop(): Promise<ApiStatus>;
   apiRotate(): Promise<ApiStatus>;
-  apiCopy(kind: "key" | "baseUrl" | "lanUrl" | "curl"): Promise<void>;
+  apiCopy(kind: "key" | "baseUrl" | "lanUrl" | "curl" | "qwenworkUrl"): Promise<void>;
   apiModels(): Promise<{
     object: string;
     data: {
@@ -498,7 +503,9 @@ export interface ApiConfig {
   accounts: { provider: WorkBuddyProvider; id: string }[];
   strategy: "round_robin" | "sequential" | "expiring";
 }
+export type QwenWorkApiMode = "compatible" | "official";
 export interface ApiStatus {
+  qwenwork: { configured: boolean; mode: QwenWorkApiMode; port: number; error: string };
   running: boolean;
   baseUrl: string;
   lanUrl?: string;

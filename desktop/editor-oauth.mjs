@@ -125,6 +125,8 @@ export class EditorOAuth {
   }
   async start(provider) {
     const definition = editorDefinition(provider);
+    if (!definition.capabilities.browserLogin)
+      throw new Error("请在千问办公客户端完成登录，再保存当前账号。");
     for (const flow of this.flows.values())
       if (flow.provider === provider) this.cancel(provider, flow.id);
     const context = await this.context(provider);
@@ -414,6 +416,8 @@ export class EditorOAuth {
   }
   async refresh(provider, account) {
     const definition = editorDefinition(provider);
+    if (!definition.capabilities.refresh)
+      throw new Error("请在千问办公客户端更新登录并重新保存快照。");
     if (!account.refreshToken)
       throw new Error("没有可用的刷新凭据，请重新授权。");
     if (definition.product === "qoder") {

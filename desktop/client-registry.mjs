@@ -128,6 +128,21 @@ export const clients = Object.freeze({
     linuxKeyApplication: "qoder-cn-app",
     authKind: "qoder",
   }),
+  "qwenwork-cn": definition("qwenwork-cn", "qwenwork", "cn", "千问办公", {
+    key: "qwenwork",
+    app: "QwenWorkCN.app",
+    executable: "QwenWorkCN.exe",
+    bundle: "cn.qwenwork.desktop.mac",
+    data: "QwenWorkCN",
+    windows: ["QwenWorkCN", "QwenWork CN", "千问办公"],
+    linuxNames: ["qwenworkcn", "QwenWorkCN"],
+    linuxExecutables: [
+      "/opt/apps/QwenWorkCN/QwenWorkCN",
+      "/opt/QwenWorkCN/qwenworkcn",
+      "/usr/bin/qwenworkcn",
+    ],
+    capabilities: { browserLogin: false, refresh: false, api: true },
+  }),
   "qoder-global": definition(
     "qoder-global",
     "qoder",
@@ -165,7 +180,7 @@ export function clientDefinition(id) {
 export function editorDefinition(id) {
   const result = clientDefinition(id);
   if (result.product === "workbuddy")
-    throw new Error("请选择 Trae 或 Qoder 客户端。");
+    throw new Error("请选择 Trae、Qoder 或千问办公客户端。");
   return result;
 }
 export const editorDefinitions = Object.freeze(

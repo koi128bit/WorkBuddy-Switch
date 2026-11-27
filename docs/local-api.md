@@ -17,6 +17,21 @@
 
 三种对话格式均支持文本、图片、本地函数工具、完整历史、流式与非流式响应。工具在调用客户端执行。本机 Responses 为无状态模式：设置 `store:false` 并发送完整 `input` 历史；不提供 `previous_response_id`、后台任务或服务端 shell。客户端附带的托管工具（`web_search`、`file_search`、`local_shell`、`code_interpreter`、`image_generation`、`mcp` 等，以及历史里的 `web_search_call` 一类条目）会被静默忽略而不是让整轮请求失败——Codex 默认就挂 `web_search`，因此可以直接接入，无需先在客户端关闭托管工具。Messages 不伪造推理签名；外部服务的加密推理块不能转入本服务。
 
+## 千问办公
+
+在客户端选择器中选择 **千问办公 → API**。千问办公有独立的上游授权，切换桌面账号后，API 继续使用页面中配置的凭据。默认 Base URL 为 `http://127.0.0.1:8317/qwenwork/v1`，实际端口随本机服务设置变化。调用方使用 **复制本机 API Key** 取得的密钥。本机服务可单独为千问办公启动。
+
+| 上游类型 | 配置 | 可调用的接口（相对于 Base URL） |
+| --- | --- | --- |
+| qwenwork2api | 启动本机服务，填写其监听端口（默认 4021）和控制台签发的 API Key | `GET /models`、`POST /chat/completions`，支持 JSON 与 SSE |
+| 千问办公开放平台 | 填写开放平台签发给应用用户的 `oauth_app` 访问令牌 | `GET /session/session-modes`、`POST /session/sessions`、`GET /session/sessions/{id}`、`POST /session/sessions/{id}/prompt`、`GET /session/sessions/{id}/events` 和 `/events/stream` |
+
+选择第一种模式后点击 **获取模型**，将返回的模型 ID 填入 OpenAI 兼容工具。模型权限和计费依据上游所授权的账号。[qwenwork2api 接口说明](https://github.com/jianhx189/qwenwork2api)
+
+开放平台模式直连 `https://openapi.qwenwork.cn`。点击 **获取执行模式** 可验证 `session.mode.read` 权限。创建云端会话还需要 `session.session.execute` 权限，请在请求体传入与令牌匹配的 `app_id` 和任务文本 `text`。创建成功返回 HTTP 202，使用返回的 `session_id` 读取状态或订阅事件，读取会话需 `session.session.read`。创建和发送提示均只提交一次。[开放平台接口总览](https://docs.qwenwork.cn/developer-standard/open-api) · [创建应用会话](https://docs.qwenwork.cn/developer-standard/open-api/session/session-create)
+
+两种模式均只接受本机连接。上游密钥由系统凭据存储加密保存。密钥过期时在同一页面重新输入并保存。
+
 ## 局域网访问（可选）
 
 服务默认只监听 `127.0.0.1`。在 **API → 账号与调度** 打开 **允许局域网访问**、保存设置并重新启动服务后，同一网段的手机、平板、另一台电脑，或本机的容器/虚拟机，可用局域网地址直接调用：

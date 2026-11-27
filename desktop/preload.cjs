@@ -9,6 +9,8 @@ const call =
 contextBridge.exposeInMainWorld("workbuddy", {
   apiStatus: call("api-status"),
   apiSave: call("api-save"),
+  apiSaveQwenWork: call("api-qwenwork-save"),
+  qwenworkCatalog: call("api-qwenwork-catalog"),
   apiStart: call("api-start"),
   apiStop: call("api-stop"),
   apiRotate: call("api-rotate"),

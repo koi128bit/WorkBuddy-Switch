@@ -84,6 +84,7 @@ import appIcon from "../assets/icon.png";
 import { Accounts } from "./Accounts";
 import { RewardsPage } from "./Rewards";
 import { EditorAccounts, EditorPaths } from "./EditorAccounts";
+import { QwenWorkApiPage } from "./QwenWorkApiPage";
 import { apiFor, providerNames, isWorkBuddy } from "./providers";
 import { LoginModal } from "./LoginModal";
 import { TaskRunPanel } from "./TaskRunPanel";
@@ -232,7 +233,7 @@ export function App() {
   }, [api, query, provider]);
   useEffect(() => {
     if (!isWorkBuddy(provider))
-      setPage((current) => (current === "settings" ? current : "accounts"));
+      setPage((current) => (current === "settings" || (provider === "qwenwork-cn" && current === "api") ? current : "accounts"));
     else if (provider === "workbuddy-global")
       setPage((current) => (current === "overview" ? "accounts" : current));
     setSelectedAccounts(null);
@@ -441,6 +442,7 @@ export function App() {
     (item) =>
       (isWorkBuddy(provider) &&
         (item.id !== "overview" || provider === "workbuddy")) ||
+      (provider === "qwenwork-cn" && item.id === "api") ||
       item.id === "accounts" ||
       item.id === "settings",
   );
@@ -574,7 +576,7 @@ export function App() {
                         : page === "usage"
                           ? "本地 Token 记录"
                           : page === "api"
-                            ? "OpenAI 兼容接口"
+                            ? provider === "qwenwork-cn" ? "千问办公 · 本机转发" : "OpenAI 兼容接口"
                             : "偏好与自动任务"}
               </span>
             </div>
@@ -762,6 +764,7 @@ export function App() {
           {isWorkBuddy(provider) && page === "api" && (
             <ApiPage privacy={privacy} />
           )}
+          {provider === "qwenwork-cn" && page === "api" && <QwenWorkApiPage />}
           {page === "settings" && (
             <SettingsPage
               key={provider}
@@ -2349,7 +2352,7 @@ function SettingsPage({
               </>,
             )}
             {(
-              ["trae-cn", "trae-global", "qoder-cn", "qoder-global"] as const
+              ["trae-cn", "trae-global", "qoder-cn", "qoder-global", "qwenwork-cn"] as const
             ).map((provider) => (
               <EditorPaths
                 key={provider}
@@ -2403,7 +2406,7 @@ function SettingsPage({
           <>
             {section(
               "WorkBuddy 账号备份",
-              "WorkBuddy 网页授权可跨设备备份；Trae 与 Qoder 的客户端登录快照仅限本机。",
+              "WorkBuddy 网页授权可跨设备备份。Trae、Qoder 和千问办公的登录快照保存在本机。",
               <>
                 <div className="setting-row">
                   <div>
@@ -2591,7 +2594,7 @@ function SettingsPage({
                           : "Windows"}
                     </p>
                   </div>
-                  <span className="badge">三种产品 · 六个客户端</span>
+                  <span className="badge">四种产品 · 七个客户端</span>
                 </div>
                 <UpdatePanel
                   disabled={disabled}
@@ -2633,7 +2636,7 @@ function SettingsPage({
                   <p>
                     没有遥测、广告或第三方凭据上传。WorkBuddy
                     凭据用于官方授权与积分接口；Trae 和 Qoder
-                    授权同样仅发送至对应地区官方接口，客户端登录快照在本机恢复。账号库采用系统加密，对话和用量在本机处理。
+                    授权同样仅发送至对应地区官方接口，客户端登录快照在本机恢复。千问办公使用单独配置的上游密钥。账号库采用系统加密。
                   </p>
                   <TextLink arrow onClick={() => void api.openLink("privacy")}>
                     查看安全与隐私说明
@@ -2662,7 +2665,7 @@ function SettingsPage({
               </>,
             )}
             <p className="about-disclaimer">
-              本项目是独立工具，与 WorkBuddy、Trae 和 Qoder 官方没有隶属关系。
+              本项目是独立工具，与 WorkBuddy、Trae、Qoder 和千问办公官方没有隶属关系。
             </p>
           </>
         )}

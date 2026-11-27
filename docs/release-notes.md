@@ -1,15 +1,18 @@
-WorkBuddy Switch 2.0.1：修掉 Codex 接进来第一句话就报错的问题。
+WorkBuddy Switch 2.0.2 新增千问办公（QwenWork）桌面账号切换和本机 API 转发。
 
-**Codex 不再被托管工具卡住**
+**切换千问办公账号**
 
-- 之前用 CC Switch 或直接配 Codex 接本机 API，第一轮就会收到 `400 仅支持客户端 function、custom 和 namespace 工具，托管工具须在客户端关闭。`。原因是 Codex 走 `responses` 协议时默认会带上 `{"type":"web_search","external_web_access":false}`，网关在解析工具列表阶段直接拒绝了整个请求。
-- 现在托管工具被**静默忽略**而不是报错：`web_search`、`web_extraction`、`file_search`、`local_shell`、`shell`、`code_interpreter`、`code_execution`、`image_generation`、`computer`、`mcp`、`memory`、`text_editor`、`bash`、`apply_patch` 全部跳过。你自己声明的 `function`、`custom`、`namespace` 工具照旧展开并转发，行为不变。
-- 如果一轮请求里除托管工具外没有别的工具，`tools` 字段整体省略，不会向上游发空数组。
-- 续聊也修了：Responses 历史里的 `web_search_call`、`file_search_call`、`local_shell_call`、`image_generation_call`、`mcp_call` 这类条目会被跳过，不再中断对话。
-- Messages 协议同步放宽，`web_search_20250305`、`bash_20250124`、`text_editor_20250728`、`computer_20250124`、`code_execution_*` 与 `server_tool_use` / `*_tool_result` 历史块被忽略，Claude Code 侧不用再手动关托管工具。
+在千问办公桌面端登录第一个账号，回到 WorkBuddy Switch 选择「千问办公 → 保存当前账号」并命名。第二个账号同样操作，之后即可从账号列表或系统托盘切换。Windows 默认识别 `%APPDATA%\QwenWorkCN`。工具在本机加密保存登录快照，并支持恢复切换前的登录状态。切换前请先结束千问办公中正在运行的任务。
 
-**验证**
+**连接本机 API**
 
-- 用真实 Codex CLI 0.159.2 抓到的原始 58 KB 请求载荷（`namespace multi_agent_v1` + 7 个 `function` + 1 个 `web_search`）回归：改动前稳定 400 `unsupported_tool`，改动后上游 200。
-- `codex exec` 端到端跑通，输出 `CODEX_OK`，`turn.completed` 用量 14802 输入 / 3 输出。
-- 新增 3 条测试覆盖托管工具剔除、纯托管工具下 `tools` 省略、托管工具历史跳过；全量 368 项通过。
+在「千问办公 → API」选择上游，启动服务后复制本机地址和密钥。默认地址为 `http://127.0.0.1:8317/qwenwork/v1`。API 使用单独配置的上游授权。
+
+- OpenAI 兼容模式连接本机运行的 qwenwork2api，支持模型列表、普通对话和流式对话。[qwenwork2api 接口说明](https://github.com/jianhx189/qwenwork2api)
+- 开放平台模式使用应用用户访问令牌直连官方云端会话，可创建会话、发送提示和订阅事件。[千问办公开放平台文档](https://docs.qwenwork.cn/developer-standard/open-api)
+
+**下载**
+
+Windows x64 可选 `windows-x64-setup.exe` 安装版或 `windows-x64-portable.exe` 便携版。macOS 提供 Apple 芯片和 Intel 版本，Linux 提供 x64 和 ARM64 版本。附件 `SHA256SUMS.txt` 列出了各安装包的校验值。
+
+账号切换和失败恢复已用隔离的登录快照验证，流式转发已通过本机 HTTP 测试。已在 macOS 识别千问办公 2.2.1。Windows 上两个真实千问办公账号之间的切换，以及使用有效开放平台令牌完成云端对话，仍待实测。

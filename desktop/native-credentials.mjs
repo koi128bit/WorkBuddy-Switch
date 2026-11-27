@@ -166,6 +166,7 @@ export class NativeCredentials {
   }
   async identify(provider, document, directory, options = {}) {
     const definition = editorDefinition(provider);
+    if (definition.product === "qwenwork") return null;
     if (definition.product === "trae") {
       const raw = document.entries["iCubeAuthInfo://icube.cloudide"];
       if (!raw || (typeof raw !== "string" && typeof raw !== "object"))

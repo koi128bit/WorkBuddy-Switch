@@ -1,5 +1,10 @@
 # 更新日志
 
+## 2.0.2 · 2026-11-27 · 千问办公
+
+- 支持保存、命名和切换千问办公桌面账号的加密登录快照，Windows 默认识别 `%APPDATA%\QwenWorkCN`。
+- 新增千问办公本机 API，可连接本机 qwenwork2api 转发 OpenAI 兼容对话，或使用应用用户令牌直连开放平台云端会话。[接入说明](docs/local-api.md#千问办公)
+
 ## 2.0.1 · 2026-10-31
 
 - 修复 Codex 经 CC Switch 等客户端接入时必定失败的 `400 仅支持客户端 function、custom 和 namespace 工具，托管工具须在客户端关闭。`。Codex 走 `wire_api="responses"` 时默认会挂 `{"type":"web_search","external_web_access":false}`，此前网关在解析工具列表阶段直接拒绝，整轮对话连一条消息都发不出去。

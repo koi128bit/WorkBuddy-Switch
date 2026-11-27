@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { createServer } from "node:net";
+import { createServer as createHttpServer } from "node:http";
+import { editorDataPath } from "../desktop/editor-controller.mjs";
 
 const directory = await fs.mkdtemp(path.join(os.tmpdir(), "wb-desktop-smoke-"));
 const authFile = path.join(directory, "fixture-auth.info");
@@ -93,6 +95,10 @@ await fs.writeFile(
     "iCubeAuthInfo://icube.cloudide": "tc:fake-editor-fixture-credential",
   }),
 );
+const qwenDirectory = editorDataPath("qwenwork-cn", {}, { home: directory, env: { APPDATA: directory } });
+await fs.mkdir(qwenDirectory, { recursive: true });
+await fs.writeFile(path.join(qwenDirectory, "auth-v2.dat"), Buffer.concat([Buffer.from("v10"), Buffer.alloc(32, 1)]));
+await fs.writeFile(path.join(qwenDirectory, "Local State"), JSON.stringify({ os_crypt: { encrypted_key: "fixture-machine" } }));
 let desktop;
 try {
   desktop = await electron.launch({
@@ -358,8 +364,9 @@ try {
     }),
     /选择/,
   );
-  assert.equal(Object.keys(initial.editors).length, 4);
-  assert.equal(Object.keys(initial.providers).length, 6);
+  assert.equal(Object.keys(initial.editors).length, 5);
+  assert.equal(Object.keys(initial.providers).length, 7);
+  assert.equal(initial.providers["qwenwork-cn"].capabilities.browserLogin, false);
   await page.evaluate(() =>
     window.workbuddy.workbuddyScope("workbuddy-global", "capture", []),
   );
@@ -457,6 +464,27 @@ try {
   }, apiPort);
   const listening = await page.evaluate(() => window.workbuddy.apiStart());
   assert.equal(listening.running, true);
+  await page.evaluate(() => window.workbuddy.captureEditor("qwenwork-cn", "千问办公测试快照"));
+  assert.equal((await page.evaluate(() => window.workbuddy.snapshot())).editors["qwenwork-cn"].accounts.length, 1);
+  const upstream = createHttpServer((req, res) => {
+    if (req.url !== "/v1/models" || req.headers.authorization !== "Bearer smoke-upstream") {
+      res.writeHead(403).end();
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ data: [{ id: "qwenwork-smoke" }] }));
+  });
+  await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+  try {
+    const catalog = await page.evaluate(async (port) => {
+      await window.workbuddy.apiSaveQwenWork({ mode: "compatible", port, key: "smoke-upstream" });
+      return window.workbuddy.qwenworkCatalog();
+    }, upstream.address().port);
+    assert.deepEqual(catalog, ["qwenwork-smoke"]);
+  } finally {
+    upstream.closeAllConnections();
+    await new Promise((resolve) => upstream.close(resolve));
+  }
   assert.equal((await fetch(listening.baseUrl + "/models")).status, 401);
   assert.equal(
     (

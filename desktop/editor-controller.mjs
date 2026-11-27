@@ -17,6 +17,7 @@ import {
 export { editors, editorDefinition };
 
 const exec = promisify(execFile);
+const versionFolder = /^(?:app-|v)?\d+(?:\.\d+){1,3}(?:[-+._][a-z0-9]+)*$/i;
 export function parseQoderLauncher(raw, expectedExecutable = "Qoder CN.exe") {
   const text = (
     raw[0] === 0xff && raw[1] === 0xfe
@@ -101,6 +102,21 @@ export class EditorController {
                 d.executable,
               ),
             ]);
+    if (!custom && this.platform === "win32" && d.product === "qwenwork") {
+      for (const file of [...candidates]) {
+        const root = path.dirname(file);
+        let entries;
+        try {
+          entries = await fs.readdir(root, { withFileTypes: true });
+        } catch (error) {
+          if (error.code === "ENOENT") continue;
+          throw error;
+        }
+        const versions = entries.filter((entry) => entry.isDirectory() && versionFolder.test(entry.name));
+        versions.sort((a, b) => b.name.localeCompare(a.name, "en", { numeric: true }));
+        for (const entry of versions) candidates.push(path.join(root, entry.name, d.executable));
+      }
+    }
     if (!custom && this.platform === "win32" && d.product === "qoder") {
       const local =
         this.env.LOCALAPPDATA || path.join(this.home, "AppData", "Local");
@@ -193,7 +209,7 @@ export class EditorController {
           "-NoProfile",
           "-NonInteractive",
           "-Command",
-          "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; @(Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'Trae|Qoder' } | Select-Object Name,ProcessId,ExecutablePath,CommandLine) | ConvertTo-Json -Compress",
+          "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; @(Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'Trae|Qoder|QwenWork' } | Select-Object Name,ProcessId,ExecutablePath,CommandLine) | ConvertTo-Json -Compress",
         ],
         { windowsHide: true, timeout: 10000, maxBuffer: 4 * 1024 * 1024 },
       );
@@ -219,6 +235,18 @@ export class EditorController {
     }
   }
   matching(processes, executable) {
+    if (this.platform === "win32" && this.definition.product === "qwenwork") {
+      const installRoot = (file) => {
+        const folder = path.win32.dirname(path.win32.normalize(file)).toLowerCase();
+        return versionFolder.test(path.win32.basename(folder)) ? path.win32.dirname(folder) : folder;
+      };
+      const root = installRoot(executable);
+      const matching = processes.filter((item) =>
+        path.win32.basename(item.executable).toLowerCase() === this.definition.executable.toLowerCase());
+      if (matching.some((item) => installRoot(item.executable) !== root))
+        throw new Error("其他安装目录的千问办公仍在运行，请先退出该实例再切换。");
+      return matching;
+    }
     return processes.filter((item) =>
       this.platform === "darwin"
         ? item.command.startsWith(`${executable}/Contents/`)

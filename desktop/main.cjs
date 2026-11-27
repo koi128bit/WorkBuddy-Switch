@@ -84,8 +84,8 @@ const links = {
   releases: "https://github.com/koi128bit/WorkBuddy-Switch/releases/latest",
   privacy:
     "https://github.com/koi128bit/WorkBuddy-Switch/blob/main/SECURITY.md",
-  license: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v2.0.1/LICENSE",
-  notices: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v2.0.1/NOTICE",
+  license: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v2.0.2/LICENSE",
+  notices: "https://github.com/koi128bit/WorkBuddy-Switch/blob/v2.0.2/NOTICE",
   growth: "https://www.codebuddy.cn/profile/growth-center",
 };
 app.setName("WorkBuddy Switch");
@@ -529,6 +529,8 @@ async function start() {
   const apiHandle = (name, action) => handle(name, action, true);
   apiHandle("api-status", () => apiGateway.snapshot());
   apiHandle("api-save", (value) => apiGateway.saveConfig(value));
+  apiHandle("api-qwenwork-save", (value) => store.exclusive(() => apiGateway.saveQwenWork(value)));
+  apiHandle("api-qwenwork-catalog", () => apiGateway.qwenworkCatalog());
   apiHandle("api-start", () => apiGateway.start());
   apiHandle("api-stop", () => apiGateway.stop());
   apiHandle("api-rotate", () => apiGateway.rotateKey());
@@ -540,6 +542,7 @@ async function start() {
     const values = {
       key: () => apiGateway.getKey(),
       baseUrl: () => base,
+      qwenworkUrl: () => base.replace(/\/v1$/, "/qwenwork/v1"),
       lanUrl: () => status.lanUrl || base,
       curl: () =>
         `curl '${base}/chat/completions' -H "Authorization: Bearer $WORKBUDDY_API_KEY" -H 'Content-Type: application/json' -d '{"model":"auto","messages":[{"role":"user","content":"你好"}]}'`,

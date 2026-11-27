@@ -94,7 +94,7 @@ async function fixture(t, platform = process.platform) {
     directory,
     vault,
     settings: () => settings,
-    controllers: { "trae-cn": control, "qoder-cn": control },
+    controllers: { "trae-cn": control, "qoder-cn": control, "qwenwork-cn": control },
     context,
   });
   await store.init();
@@ -265,6 +265,61 @@ test("Qoder opaque auth and overlays restore together without rewriting Local St
   assert.deepEqual(await fs.readFile(f.qoderFile), oldAuth);
   assert.deepEqual(await fs.readFile(overlay), oldOverlay);
   assert.deepEqual(await fs.readFile(local), before);
+});
+test("QwenWork restores both Windows login files, removes absent legacy state and rolls back a failed restart", async (t) => {
+  const f = await fixture(t, "win32");
+  const provider = "qwenwork-cn";
+  const dir = f.store.dataPath(provider);
+  assert.equal(dir, path.join(f.context.env.APPDATA, "QwenWorkCN"));
+  await fs.mkdir(dir, { recursive: true });
+  const auth = path.join(dir, "auth-v2.dat"), legacy = path.join(dir, "auth.dat");
+  const state = path.join(dir, "Local State"), prefs = path.join(dir, "settings.json");
+  const originalState = JSON.stringify({ os_crypt: { encrypted_key: "machine-fixture" } });
+  const encrypted = (byte) => Buffer.concat([Buffer.from("v10"), Buffer.alloc(64, byte)]);
+  await fs.writeFile(state, originalState);
+  await fs.writeFile(prefs, "user preferences");
+  await fs.writeFile(auth, encrypted(1));
+  const a = await f.store.capture(provider, "账号 A");
+  await fs.writeFile(auth, encrypted(2));
+  await fs.writeFile(legacy, encrypted(3));
+  const b = await f.store.capture(provider, "账号 B");
+  await f.store.switchAccount(provider, a.id);
+  assert.deepEqual(await fs.readFile(auth), encrypted(1));
+  await assert.rejects(fs.access(legacy), { code: "ENOENT" });
+  f.control.failLaunch = 1;
+  await assert.rejects(f.store.switchAccount(provider, b.id), /启动失败/);
+  assert.deepEqual(await fs.readFile(auth), encrypted(1));
+  await assert.rejects(fs.access(legacy), { code: "ENOENT" });
+  await f.store.switchAccount(provider, b.id);
+  assert.deepEqual(await fs.readFile(auth), encrypted(2));
+  assert.deepEqual(await fs.readFile(legacy), encrypted(3));
+  assert.equal(await fs.readFile(state, "utf8"), originalState);
+  assert.equal(await fs.readFile(prefs, "utf8"), "user preferences");
+  const snapshot = (await f.store.snapshots())[provider];
+  assert.equal(snapshot.currentId, b.id);
+  assert.equal(snapshot.accounts.length, 2);
+  assert.equal(snapshot.accounts[0].canRefresh, false);
+  assert.ok(!(await fs.readFile(f.store.file, "utf8")).includes(encrypted(1).toString("base64")));
+  await fs.writeFile(state, JSON.stringify({ os_crypt: { encrypted_key: "replacement-fixture" } }));
+  await assert.rejects(f.store.switchAccount(provider, a.id), /绑定已变化/);
+  assert.deepEqual(await fs.readFile(auth), encrypted(2));
+  await fs.writeFile(path.join(dir, "auth-v2.dat.json"), "{}");
+  await assert.rejects(f.store.capture(provider, "混合格式"), /回退/);
+});
+test("QwenWork Windows discovery selects the latest installed version and checks all installations before writing", async (t) => {
+  const f = await fixture(t, "win32");
+  const root = path.join(f.directory, "Programs", "QwenWorkCN");
+  const file = (version) => path.join(root, version, "QwenWorkCN.exe");
+  for (const version of ["app-2.9.0", "app-2.10.0"]) {
+    await fs.mkdir(path.dirname(file(version)), { recursive: true });
+    await fs.writeFile(file(version), "");
+  }
+  const controller = new EditorController("qwenwork-cn", () => f.settings, f.context);
+  const executable = await controller.executable();
+  assert.equal(executable, file("app-2.10.0"));
+  const running = { executable: file("app-2.9.0") };
+  assert.deepEqual(controller.matching([running], executable), [running]);
+  assert.throws(() => controller.matching([{ executable: path.join(f.directory, "other", "QwenWorkCN.exe") }], executable), /其他安装目录/);
 });
 test("Qoder key binding changes reject restore and retain the current encrypted login", async (t) => {
   const f = await fixture(t, "win32");

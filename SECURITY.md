@@ -28,6 +28,10 @@ Trae 静态格式常量从安装包公开脚本只读解析，不执行其脚本
 
 WorkBuddy 国际版账号单独保存在 `workbuddy-global/`，导入与读取校验地区。Trae / Qoder 的标准授权资料同样写入加密的 `editor-vault.json`，不会包含在 WorkBuddy 跨设备备份里。
 
+## 千问办公
+
+登录快照按原样保存客户端加密的 `auth-v2.dat` 和 `auth.dat`，由 WorkBuddy Switch 再加密并绑定本机恢复。API 上游使用用户在「千问办公 → API」中单独提供的密钥。即使启用了 WorkBuddy 的局域网访问，`/qwenwork/v1` 也只接受本机连接。
+
 ## 备份与本地数据
 
 `.wbsbackup` 使用 scrypt 派生密钥、随机盐和 nonce、AES-256-GCM 加密与认证。密码至少 8 个字符，遗忘后无法恢复。导入会验证文件大小、版本、认证标签和账号身份；已有账号不会被覆盖。
@@ -44,6 +48,7 @@ WorkBuddy 国际版账号单独保存在 `workbuddy-global/`，导入与读取�
 2. Trae：`www.trae.cn` / `www.trae.ai` 官方授权页、`api.trae.cn` / `grow-normal.trae.ai` 对应地区授权接口。Qoder：`qoder.com.cn` / `qoder.com` 官方授权页、`openapi.qoder.com.cn` / `openapi.qoder.sh` 对应地区授权及资料接口。
 3. 用户打开官方授权页时，由系统浏览器完成登录。
 4. 用户检查更新、下载更新包时访问本仓库 GitHub Releases API 与安装包地址。默认线路经第三方 GitHub 代理（`gh-proxy.com`、`ghproxy.net`、`ghfast.top`）转发同一份仓库地址，只在代理不可用时回落直连；可在设置里固定线路或填写自定义镜像。下载完成后用官方 `SHA256SUMS.txt` 校验。打开仓库、Wiki、下载与安全说明使用固定 GitHub 地址。
+5. 千问办公使用用户配置的本机 qwenwork2api 端口，或开放平台的固定域名 `openapi.qwenwork.cn`。
 
 请求禁用自动跨站重定向，登录 URL 校验协议、主机、用户信息和端口。浏览器授权请求在主进程内存中保存，5 分钟过期，可取消。网络使用 Electron 系统代理。
 

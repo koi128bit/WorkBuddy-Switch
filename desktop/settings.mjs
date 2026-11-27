@@ -35,6 +35,8 @@ export const defaults = Object.freeze({
   traeExecutablePath: "",
   qoderDataPath: "",
   qoderExecutablePath: "",
+  qwenworkDataPath: "",
+  qwenworkExecutablePath: "",
   workbuddyGlobalAuthPath: "",
   workbuddyGlobalDataPath: "",
   workbuddyGlobalExecutablePath: "",

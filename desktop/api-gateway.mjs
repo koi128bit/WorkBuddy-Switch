@@ -10,6 +10,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { atomicWrite, readBounded } from "./files.mjs";
+import { QwenWorkForwarder } from "./qwenwork-api.mjs";
 import {
   ApiError,
   openApiChat,
@@ -275,9 +276,11 @@ export class ApiGateway {
       onChange,
       listenPort,
     });
+    this.qwenwork = new QwenWorkForwarder(directory, vault, request);
   }
   async init() {
     await fs.mkdir(this.directory, { recursive: true, mode: 0o700 });
+    await this.qwenwork.init();
     await this.loadApiDaily();
     try {
       const raw = JSON.parse(
@@ -449,6 +452,7 @@ export class ApiGateway {
     if (this.server || this.active.size)
       throw new Error("请先停止 API 服务，再修改配置。");
     const config = validateApiConfig(value);
+    this.qwenwork.checkListenerPort(config.port);
     for (const account of config.accounts)
       if (
         !this.accounts().some(
@@ -482,6 +486,41 @@ export class ApiGateway {
     this.sessions.clear();
     this.onChange();
     return this.snapshot();
+  }
+  async saveQwenWork(value) {
+    await this.qwenwork.save(value, this.server?.address()?.port ?? this.config.port);
+    this.onChange();
+    return this.snapshot();
+  }
+  async qwenworkCatalog() {
+    const { running, baseUrl, qwenwork } = this.snapshot();
+    if (!running || !qwenwork.configured) throw new Error("请先配置千问办公上游并启动本机 API。");
+    const official = qwenwork.mode === "official";
+    const endpoint = official ? "/session/session-modes" : "/models";
+    const response = await fetch(baseUrl.replace(/\/v1$/, "/qwenwork/v1") + endpoint, {
+      headers: { Authorization: "Bearer " + this.getKey() },
+      redirect: "error",
+      signal: AbortSignal.timeout(15000),
+    });
+    const chunks = [];
+    let bytes = 0;
+    for await (const chunk of response.body) {
+      bytes += chunk.length;
+      if (bytes > 1024 * 1024) throw new Error("千问办公目录响应过大。");
+      chunks.push(chunk);
+    }
+    let result;
+    try {
+      result = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    } catch {
+      throw new Error("千问办公上游目录的 JSON 格式无效。");
+    }
+    if (!response.ok) throw new Error(typeof result?.error?.message === "string"
+      ? result.error.message : `读取千问办公目录失败（HTTP ${response.status}），请检查上游授权。`);
+    const items = official ? result?.items : result?.data;
+    if (!Array.isArray(items) || items.some((item) => typeof item?.[official ? "mode" : "id"] !== "string"))
+      throw new Error("千问办公上游未返回有效的目录。");
+    return items.map((item) => item[official ? "mode" : "id"]);
   }
   accounts() {
     return realms.flatMap((provider) =>
@@ -520,6 +559,7 @@ export class ApiGateway {
       activeRequests: this.active.size,
       hasKey: !!this.secret,
       config: this.config,
+      qwenwork: this.qwenwork.status(),
       accounts: this.accounts(),
       totals: this.totals,
       recent: this.recent,
@@ -792,15 +832,13 @@ export class ApiGateway {
   async start() {
     if (this.server) return this.snapshot();
     this.getKey();
-    if (
-      !this.config.accounts.length ||
-      !this.accounts().some(
+    this.qwenwork.checkListenerPort(this.listenPort ?? this.config.port);
+    if (!this.qwenwork.connection && !this.accounts().some(
         (row) =>
           row.available &&
           this.config.accounts.some((account) => ref(account) === ref(row)),
-      )
-    )
-      throw new Error("请先选择至少一个已授权的 WorkBuddy 账号。");
+      ))
+      throw new Error("请先选择已授权的 WorkBuddy 账号，或配置千问办公上游。");
     this.draining = false;
     this.server = http.createServer((req, res) => {
       void this.handle(req, res);
@@ -1018,6 +1056,12 @@ export class ApiGateway {
         throw new ApiError(503, "service_stopping", "API 服务正在停止。");
       if (!this.authorize(req))
         throw new ApiError(401, "invalid_api_key", "API Key 无效或缺失。");
+      if (url.pathname.startsWith("/qwenwork/v1/")) {
+        if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress) ||
+            !allowedHosts(port).has(String(req.headers.host).toLowerCase()))
+          throw new ApiError(403, "local_clients_only", "千问办公 API 仅接受本机调用。");
+        return await this.forwardQwenWork(req, res, url);
+      }
       if (req.method === "GET" && pathname === "/healthz")
         return this.json(res, 200, {
           status: "ok",
@@ -1087,6 +1131,10 @@ export class ApiGateway {
       if (region) prepared.model = prepared.model.replace(/^global:/, "");
       await this.chat(prepared, req, res);
     } catch (error) {
+      if (res.headersSent) {
+        if (!res.writableEnded) res.destroy();
+        return;
+      }
       const safe =
         error instanceof ApiError
           ? error
@@ -1100,6 +1148,29 @@ export class ApiGateway {
       this.json(res, safe.status, this.errorBody(safe, protocol));
     } finally {
       if (!req.complete) req.resume();
+    }
+  }
+  async forwardQwenWork(req, res, url) {
+    const id = randomUUID();
+    const controller = new AbortController();
+    let finished;
+    controller.done = new Promise((resolve) => { finished = resolve; });
+    const timeout = AbortSignal.timeout(300000);
+    const signal = AbortSignal.any([controller.signal, timeout]);
+    const close = () => { if (!res.writableEnded) controller.abort(); };
+    this.active.set(id, controller);
+    res.once("close", close);
+    this.onChange();
+    try {
+      await this.qwenwork.forward(req, res, url, (incoming) => this.body(incoming), signal);
+    } catch (error) {
+      if (timeout.aborted) throw new ApiError(504, "qwenwork_timeout", "千问办公上游响应超时。");
+      throw error;
+    } finally {
+      res.off("close", close);
+      this.active.delete(id);
+      finished();
+      this.onChange();
     }
   }
   async chat(prepared, _req, res) {

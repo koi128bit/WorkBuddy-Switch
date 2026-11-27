@@ -15,6 +15,9 @@ const qoderFiles = Object.freeze([
   "auth.v1.dat",
   "auth-profile-overlays.v1.dat",
 ]);
+const qwenworkFiles = Object.freeze(["auth-v2.dat", "auth.dat"]);
+const authFiles = (provider) =>
+  editorDefinition(provider).product === "qwenwork" ? qwenworkFiles : qoderFiles;
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 export function authFingerprint(document) {
   return hash(
@@ -77,7 +80,10 @@ function loggedIn(entries) {
     value.token.length > 0
   );
 }
-async function qoderBinding(directory, platform) {
+async function localBinding(provider, directory, platform) {
+  const qwenwork = editorDefinition(provider).product === "qwenwork";
+  const root = qwenwork ? await fs.realpath(directory) : "";
+  if (qwenwork && platform !== "win32") return hash(`${platform}:${root}`);
   if (platform !== "win32")
     return hash(
       Buffer.concat([
@@ -94,10 +100,29 @@ async function qoderBinding(directory, platform) {
   try {
     const key = raw && JSON.parse(raw.toString("utf8")).os_crypt?.encrypted_key;
     if (typeof key !== "string" || !key) throw new Error("missing");
-    return hash(key);
+    return hash(qwenwork ? `${platform}:${root}:${key}` : key);
   } catch {
-    throw new Error("无法确认 Qoder CN 的本机加密绑定，请先登录一次客户端。");
+    throw new Error(`无法确认 ${editorDefinition(provider).name} 的本机加密绑定，请先登录一次客户端。`);
   }
+}
+async function checkQwenWorkStorage(directory) {
+  for (const name of qwenworkFiles) {
+    try {
+      await fs.lstat(path.join(directory, name + ".json"));
+    } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw error;
+    }
+    throw new Error("千问办公使用了明文回退登录文件。请启用系统加密、在客户端重新登录，再保存快照。");
+  }
+}
+function checkEncryptedFile(bytes, platform, name) {
+  const version = bytes.toString("ascii", 0, 3);
+  if (
+    !(version === "v10" || (platform === "linux" && version === "v11")) ||
+    (platform === "win32" ? bytes.length < 31 : bytes.length < 19 || (bytes.length - 3) % 16 !== 0)
+  )
+    throw new Error(`${name} 的加密登录文件不完整或格式暂不支持。`);
 }
 export function validateEditorAuth(document, provider) {
   editorDefinition(provider);
@@ -112,7 +137,7 @@ export function validateEditorAuth(document, provider) {
   )
     throw new Error("登录快照格式或客户端标识无效。");
   const trae = editorDefinition(provider).product === "trae";
-  const allowed = trae ? traeKeys : qoderFiles;
+  const allowed = trae ? traeKeys : authFiles(provider);
   if (
     document.binding.length > 100 ||
     allowed.some((key) => !Object.hasOwn(document.entries, key))
@@ -133,15 +158,17 @@ export function validateEditorAuth(document, provider) {
       if (value === null) continue;
       const bytes = Buffer.from(value, "base64");
       if (
-        key === "auth.v1.dat" &&
+        (key === "auth.v1.dat" || qwenworkFiles.includes(key)) &&
         (bytes.length < 19 ||
           !["v10", "v11"].includes(bytes.toString("ascii", 0, 3)))
       )
-        throw new Error("Qoder CN 登录文件的加密格式暂不支持，未修改文件。");
+        throw new Error(`${editorDefinition(provider).name} 登录文件的加密格式暂不支持，未修改文件。`);
     }
   return document;
 }
 export function hasEditorLogin(document) {
+  if (editorDefinition(document.provider).product === "qwenwork")
+    return qwenworkFiles.some((name) => !!document.entries[name]);
   return editorDefinition(document.provider).product === "trae"
     ? loggedIn(document.entries)
     : !!document.entries["auth.v1.dat"];
@@ -159,21 +186,16 @@ export async function readEditorAuth(
     for (const key of traeKeys)
       entries[key] = Object.hasOwn(root, key) ? root[key] : null;
   } else {
-    for (const name of qoderFiles)
-      entries[name] =
-        (await read(path.join(directory, name), directory))?.toString(
-          "base64",
-        ) ?? null;
-    if (entries["auth.v1.dat"]) {
-      const bytes = Buffer.from(entries["auth.v1.dat"], "base64"),
-        length = bytes.length;
-      if (platform !== "linux" && bytes.toString("ascii", 0, 3) !== "v10")
-        throw new Error("客户端加密格式与当前系统不符。");
-      if (platform === "win32" ? length < 31 : (length - 3) % 16 !== 0)
-        throw new Error("Qoder CN 登录文件不完整，请退出客户端后重新保存。");
+    const definition = editorDefinition(provider);
+    if (definition.product === "qwenwork") await checkQwenWorkStorage(directory);
+    for (const name of authFiles(provider)) {
+      const bytes = await read(path.join(directory, name), directory);
+      if (bytes && (name === "auth.v1.dat" || definition.product === "qwenwork"))
+        checkEncryptedFile(bytes, platform, definition.name);
+      entries[name] = bytes?.toString("base64") ?? null;
     }
-    if (entries["auth.v1.dat"])
-      binding = await qoderBinding(directory, platform);
+    if (hasEditorLogin({ provider, entries }))
+      binding = await localBinding(provider, directory, platform);
     else binding = "no-login";
   }
   return validateEditorAuth(
@@ -215,12 +237,16 @@ export async function writeEditorAuth(
     await atomicWrite(file, JSON.stringify(root, null, 2));
     return;
   }
-  if (
-    hasEditorLogin(document) &&
-    document.binding !== (await qoderBinding(directory, platform))
-  )
-    throw new Error("Qoder CN 本机加密绑定已变化，请重新登录并保存快照。");
-  for (const name of qoderFiles) {
+  const definition = editorDefinition(provider);
+  if (definition.product === "qwenwork") {
+    await checkQwenWorkStorage(directory);
+    for (const name of qwenworkFiles)
+      if (document.entries[name] !== null)
+        checkEncryptedFile(Buffer.from(document.entries[name], "base64"), platform, definition.name);
+  }
+  if (hasEditorLogin(document) && document.binding !== (await localBinding(provider, directory, platform)))
+    throw new Error(`${definition.name} 本机加密绑定已变化，请重新登录并保存快照。`);
+  for (const name of authFiles(provider)) {
     const value = document.entries[name];
     if (value === null || value === undefined)
       await fs.rm(path.join(directory, name), { force: true });

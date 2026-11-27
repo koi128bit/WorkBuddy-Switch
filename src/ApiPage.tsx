@@ -146,7 +146,7 @@ export function ApiPage({ privacy }: { privacy: boolean }) {
                 primary
                 icon={Play}
                 disabled={
-                  !!busy || dirty || !draft.accounts.length || !status.hasKey
+                  !!busy || dirty || (!draft.accounts.length && !status.qwenwork?.configured) || !status.hasKey
                 }
                 onClick={() =>
                   void run("启动服务", () => api.apiStart(), setStatus)

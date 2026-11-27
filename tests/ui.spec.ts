@@ -943,7 +943,7 @@ test("basic task mode remains usable after clearing the optional dialogue inputs
   ).toContainText("执行结束");
 });
 
-test("all six clients can be selected and editor OAuth controls are visible", async ({
+test("all seven clients expose the login controls supported by their provider", async ({
   page,
 }) => {
   await page.goto("/");
@@ -954,6 +954,7 @@ test("all six clients can be selected and editor OAuth controls are visible", as
     "trae-global",
     "qoder-cn",
     "qoder-global",
+    "qwenwork-cn",
   ]) {
     await page.getByLabel("切换客户端", { exact: true }).selectOption(provider);
     await expect(
@@ -974,7 +975,47 @@ test("all six clients can be selected and editor OAuth controls are visible", as
       await expect(
         page.getByRole("button", { name: "一键领积分", exact: true }),
       ).toHaveCount(0);
+    if (provider === "qwenwork-cn") {
+      await expect(page.getByRole("button", { name: "网页登录", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "保存当前账号", exact: true })).toBeEnabled();
+      await expect(page.getByRole("button", { name: "API", exact: true })).toBeVisible();
+    }
   }
+});
+
+test("QwenWork connects an upstream, starts without WorkBuddy accounts and checks both catalogs", async ({ page }) => {
+  await page.evaluate(async () => {
+    const status = await window.workbuddy.apiStatus();
+    status.running = false;
+    status.config.accounts = [];
+    window.workbuddyFixture.apiStatus = async () => structuredClone(status);
+    window.workbuddyFixture.apiSaveQwenWork = async (value) => {
+      if (!value) throw new Error("missing configuration");
+      status.qwenwork = { configured: true, mode: value.mode, port: value.port, error: "" };
+      return structuredClone(status);
+    };
+    window.workbuddyFixture.apiStart = async () => {
+      status.running = true;
+      return structuredClone(status);
+    };
+    window.workbuddyFixture.qwenworkCatalog = async () =>
+      status.qwenwork.mode === "official" ? ["standard"] : ["qwenwork-standard"];
+  });
+  await page.getByLabel("切换客户端", { exact: true }).selectOption("qwenwork-cn");
+  await page.getByRole("button", { name: "API", exact: true }).click();
+  await expect(page.getByRole("button", { name: "启动服务" })).toBeDisabled();
+  const key = page.getByLabel("上游 API Key", { exact: true });
+  await key.fill("fixture-upstream-key");
+  await page.getByRole("button", { name: "保存上游" }).click();
+  await expect(key).toHaveValue("");
+  await page.getByRole("button", { name: "启动服务" }).click();
+  await page.getByRole("button", { name: "获取模型" }).click();
+  await expect(page.getByText("qwenwork-standard", { exact: true })).toBeVisible();
+  await page.getByLabel("上游类型").selectOption("official");
+  await page.getByLabel("开放平台用户访问令牌").fill("fixture-app-token");
+  await page.getByRole("button", { name: "保存上游" }).click();
+  await page.getByRole("button", { name: "获取执行模式" }).click();
+  await expect(page.getByText("standard", { exact: true })).toBeVisible();
 });
 
 test.beforeEach(async ({ page }) => {
@@ -1009,6 +1050,8 @@ test.beforeEach(async ({ page }) => {
         snapshot: async () => structuredClone(snapshot),
         apiStatus: async () => structuredClone(apiStatus),
         apiSave: unconfiguredApi,
+        apiSaveQwenWork: unconfiguredApi,
+        qwenworkCatalog: unconfiguredApi,
         apiStart: unconfiguredApi,
         apiStop: unconfiguredApi,
         apiRotate: unconfiguredApi,

@@ -158,6 +158,7 @@ export function EditorAccounts({
   );
   const name = providerNames[provider],
     api = apiFor(provider);
+  const desktopLoginOnly = provider === "qwenwork-cn";
   useEffect(
     () => () => {
       if (login) void api.cancelLogin(login.id).catch(() => {});
@@ -223,7 +224,7 @@ export function EditorAccounts({
               ? "当前文件与已保存快照匹配"
               : state?.hasLogin
                 ? "检测到本机登录文件，可保存为账号快照"
-                : "网页登录添加账号，或读取客户端当前身份"}
+                : desktopLoginOnly ? "请先在千问办公客户端登录" : "网页登录添加账号，或读取客户端当前身份"}
           </p>
         </div>
         <div className="toolbar-right">
@@ -243,7 +244,7 @@ export function EditorAccounts({
           >
             刷新
           </Button>
-          <Button
+          {!desktopLoginOnly && <Button
             icon={Globe}
             disabled={disabled || !!login}
             onClick={() =>
@@ -253,7 +254,7 @@ export function EditorAccounts({
             }
           >
             网页登录
-          </Button>
+          </Button>}
           <Button
             primary
             icon={Plus}
@@ -267,7 +268,9 @@ export function EditorAccounts({
       <div className="notice info">
         <ShieldCheck size={17} />
         <span>
-          支持识别真实账号与刷新授权。首次切换前，请在客户端登录并保存当前账号，关联完整登录资料。客户端登录快照仅在本机使用。
+          {desktopLoginOnly
+            ? "在千问办公中登录一个账号，保存快照并命名。登录另一个账号后再保存一次，就可以在列表中切换。"
+            : "支持识别真实账号与刷新授权。首次切换前，请在客户端登录并保存当前账号，关联完整登录资料。客户端登录快照仅在本机使用。"}
         </span>
       </div>
       {state?.error && (
@@ -508,8 +511,8 @@ export function EditorAccounts({
           {dialog.kind === "capture" || dialog.kind === "edit" ? (
             <>
               <p className="quiet-note">
-                请确认 {name} 中显示的是要保存的账号。优先识别真实
-                UID；格式暂不支持时仍可按名称保留兼容快照。
+                {desktopLoginOnly ? "请确认千问办公中显示的账号，并给本机登录快照取一个便于辨认的名称。"
+                  : `请确认 ${name} 中显示的是要保存的账号。优先识别真实 UID；格式暂不支持时仍可按名称保留兼容快照。`}
               </p>
               <label className="form-field">
                 账号名称

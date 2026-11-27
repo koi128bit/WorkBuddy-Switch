@@ -8,6 +8,7 @@ export const providers = {
   },
   "trae-cn": { name: "Trae CN", key: "trae", data: "Trae CN" },
   "trae-global": { name: "Trae 国际版", key: "traeGlobal", data: "Trae" },
+  "qwenwork-cn": { name: "千问办公", key: "qwenwork", data: "QwenWorkCN" },
   "qoder-cn": {
     name: "Qoder CN",
     key: "qoder",

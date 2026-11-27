@@ -34,6 +34,8 @@ export function fixtureState(): Snapshot {
     traeExecutablePath: "",
     qoderDataPath: "",
     qoderExecutablePath: "",
+    qwenworkDataPath: "",
+    qwenworkExecutablePath: "",
     traeGlobalDataPath: "",
     traeGlobalExecutablePath: "",
     qoderGlobalDataPath: "",
@@ -141,7 +143,7 @@ export function fixtureState(): Snapshot {
   return {
     demo: true,
     editors: Object.fromEntries(
-      (["trae-cn", "trae-global", "qoder-cn", "qoder-global"] as const).map(
+      (["trae-cn", "trae-global", "qoder-cn", "qoder-global", "qwenwork-cn"] as const).map(
         (provider) => {
           const name =
             provider === "trae-cn"
@@ -150,7 +152,7 @@ export function fixtureState(): Snapshot {
                 ? "Trae 国际版"
                 : provider === "qoder-cn"
                   ? "Qoder CN"
-                  : "Qoder 国际版";
+                  : provider === "qwenwork-cn" ? "千问办公" : "Qoder 国际版";
           return [
             provider,
             {
@@ -164,12 +166,12 @@ export function fixtureState(): Snapshot {
                 capturedAt: now - index * 86400000,
                 lastUsedAt: now - index * 3600000,
                 automatic: false,
-                uid: `demo-${index}`,
+                uid: provider === "qwenwork-cn" ? null : `demo-${index}`,
                 originalNickname: label,
                 nativeAvailable: true,
-                canRefresh: true,
+                canRefresh: provider !== "qwenwork-cn",
                 source: "native",
-                expiresAt: now + 7 * 86400000,
+                expiresAt: provider === "qwenwork-cn" ? null : now + 7 * 86400000,
               })),
               currentId: `${provider}-0`,
               hasLogin: true,
@@ -179,7 +181,7 @@ export function fixtureState(): Snapshot {
                 running: false,
                 executable: `/Applications/${name}.app`,
               },
-              dataPath: `/Users/example/Library/Application Support/${provider === "trae-cn" ? "Trae CN" : "com.qodercn.app.stable"}`,
+              dataPath: `/Users/example/Library/Application Support/${provider === "qwenwork-cn" ? "QwenWorkCN" : provider === "trae-cn" ? "Trae CN" : "com.qodercn.app.stable"}`,
               recoveryPending: false,
             },
           ];
@@ -305,6 +307,7 @@ export function fixtureUsage(): Usage {
 
 export function fixtureApi(): ApiStatus {
   return {
+    qwenwork: { configured: false, mode: "compatible", port: 4021, error: "" },
     running: true,
     baseUrl: "http://127.0.0.1:8317/v1",
     activeRequests: 0,
